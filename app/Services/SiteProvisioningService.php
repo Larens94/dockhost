@@ -34,7 +34,9 @@ class SiteProvisioningService
      *   storage_pool_id?:int|null,
      *   wants_sftp:bool,
      *   wants_cache:bool,
-     *   cache_pool_id?:int|null
+     *   cache_pool_id?:int|null,
+     *   database_mode?:string|null,
+     *   git_branch?:string|null
      * }  $input
      */
     public function provision(array $input): Site
@@ -62,6 +64,8 @@ class SiteProvisioningService
             'wants_cache' => (bool) ($input['wants_cache'] ?? false),
             'cache_pool_id' => null,
             'runtime_pool_id' => null,
+            'database_mode' => ($input['database_mode'] ?? 'shared') === 'dedicated' ? 'dedicated' : 'shared',
+            'git_branch' => $input['git_branch'] ?? 'main',
         ];
 
         if ($options['wants_sftp']) {
@@ -126,6 +130,97 @@ class SiteProvisioningService
 
             return $site;
         });
+    }
+
+    /**
+     * Re-hold capacity and run the recipe again. Pool selection may change; data is not moved.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    public function retry(Site $site, array $input = []): Site
+    {
+        if ($site->status !== 'failed') {
+            throw ValidationException::withMessages([
+                'site' => 'Only a failed site can be retried.',
+            ]);
+        }
+
+        $site->loadMissing(['client', 'recipe']);
+
+        if (! $site->client || ! $site->recipe) {
+            throw ValidationException::withMessages([
+                'site' => 'Site is missing its client or recipe.',
+            ]);
+        }
+
+        $options = $site->options ?? [];
+        $attachments = [];
+
+        if (! empty($options['wants_database'])) {
+            $pool = $this->requirePool(
+                isset($input['database_pool_id']) ? (int) $input['database_pool_id'] : (int) ($options['database_pool_id'] ?? 0),
+                'database',
+            );
+            $options['database_pool_id'] = $pool->id;
+            $attachments['database'] = $pool->id;
+        }
+
+        if (! empty($options['wants_storage']) || ! empty($options['wants_sftp'])) {
+            $pool = $this->requirePool(
+                isset($input['storage_pool_id']) ? (int) $input['storage_pool_id'] : (int) ($options['storage_pool_id'] ?? 0),
+                'storage',
+            );
+            $options['storage_pool_id'] = $pool->id;
+            $attachments['storage'] = $pool->id;
+        }
+
+        if (! empty($options['wants_cache'])) {
+            $pool = $this->requirePool(
+                isset($input['cache_pool_id']) ? (int) $input['cache_pool_id'] : (int) ($options['cache_pool_id'] ?? 0),
+                'cache',
+            );
+            $options['cache_pool_id'] = $pool->id;
+            $attachments['cache'] = $pool->id;
+        }
+
+        $runtimeId = (int) ($options['runtime_pool_id'] ?? 0);
+        $runtime = $runtimeId
+            ? Pool::query()->whereKey($runtimeId)->where('kind', 'runtime')->first()
+            : Pool::query()->where('kind', 'runtime')->orderBy('usage')->orderBy('id')->first();
+
+        if (! $runtime) {
+            throw ValidationException::withMessages([
+                'site' => 'No runtime pool is available.',
+            ]);
+        }
+
+        if ($runtime->usage >= $runtime->capacity) {
+            throw ValidationException::withMessages([
+                'site' => "Runtime pool {$runtime->name} is full.",
+            ]);
+        }
+
+        $options['runtime_pool_id'] = $runtime->id;
+        $attachments['runtime'] = $runtime->id;
+
+        if (! empty($input['database_mode'])) {
+            $options['database_mode'] = $input['database_mode'] === 'dedicated' ? 'dedicated' : 'shared';
+        }
+
+        $this->entitlements->assertCanProvision($site->client, $site->recipe, $options);
+
+        DB::transaction(function () use ($site, $options, $attachments) {
+            $site->options = $options;
+            $site->status = 'pending';
+            $site->last_error = null;
+            $site->save();
+            $this->ledger->sync($site, $attachments);
+            $this->audit->log('site.retried', $site, ['domain' => $site->domain]);
+        });
+
+        ProvisionSiteJob::dispatchSync($site->id);
+
+        return $site->fresh(['client', 'recipe', 'databaseAccount', 'sftpAccount']);
     }
 
     private function requirePool(?int $id, string $kind): Pool

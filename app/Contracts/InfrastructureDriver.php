@@ -52,6 +52,27 @@ interface InfrastructureDriver
     public function destroyApplication(array $definition): array;
 
     /**
+     * @param  array<string, mixed>  $definition
+     * @return array{ok: bool, raw?: mixed}
+     */
+    public function saveGitProvider(array $definition): array;
+
+    /**
+     * @return array{ok: bool, raw?: mixed}
+     */
+    public function stopApplication(string $applicationId): array;
+
+    /**
+     * @return array{ok: bool, raw?: mixed}
+     */
+    public function startApplication(string $applicationId): array;
+
+    /**
+     * @return array{ok: bool, status: ?string, project_id: ?string, environment_id: ?string, raw?: mixed}
+     */
+    public function applicationStatus(string $applicationId): array;
+
+    /**
      * @return array{ok: bool, message?: string, servers: list<array{id: string, name: string, ip: ?string}>}
      */
     public function listServers(): array;

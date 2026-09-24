@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Contracts\InfrastructureDriver;
 use App\Models\Pool;
 use App\Models\Site;
+use App\Models\SiteDomain;
 use Throwable;
 
 class RecipeExecutor
@@ -30,9 +31,22 @@ class RecipeExecutor
                 $this->run($site, $op);
             }
 
-            $site->status = 'active';
-            $site->save();
-            $this->audit->log('site.provisioned', $site, ['domain' => $site->domain]);
+            $site->refresh();
+
+            if ($this->awaitsDokploy($site)) {
+                $this->refreshDeployStatus($site);
+            } else {
+                $site->status = 'active';
+                $site->last_error = null;
+                $site->save();
+            }
+
+            $site->refresh();
+            $this->audit->log(
+                $site->status === 'active' ? 'site.provisioned' : 'site.deploy_pending',
+                $site,
+                ['domain' => $site->domain, 'status' => $site->status],
+            );
         } catch (Throwable $exception) {
             $this->ledger->release($site);
             $site->status = 'failed';
@@ -110,27 +124,107 @@ class RecipeExecutor
     private function deploy(Site $site): void
     {
         $env = $site->environment ?? $this->environment->persist($site);
+        $existingId = $site->dokploy_app_id;
         $result = $this->driver->deployApplication([
             'name' => $site->domain,
             'app_name' => 'site-'.$site->id,
             'domain' => $site->domain,
             'recipe' => $site->recipe?->slug,
             'repository' => $site->repository,
+            'branch' => $site->options['git_branch'] ?? 'main',
             'env' => $this->environment->render($env),
             'environment_id' => config('dockhost.dokploy.environment_id'),
+            'application_id' => is_string($existingId) && $existingId !== '' && ! str_starts_with($existingId, 'local_')
+                ? $existingId
+                : null,
         ]);
 
-        $site->dokploy_app_id = $result['external_id'] ?? null;
+        $site->dokploy_app_id = $result['external_id'] ?? $site->dokploy_app_id;
+        $meta = $site->meta ?? [];
+
+        if (! empty($result['project_id'])) {
+            $meta['dokploy_project_id'] = $result['project_id'];
+        }
+
+        if (! empty($result['environment_id'])) {
+            $meta['dokploy_environment_id'] = $result['environment_id'];
+        }
+
+        $site->meta = $meta;
         $site->save();
+    }
+
+    public function refreshDeployStatus(Site $site): Site
+    {
+        $applicationId = (string) $site->dokploy_app_id;
+
+        if ($applicationId === '') {
+            return $site;
+        }
+
+        try {
+            $result = $this->driver->applicationStatus($applicationId);
+        } catch (Throwable $exception) {
+            $site->status = $site->status === 'suspended' ? 'suspended' : 'provisioning';
+            $site->last_error = $exception->getMessage();
+            $site->save();
+
+            return $site;
+        }
+        $meta = $site->meta ?? [];
+
+        if (! empty($result['project_id'])) {
+            $meta['dokploy_project_id'] = $result['project_id'];
+        }
+
+        if (! empty($result['environment_id'])) {
+            $meta['dokploy_environment_id'] = $result['environment_id'];
+        }
+
+        $site->meta = $meta;
+        $remote = $result['status'] ?? null;
+
+        if (in_array($remote, ['done', 'running'], true)) {
+            $site->status = 'active';
+            $site->last_error = null;
+        } elseif ($remote === 'error') {
+            $site->status = 'provisioning';
+            $site->last_error = 'Dokploy reported an error for this application.';
+        } elseif ($site->status !== 'suspended') {
+            $site->status = 'provisioning';
+        }
+
+        $site->save();
+
+        return $site;
+    }
+
+    private function awaitsDokploy(Site $site): bool
+    {
+        return is_string($site->dokploy_app_id)
+            && $site->dokploy_app_id !== ''
+            && ! str_starts_with($site->dokploy_app_id, 'local_');
     }
 
     private function attachDomain(Site $site): void
     {
-        $this->driver->attachDomain([
+        $created = $this->driver->attachDomain([
             'domain' => $site->domain,
             'application_id' => $site->dokploy_app_id,
             'port' => $site->recipe?->stack === 'node' ? 3000 : 80,
         ]);
+
+        $raw = is_array($created['raw'] ?? null) ? $created['raw'] : [];
+        $domainId = $raw['domainId'] ?? $raw['id'] ?? null;
+
+        SiteDomain::query()->updateOrCreate(
+            ['host' => strtolower($site->domain)],
+            [
+                'site_id' => $site->id,
+                'primary' => true,
+                'dokploy_domain_id' => is_string($domainId) ? $domainId : null,
+            ],
+        );
     }
 
     private function pool(int $id): Pool

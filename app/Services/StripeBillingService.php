@@ -20,6 +20,8 @@ use Illuminate\Validation\ValidationException;
  */
 class StripeBillingService
 {
+    public function __construct(private SiteSuspension $sites) {}
+
     public function configured(): bool
     {
         return (bool) config('dockhost.stripe.secret');
@@ -192,6 +194,10 @@ class StripeBillingService
                 ? $session['customer']
                 : $subscription->client->stripe_customer_id,
         ])->save();
+
+        if ($subscription->client) {
+            $this->sites->apply($subscription->client);
+        }
     }
 
     private function markPastDue(string $customerId): void
@@ -211,6 +217,7 @@ class StripeBillingService
         $client->subscriptions()->whereIn('status', ['active', 'trialing'])->update([
             'status' => 'past_due',
         ]);
+        $this->sites->apply($client);
     }
 
     private function cancelSubscription(string $stripeSubscriptionId): void

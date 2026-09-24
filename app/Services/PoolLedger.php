@@ -44,6 +44,19 @@ class PoolLedger
         $this->recalculate($poolIds);
     }
 
+    /**
+     * Replace every pool attachment and hold capacity again.
+     *
+     * @param  array<string, int|null>  $purposeToPoolId
+     */
+    public function sync(Site $site, array $purposeToPoolId): void
+    {
+        $previous = $this->poolIds($site);
+        DB::table('site_pools')->where('site_id', $site->id)->delete();
+        $this->attach($site, $purposeToPoolId);
+        $this->recalculate($previous);
+    }
+
     public function release(Site $site): void
     {
         $poolIds = $this->poolIds($site);

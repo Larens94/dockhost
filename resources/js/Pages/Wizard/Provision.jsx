@@ -17,6 +17,8 @@ export default function Provision({ clients, recipes, pools }) {
         wants_sftp: false,
         wants_cache: false,
         cache_pool_id: pools.cache[0]?.id || '',
+        database_mode: 'shared',
+        git_branch: 'main',
     });
 
     const client = clients.find((item) => String(item.id) === String(data.client_id));
@@ -41,6 +43,7 @@ export default function Provision({ clients, recipes, pools }) {
             wants_storage: payload.wants_storage ? 1 : 0,
             wants_sftp: payload.wants_sftp ? 1 : 0,
             wants_cache: payload.wants_cache ? 1 : 0,
+            database_mode: payload.wants_database && payload.database_mode === 'dedicated' ? 'dedicated' : 'shared',
             database_pool_id: payload.wants_database ? payload.database_pool_id : null,
             storage_pool_id: payload.wants_storage || payload.wants_sftp ? payload.storage_pool_id : null,
             cache_pool_id: payload.wants_cache ? payload.cache_pool_id : null,
@@ -79,7 +82,7 @@ export default function Provision({ clients, recipes, pools }) {
                         )}
                         {client?.can_provision && (
                             <p className="text-sm text-slate-500">
-                                {client.plan} allows SFTP {client.entitlements.sftp ? 'yes' : 'no'}, cache {client.entitlements.cache ? 'yes' : 'no'}.
+                                {client.plan} allows SFTP {client.entitlements.sftp ? 'yes' : 'no'}, cache {client.entitlements.cache ? 'yes' : 'no'}, dedicated database {client.entitlements.dedicated_database ? 'yes' : 'no'}.
                             </p>
                         )}
 
@@ -93,7 +96,12 @@ export default function Provision({ clients, recipes, pools }) {
                             Git repository
                             <TextInput value={data.repository} onChange={(event) => setData('repository', event.target.value)} className="mt-1 block w-full" placeholder="git@github.com:org/app.git" />
                         </label>
-                        <p className="text-xs text-slate-500">Stored for the operator. Connecting the Git provider stays in Dokploy.</p>
+                        <label className="block text-sm font-medium">
+                            Branch
+                            <TextInput value={data.git_branch} onChange={(event) => setData('git_branch', event.target.value)} className="mt-1 block w-full" placeholder="main" />
+                        </label>
+                        <InputError message={errors.git_branch} />
+                        <p className="text-xs text-slate-500">When Dokploy is connected, DockHost saves this repository before the first deploy.</p>
                     </Card>
 
                     <Card className="p-5">
@@ -125,6 +133,17 @@ export default function Provision({ clients, recipes, pools }) {
                         >
                             <PoolSelect pools={pools.database} value={data.database_pool_id} onChange={(value) => setData('database_pool_id', value)} />
                             <InputError message={errors.database_pool_id} />
+                            {client?.entitlements?.dedicated_database && (
+                                <label className="mt-3 flex items-center gap-2 text-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={data.database_mode === 'dedicated'}
+                                        onChange={(event) => setData('database_mode', event.target.checked ? 'dedicated' : 'shared')}
+                                    />
+                                    Dedicated database service
+                                </label>
+                            )}
+                            <InputError message={errors.database_mode} />
                         </Toggle>
                         <Toggle
                             label="Storage"
@@ -164,7 +183,7 @@ export default function Provision({ clients, recipes, pools }) {
                         <li>Hold one slot on each selected pool.</li>
                         <li>Reserve a database user and, when the pool has an admin DSN, create the schema.</li>
                         <li>Reserve an SFTP account when requested.</li>
-                        <li>Write the site .env and ask Dokploy to create the app and domain.</li>
+                        <li>Write the site .env, connect the Git repository, and ask Dokploy to deploy. The site stays provisioning until Dokploy reports the app is up.</li>
                     </ul>
                     <PrimaryButton className="mt-5" disabled={processing || (client && !client.can_provision)}>
                         Provision

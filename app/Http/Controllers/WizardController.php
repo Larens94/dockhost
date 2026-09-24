@@ -56,6 +56,10 @@ class WizardController extends Controller
             'wants_cache',
         ]);
 
+        if ($request->input('git_branch') === '') {
+            $request->merge(['git_branch' => null]);
+        }
+
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
             'domain' => ['required', 'string', 'max:255', 'unique:sites,domain', 'regex:/^(?=.{1,255}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i'],
@@ -68,6 +72,8 @@ class WizardController extends Controller
             'wants_sftp' => ['required', 'boolean'],
             'wants_cache' => ['required', 'boolean'],
             'cache_pool_id' => ['nullable', 'integer', 'exists:pools,id'],
+            'database_mode' => ['nullable', 'in:shared,dedicated'],
+            'git_branch' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z0-9._\-\/]+$/'],
         ]);
 
         $site = $provisioning->provision($data);

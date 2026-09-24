@@ -14,7 +14,8 @@ class EntitlementGate
      *     wants_database?: bool,
      *     wants_storage?: bool,
      *     wants_sftp?: bool,
-     *     wants_cache?: bool
+     *     wants_cache?: bool,
+     *     database_mode?: string
      * }  $options
      */
     public function assertCanProvision(Client $client, Recipe $recipe, array $options): Subscription
@@ -52,6 +53,12 @@ class EntitlementGate
         if (($options['wants_cache'] ?? false) && empty($entitlements['cache'])) {
             throw ValidationException::withMessages([
                 'wants_cache' => 'This plan does not include cache.',
+            ]);
+        }
+
+        if (($options['database_mode'] ?? 'shared') === 'dedicated' && empty($entitlements['dedicated_database'])) {
+            throw ValidationException::withMessages([
+                'database_mode' => 'This plan does not include a dedicated database.',
             ]);
         }
 

@@ -3,7 +3,9 @@
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\PanelController;
+use App\Http\Controllers\PoolController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ServerController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SiteToolkitController;
 use App\Http\Controllers\StripeWebhookController;
@@ -29,12 +31,21 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
     Route::get('/sites/{site}/toolkit', [SiteToolkitController::class, 'show'])->name('sites.toolkit');
     Route::patch('/sites/{site}/toolkit', [SiteToolkitController::class, 'updateSettings'])->name('sites.toolkit.update');
     Route::post('/sites/{site}/artisan', [SiteToolkitController::class, 'runArtisan'])->name('sites.artisan');
+    Route::post('/sites/{site}/refresh', [SiteToolkitController::class, 'refresh'])->name('sites.refresh');
+    Route::post('/sites/{site}/retry', [SiteToolkitController::class, 'retry'])->name('sites.retry');
+    Route::post('/sites/{site}/domains', [SiteToolkitController::class, 'storeDomain'])->name('sites.domains.store');
 
     Route::get('/wizard', [WizardController::class, 'create'])->name('wizard.create');
     Route::post('/wizard', [WizardController::class, 'store'])->name('wizard.store');
 
     Route::get('/pools', [PanelController::class, 'pools'])->name('pools.index');
+    Route::get('/pools/create', [PoolController::class, 'create'])->name('pools.create');
+    Route::post('/pools', [PoolController::class, 'store'])->name('pools.store');
+    Route::get('/pools/{pool}/edit', [PoolController::class, 'edit'])->name('pools.edit');
+    Route::patch('/pools/{pool}', [PoolController::class, 'update'])->name('pools.update');
     Route::get('/servers', [PanelController::class, 'servers'])->name('servers.index');
+    Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
+    Route::patch('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::post('/servers/sync', [PanelController::class, 'syncServers'])->name('servers.sync');
     Route::get('/services', [PanelController::class, 'services'])->name('services.index');
     Route::get('/recipes', [PanelController::class, 'recipes'])->name('recipes.index');

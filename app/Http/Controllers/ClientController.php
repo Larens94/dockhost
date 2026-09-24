@@ -13,6 +13,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Services\AuditLogger;
 use App\Services\SiteLifecycle;
+use App\Services\SiteSuspension;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -79,11 +80,12 @@ class ClientController extends Controller
      *
      * Rules:   Do not touch stripe_customer_id or billing_status from this form.
      */
-    public function update(Request $request, Client $client): RedirectResponse
+    public function update(Request $request, Client $client, SiteSuspension $suspension): RedirectResponse
     {
         $data = $this->validated($request, $client);
 
         $client->update($data);
+        $suspension->apply($client);
 
         app(AuditLogger::class)->log('client.updated', $client, ['name' => $client->name]);
 

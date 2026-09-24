@@ -3,6 +3,7 @@
 namespace App\Infrastructure;
 
 use App\Contracts\InfrastructureDriver;
+use App\Support\GitRemote;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -17,7 +18,11 @@ use Throwable;
  *   GET  /api/server.all
  *   POST /api/application.create
  *   POST /api/application.saveEnvironment
+ *   POST /api/application.saveGitProvider
  *   POST /api/application.deploy
+ *   POST /api/application.stop
+ *   POST /api/application.start
+ *   GET  /api/application.one
  *   POST /api/application.delete
  *   POST /api/domain.create
  *   POST /api/compose.create
@@ -84,16 +89,21 @@ class DokployDriver implements InfrastructureDriver
             ];
         }
 
-        $created = $this->post('application.create', array_filter([
-            'name' => $definition['name'] ?? $definition['domain'] ?? 'site',
-            'appName' => $definition['app_name'] ?? null,
-            'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
-            'description' => $definition['recipe'] ?? null,
-        ], fn ($value) => $value !== null && $value !== ''));
+        $applicationId = $definition['application_id'] ?? null;
+        $created = [];
 
-        $applicationId = $created['applicationId'] ?? $created['id'] ?? null;
+        if (! is_string($applicationId) || $applicationId === '') {
+            $created = $this->post('application.create', array_filter([
+                'name' => $definition['name'] ?? $definition['domain'] ?? 'site',
+                'appName' => $definition['app_name'] ?? null,
+                'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
+                'description' => $definition['recipe'] ?? null,
+            ], fn ($value) => $value !== null && $value !== ''));
 
-        if (! $applicationId) {
+            $applicationId = $created['applicationId'] ?? $created['id'] ?? null;
+        }
+
+        if (! is_string($applicationId) || $applicationId === '') {
             throw new RuntimeException('Dokploy application.create did not return an id.');
         }
 
@@ -104,13 +114,88 @@ class DokployDriver implements InfrastructureDriver
             ]);
         }
 
+        if (! empty($definition['repository'])) {
+            $this->saveGitProvider([
+                'application_id' => $applicationId,
+                'repository' => $definition['repository'],
+                'branch' => $definition['branch'] ?? 'main',
+            ]);
+        }
+
         $this->post('application.deploy', [
             'applicationId' => $applicationId,
         ]);
 
         return [
-            'external_id' => (string) $applicationId,
+            'external_id' => $applicationId,
+            'project_id' => $this->projectId($created),
+            'environment_id' => $this->environmentIdFrom($created) ?: ($definition['environment_id'] ?? null),
             'raw' => $created,
+        ];
+    }
+
+    public function saveGitProvider(array $definition): array
+    {
+        $applicationId = (string) ($definition['application_id'] ?? '');
+
+        if (! $this->configured() || $applicationId === '' || str_starts_with($applicationId, 'local_')) {
+            return ['ok' => true, 'raw' => ['status' => 'local']];
+        }
+
+        $git = GitRemote::forDokploy(
+            (string) ($definition['repository'] ?? ''),
+            (string) ($definition['branch'] ?? 'main'),
+        );
+
+        $saved = $this->post('application.saveGitProvider', [
+            'applicationId' => $applicationId,
+            'customGitUrl' => $git['url'],
+            'customGitBranch' => $git['branch'],
+            'customGitBuildPath' => '/',
+            'watchPaths' => [],
+        ]);
+
+        return ['ok' => true, 'raw' => $saved];
+    }
+
+    public function stopApplication(string $applicationId): array
+    {
+        return $this->lifecycle('application.stop', $applicationId);
+    }
+
+    public function startApplication(string $applicationId): array
+    {
+        return $this->lifecycle('application.start', $applicationId);
+    }
+
+    public function applicationStatus(string $applicationId): array
+    {
+        if (! $this->configured() || $applicationId === '' || str_starts_with($applicationId, 'local_')) {
+            return [
+                'ok' => true,
+                'status' => 'done',
+                'project_id' => null,
+                'environment_id' => null,
+            ];
+        }
+
+        $response = $this->request()->get($this->url('application.one'), [
+            'applicationId' => $applicationId,
+        ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException("Dokploy application.one failed: HTTP {$response->status()}");
+        }
+
+        $json = $this->unwrap($response->json());
+        $status = $json['applicationStatus'] ?? null;
+
+        return [
+            'ok' => true,
+            'status' => is_string($status) ? $status : null,
+            'project_id' => $this->projectId($json),
+            'environment_id' => $this->environmentIdFrom($json),
+            'raw' => $json,
         ];
     }
 
@@ -326,6 +411,44 @@ class DokployDriver implements InfrastructureDriver
     private function url(string $procedure): string
     {
         return rtrim((string) config('dockhost.dokploy.url'), '/').'/api/'.$procedure;
+    }
+
+    /**
+     * @return array{ok: bool, raw?: mixed}
+     */
+    private function lifecycle(string $procedure, string $applicationId): array
+    {
+        if (! $this->configured() || $applicationId === '' || str_starts_with($applicationId, 'local_')) {
+            return ['ok' => true, 'raw' => ['status' => 'local']];
+        }
+
+        return [
+            'ok' => true,
+            'raw' => $this->post($procedure, ['applicationId' => $applicationId]),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function projectId(array $payload): ?string
+    {
+        $environment = is_array($payload['environment'] ?? null) ? $payload['environment'] : [];
+        $project = is_array($environment['project'] ?? null) ? $environment['project'] : [];
+        $id = $payload['projectId'] ?? $environment['projectId'] ?? $project['projectId'] ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function environmentIdFrom(array $payload): ?string
+    {
+        $environment = is_array($payload['environment'] ?? null) ? $payload['environment'] : [];
+        $id = $payload['environmentId'] ?? $environment['environmentId'] ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
     }
 
     private function localId(string $seed): string

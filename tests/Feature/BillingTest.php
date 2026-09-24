@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Plan;
+use App\Models\Site;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -108,6 +109,76 @@ class BillingTest extends TestCase
 
         $this->assertSame('past_due', $client->fresh()->billing_status);
         $this->assertSame('past_due', $subscription->fresh()->status);
+    }
+
+    public function test_payment_failure_suspends_existing_sites_until_billing_recovers(): void
+    {
+        $client = Client::factory()->create([
+            'stripe_customer_id' => 'cus_live_3',
+            'billing_status' => 'active',
+            'status' => 'active',
+        ]);
+        $plan = Plan::factory()->create();
+        $subscription = Subscription::factory()->create([
+            'client_id' => $client->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+        ]);
+        $site = Site::factory()->create([
+            'client_id' => $client->id,
+            'status' => 'active',
+            'usage_held' => true,
+            'dokploy_app_id' => 'local_bill',
+        ]);
+
+        $failed = json_encode([
+            'type' => 'invoice.payment_failed',
+            'data' => [
+                'object' => [
+                    'customer' => 'cus_live_3',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            route('stripe.webhook'),
+            [],
+            [],
+            [],
+            ['HTTP_STRIPE_SIGNATURE' => $this->signature($failed)],
+            $failed,
+        )->assertOk();
+
+        $this->assertSame('suspended', $site->fresh()->status);
+        $this->assertTrue($site->fresh()->usage_held);
+
+        $paid = json_encode([
+            'type' => 'checkout.session.completed',
+            'data' => [
+                'object' => [
+                    'customer' => 'cus_live_3',
+                    'subscription' => 'sub_live_3',
+                    'metadata' => [
+                        'subscription_id' => (string) $subscription->id,
+                    ],
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            route('stripe.webhook'),
+            [],
+            [],
+            [],
+            ['HTTP_STRIPE_SIGNATURE' => $this->signature($paid)],
+            $paid,
+        )->assertOk();
+
+        $this->assertSame('active', $client->fresh()->billing_status);
+        $this->assertSame('active', $site->fresh()->status);
+        $this->assertTrue($site->fresh()->usage_held);
     }
 
     public function test_webhook_rejects_a_bad_signature(): void

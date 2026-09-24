@@ -234,6 +234,8 @@ class PanelController extends Controller
             'usage' => $pool->usage,
             'capacity' => $pool->capacity,
             'dokploy_ref' => $pool->dokploy_ref,
+            'admin_ready' => filled($pool->adminConnection()['host']) && filled($pool->adminConnection()['admin_username']),
+            'ssh_ready' => filled($pool->adminConnection()['ssh_host']) && filled($pool->adminConnection()['ssh_username']),
         ]);
 
         return Inertia::render('Pools/Index', compact('pools'));

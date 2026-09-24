@@ -5,8 +5,15 @@ import AuthenticatedLayout, { Card, PageTitle, StatusBadge } from '@/Layouts/Aut
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
-export default function Toolkit({ site, toolkit, state, envPreview, artisanCommands, dokployLinks, dokployConfigured }) {
+export default function Toolkit({ site, toolkit, state, envPreview, artisanCommands, dokployLinks, dokployConfigured, pools }) {
     const [tab, setTab] = useState(toolkit.tabs?.[0]?.id || 'dashboard');
+    const refresh = useForm({});
+    const domain = useForm({ host: '' });
+    const retry = useForm({
+        database_pool_id: site.options?.database_pool_id || pools?.database?.[0]?.id || '',
+        storage_pool_id: site.options?.storage_pool_id || pools?.storage?.[0]?.id || '',
+        cache_pool_id: site.options?.cache_pool_id || pools?.cache?.[0]?.id || '',
+    });
     const settings = useForm({
         schedule_enabled: !!state.schedule_enabled,
         queue_enabled: !!state.queue_enabled,
@@ -31,6 +38,18 @@ export default function Toolkit({ site, toolkit, state, envPreview, artisanComma
         artisan.post(route('sites.artisan', site.id));
     };
 
+    const addDomain = (event) => {
+        event.preventDefault();
+        domain.post(route('sites.domains.store', site.id), {
+            onSuccess: () => domain.reset(),
+        });
+    };
+
+    const retrySite = (event) => {
+        event.preventDefault();
+        retry.post(route('sites.retry', site.id));
+    };
+
     return (
         <AuthenticatedLayout header={site.domain}>
             <Head title={site.domain} />
@@ -40,6 +59,16 @@ export default function Toolkit({ site, toolkit, state, envPreview, artisanComma
                 action={
                     <div className="flex items-center gap-3">
                         <StatusBadge status={site.status} />
+                        {site.dokploy_app_id && (
+                            <button
+                                type="button"
+                                disabled={refresh.processing}
+                                onClick={() => refresh.post(route('sites.refresh', site.id))}
+                                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                            >
+                                Refresh deploy
+                            </button>
+                        )}
                         <Link
                             href={route('sites.destroy', site.id)}
                             method="delete"
@@ -96,6 +125,44 @@ export default function Toolkit({ site, toolkit, state, envPreview, artisanComma
                                     <Fact label="SFTP password" value={site.sftp.password} />
                                 </>
                             )}
+                            <Fact label="Branch" value={site.git_branch || 'main'} />
+                        </Card>
+                    )}
+
+                    {tab === 'dashboard' && (
+                        <Card className="p-5">
+                            <div className="text-sm font-medium">Domains</div>
+                            <ul className="mt-3 space-y-1 text-sm">
+                                {(site.domains || []).map((item) => (
+                                    <li key={item.id}>{item.host}{item.primary ? ' · primary' : ''}</li>
+                                ))}
+                                {(site.domains || []).length === 0 && <li className="text-slate-500">No domains recorded yet.</li>}
+                            </ul>
+                            <form onSubmit={addDomain} className="mt-4 flex gap-3">
+                                <TextInput value={domain.data.host} onChange={(event) => domain.setData('host', event.target.value)} className="block w-full" placeholder="www.example.com" />
+                                <PrimaryButton disabled={domain.processing}>Add alias</PrimaryButton>
+                            </form>
+                            <InputError message={domain.errors.host} className="mt-2" />
+                        </Card>
+                    )}
+
+                    {site.status === 'failed' && pools && (
+                        <Card className="p-5">
+                            <div className="text-sm font-medium">Retry provisioning</div>
+                            <p className="mt-1 text-xs text-slate-500">Holds the slot again and reruns the recipe. Changing a pool does not move data that was never created.</p>
+                            <form onSubmit={retrySite} className="mt-4 space-y-3">
+                                {site.options?.wants_database && (
+                                    <PoolSelect label="Database pool" pools={pools.database} value={retry.data.database_pool_id} onChange={(value) => retry.setData('database_pool_id', value)} />
+                                )}
+                                {(site.options?.wants_storage || site.options?.wants_sftp) && (
+                                    <PoolSelect label="Storage pool" pools={pools.storage} value={retry.data.storage_pool_id} onChange={(value) => retry.setData('storage_pool_id', value)} />
+                                )}
+                                {site.options?.wants_cache && (
+                                    <PoolSelect label="Cache pool" pools={pools.cache} value={retry.data.cache_pool_id} onChange={(value) => retry.setData('cache_pool_id', value)} />
+                                )}
+                                <InputError message={retry.errors.site || retry.errors.client_id} />
+                                <PrimaryButton disabled={retry.processing}>Retry</PrimaryButton>
+                            </form>
                         </Card>
                     )}
 
@@ -184,6 +251,21 @@ function Check({ label, checked, onChange }) {
         <label className="flex items-center gap-2">
             <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
             {label}
+        </label>
+    );
+}
+
+function PoolSelect({ label, pools, value, onChange }) {
+    return (
+        <label className="block text-sm font-medium">
+            {label}
+            <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 block w-full rounded-md border-slate-300 text-sm">
+                {(pools || []).map((pool) => (
+                    <option key={pool.id} value={pool.id} disabled={!pool.available}>
+                        {pool.name} · {pool.usage}/{pool.capacity}
+                    </option>
+                ))}
+            </select>
         </label>
     );
 }

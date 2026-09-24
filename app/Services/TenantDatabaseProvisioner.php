@@ -19,24 +19,32 @@ class TenantDatabaseProvisioner
 
     public function ensure(Site $site, Pool $pool): SiteDatabase
     {
+        $existing = SiteDatabase::query()->where('site_id', $site->id)->first();
+
+        if ($existing && $existing->status === 'provisioned' && (int) $existing->pool_id === $pool->id) {
+            return $existing;
+        }
+
         $engine = strtolower((string) ($pool->engine ?: 'mariadb'));
+        $connection = $pool->adminConnection();
         $account = SiteDatabase::query()->updateOrCreate(
             ['site_id' => $site->id],
             [
                 'pool_id' => $pool->id,
                 'engine' => $engine,
-                'schema_name' => $this->identifier('db', $site),
-                'username' => $this->identifier('u', $site),
-                'password' => Str::password(24, symbols: false),
-                'host' => $pool->meta['host'] ?? null,
-                'port' => (int) ($pool->meta['port'] ?? (str_starts_with($engine, 'postgres') ? 5432 : 3306)),
+                'schema_name' => $existing?->schema_name ?? $this->identifier('db', $site),
+                'username' => $existing?->username ?? $this->identifier('u', $site),
+                'password' => $existing?->password ?: Str::password(24, symbols: false),
+                'host' => $connection['host'] ?? null,
+                'port' => (int) ($connection['port'] ?? (str_starts_with($engine, 'postgres') ? 5432 : 3306)),
                 'status' => 'reserved',
             ]
         );
 
-        $mode = $pool->meta['mode'] ?? 'shared';
+        $dedicated = ($site->options['database_mode'] ?? null) === 'dedicated'
+            || $connection['mode'] === 'dedicated';
 
-        if ($mode === 'dedicated') {
+        if ($dedicated) {
             $remote = $this->driver->createDatabase([
                 'name' => 'db-'.$site->id,
                 'app_name' => 'db-'.$site->id,
@@ -44,8 +52,8 @@ class TenantDatabaseProvisioner
                 'database' => $account->schema_name,
                 'username' => $account->username,
                 'password' => $account->password,
-                'environment_id' => $pool->meta['dokploy_environment_id'] ?? config('dockhost.dokploy.environment_id'),
-                'image' => $pool->meta['image'] ?? null,
+                'environment_id' => $connection['dokploy_environment_id'] ?? config('dockhost.dokploy.environment_id'),
+                'image' => $connection['image'] ?? null,
             ]);
 
             $account->dokploy_ref = $remote['external_id'] ?? null;
@@ -55,7 +63,7 @@ class TenantDatabaseProvisioner
             return $account;
         }
 
-        if (! empty($pool->meta['admin_username']) && ! empty($pool->meta['host'])) {
+        if (! empty($connection['admin_username']) && ! empty($connection['host'])) {
             $this->admin->exec($pool, $this->statements($account, create: true));
             $account->status = 'provisioned';
             $account->save();
@@ -72,11 +80,13 @@ class TenantDatabaseProvisioner
             return;
         }
 
-        if (($pool->meta['mode'] ?? 'shared') === 'dedicated') {
+        $connection = $pool->adminConnection();
+
+        if ($connection['mode'] === 'dedicated') {
             return;
         }
 
-        if (empty($pool->meta['admin_username']) || empty($pool->meta['host'])) {
+        if (empty($connection['admin_username']) || empty($connection['host'])) {
             return;
         }
 

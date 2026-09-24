@@ -192,8 +192,14 @@ class ProvisioningTest extends TestCase
 
         $site = Site::query()->where('domain', 'live.example.test')->firstOrFail();
 
-        $this->assertSame('active', $site->status);
+        $this->assertSame('provisioning', $site->status);
+        $this->assertTrue($site->usage_held);
         $this->assertSame('app_live', $site->dokploy_app_id);
+        $this->assertDatabaseHas('site_domains', [
+            'site_id' => $site->id,
+            'host' => 'live.example.test',
+            'primary' => true,
+        ]);
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://dokploy.test/api/application.create'
