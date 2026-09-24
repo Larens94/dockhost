@@ -1,31 +1,29 @@
 <?php
-// DokployDriver.php — DokployDriver module.
-//
-// exports: DokployDriver | DokployDriver::name(): string | DokployDriver::ping(): array | DokployDriver::deployCompose(array $definition): array | DokployDriver::deployApplication(array $definition): array | DokployDriver::attachDomain(array $definition): array
-// used_by: app/Providers/AppServiceProvider.php
-// rules:   stubs only until live API wired; never invent Dokploy UI in DockHost
-// agent:   composer | cursor | 2026-09-18 | s_20260918_dokploy_stripe | Document real API endpoint TODOs (compose/application/domain)
-// message: Live calls still stubbed — wire compose.create / application.create / domain.create next
 
 namespace App\Infrastructure;
 
 use App\Contracts\InfrastructureDriver;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
+use Throwable;
 
 /**
- * Dokploy API adapter. Business entities never call this directly
- * from controllers without going through application services.
+ * Dokploy API adapter.
  *
- * Real Dokploy HTTP endpoints (to wire when credentials + payload shapes are confirmed):
- *   POST {DOKPLOY_URL}/api/compose.create      — create compose service
- *   POST {DOKPLOY_URL}/api/compose.deploy      — deploy compose
- *   POST {DOKPLOY_URL}/api/application.create  — create application
- *   POST {DOKPLOY_URL}/api/application.deploy  — deploy application
- *   POST {DOKPLOY_URL}/api/domain.create       — attach domain / SSL
- *   GET  {DOKPLOY_URL}/api/project.all         — ping / list (already used)
+ * Live procedures (official REST, x-api-key):
+ *   GET  /api/project.all
+ *   GET  /api/server.all
+ *   POST /api/application.create
+ *   POST /api/application.saveEnvironment
+ *   POST /api/application.deploy
+ *   POST /api/application.delete
+ *   POST /api/domain.create
+ *   POST /api/compose.create
+ *   POST /api/mariadb.create | postgres.create
  *
- * Auth header: x-api-key: {DOKPLOY_API_KEY}
+ * Without URL and API key the driver stays local: DockHost still records the tenant.
  */
 class DokployDriver implements InfrastructureDriver
 {
@@ -36,62 +34,302 @@ class DokployDriver implements InfrastructureDriver
 
     public function ping(): array
     {
-        $url = config('dockhost.dokploy.url');
-        $key = config('dockhost.dokploy.api_key');
-
-        if (! $url || ! $key) {
+        if (! $this->configured()) {
             return ['ok' => false, 'message' => 'Dokploy URL or API key missing'];
         }
 
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $key,
-            ])->timeout(8)->get(rtrim($url, '/').'/api/project.all');
+            $response = $this->request()->timeout(8)->get($this->url('project.all'));
 
             return [
                 'ok' => $response->successful(),
                 'message' => $response->successful() ? 'connected' : 'HTTP '.$response->status(),
             ];
-        } catch (\Throwable $e) {
-            Log::warning('Dokploy ping failed', ['error' => $e->getMessage()]);
+        } catch (Throwable $exception) {
+            Log::warning('Dokploy ping failed', ['error' => $exception->getMessage()]);
 
-            return ['ok' => false, 'message' => $e->getMessage()];
+            return ['ok' => false, 'message' => $exception->getMessage()];
         }
     }
 
     public function deployCompose(array $definition): array
     {
-        // TODO: live call — POST {DOKPLOY_URL}/api/compose.create then compose.deploy
-        //   headers: x-api-key
-        //   body: name, appName, composeFile, sourceType, ...
-        //   return external_id from response.composeId / applicationId
-        // Stub until payload contract is confirmed — do not half-wire.
+        if (! $this->configured()) {
+            return [
+                'external_id' => $this->localId((string) ($definition['name'] ?? 'compose')),
+                'raw' => ['status' => 'local'],
+            ];
+        }
+
+        $created = $this->post('compose.create', array_filter([
+            'name' => $definition['name'] ?? 'compose',
+            'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
+            'composeType' => 'docker-compose',
+            'composeFile' => $definition['compose'] ?? null,
+            'appName' => $definition['app_name'] ?? null,
+        ], fn ($value) => $value !== null && $value !== ''));
+
         return [
-            'external_id' => $definition['external_id'] ?? null,
-            'raw' => ['status' => 'stubbed', 'definition' => $definition],
+            'external_id' => $created['composeId'] ?? $created['id'] ?? null,
+            'raw' => $created,
         ];
     }
 
     public function deployApplication(array $definition): array
     {
-        // TODO: live call — POST {DOKPLOY_URL}/api/application.create then application.deploy
-        //   headers: x-api-key
-        //   body: name, appName, sourceType (github/git/docker), buildType, ...
-        //   return external_id from response.applicationId
+        if (! $this->configured()) {
+            return [
+                'external_id' => $this->localId((string) ($definition['domain'] ?? 'app')),
+                'raw' => ['status' => 'local'],
+            ];
+        }
+
+        $created = $this->post('application.create', array_filter([
+            'name' => $definition['name'] ?? $definition['domain'] ?? 'site',
+            'appName' => $definition['app_name'] ?? null,
+            'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
+            'description' => $definition['recipe'] ?? null,
+        ], fn ($value) => $value !== null && $value !== ''));
+
+        $applicationId = $created['applicationId'] ?? $created['id'] ?? null;
+
+        if (! $applicationId) {
+            throw new RuntimeException('Dokploy application.create did not return an id.');
+        }
+
+        if (! empty($definition['env'])) {
+            $this->updateEnvironment([
+                'application_id' => $applicationId,
+                'env' => $definition['env'],
+            ]);
+        }
+
+        $this->post('application.deploy', [
+            'applicationId' => $applicationId,
+        ]);
+
         return [
-            'external_id' => $definition['external_id'] ?? null,
-            'raw' => ['status' => 'stubbed', 'definition' => $definition],
+            'external_id' => (string) $applicationId,
+            'raw' => $created,
         ];
     }
 
     public function attachDomain(array $definition): array
     {
-        // TODO: live call — POST {DOKPLOY_URL}/api/domain.create
-        //   headers: x-api-key
-        //   body: host, https, certificateType, applicationId|composeId, ...
+        $applicationId = (string) ($definition['application_id'] ?? '');
+
+        if (! $this->configured() || $applicationId === '' || str_starts_with($applicationId, 'local_')) {
+            return ['ok' => true, 'raw' => ['status' => 'local']];
+        }
+
+        $created = $this->post('domain.create', [
+            'host' => $definition['domain'],
+            'path' => '/',
+            'port' => (int) ($definition['port'] ?? 80),
+            'https' => true,
+            'certificateType' => 'letsencrypt',
+            'applicationId' => $applicationId,
+            'domainType' => 'application',
+        ]);
+
+        return ['ok' => true, 'raw' => $created];
+    }
+
+    public function createDatabase(array $definition): array
+    {
+        if (! $this->configured()) {
+            return [
+                'ok' => true,
+                'external_id' => null,
+                'status' => 'reserved',
+                'raw' => ['status' => 'local'],
+            ];
+        }
+
+        $engine = strtolower((string) ($definition['engine'] ?? 'mariadb'));
+        $procedure = str_starts_with($engine, 'postgres') ? 'postgres.create' : 'mariadb.create';
+
+        $created = $this->post($procedure, array_filter([
+            'name' => $definition['name'] ?? 'database',
+            'appName' => $definition['app_name'] ?? null,
+            'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
+            'databaseName' => $definition['database'],
+            'databaseUser' => $definition['username'],
+            'databasePassword' => $definition['password'],
+            'dockerImage' => $definition['image'] ?? null,
+        ], fn ($value) => $value !== null && $value !== ''));
+
+        $id = $created['mariadbId'] ?? $created['postgresId'] ?? $created['id'] ?? null;
+
         return [
             'ok' => true,
-            'raw' => ['status' => 'stubbed', 'definition' => $definition],
+            'external_id' => $id ? (string) $id : null,
+            'status' => 'provisioned',
+            'raw' => $created,
         ];
+    }
+
+    public function updateEnvironment(array $definition): array
+    {
+        $applicationId = (string) ($definition['application_id'] ?? '');
+
+        if (! $this->configured() || $applicationId === '' || str_starts_with($applicationId, 'local_')) {
+            return ['ok' => true, 'raw' => ['status' => 'local']];
+        }
+
+        $saved = $this->post('application.saveEnvironment', [
+            'applicationId' => $applicationId,
+            'env' => (string) ($definition['env'] ?? ''),
+            'createEnvFile' => true,
+        ]);
+
+        return ['ok' => true, 'raw' => $saved];
+    }
+
+    public function destroyApplication(array $definition): array
+    {
+        $applicationId = (string) ($definition['application_id'] ?? '');
+
+        if (! $this->configured() || $applicationId === '' || str_starts_with($applicationId, 'local_')) {
+            return ['ok' => true, 'raw' => ['status' => 'local']];
+        }
+
+        try {
+            $deleted = $this->post('application.delete', [
+                'applicationId' => $applicationId,
+            ]);
+
+            return ['ok' => true, 'raw' => $deleted];
+        } catch (Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        }
+    }
+
+    public function listServers(): array
+    {
+        if (! $this->configured()) {
+            return [
+                'ok' => false,
+                'message' => 'Dokploy URL or API key missing',
+                'servers' => [],
+            ];
+        }
+
+        try {
+            $response = $this->request()->get($this->url('server.all'));
+
+            if (! $response->successful()) {
+                return [
+                    'ok' => false,
+                    'message' => 'HTTP '.$response->status(),
+                    'servers' => [],
+                ];
+            }
+
+            $rows = $this->unwrap($response->json());
+
+            if (isset($rows['servers']) && is_array($rows['servers'])) {
+                $rows = $rows['servers'];
+            }
+
+            $servers = [];
+
+            foreach (is_array($rows) ? $rows : [] as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                $servers[] = [
+                    'id' => (string) ($row['serverId'] ?? $row['id'] ?? ''),
+                    'name' => (string) ($row['name'] ?? 'server'),
+                    'ip' => isset($row['ipAddress']) ? (string) $row['ipAddress'] : (isset($row['ip']) ? (string) $row['ip'] : null),
+                ];
+            }
+
+            return ['ok' => true, 'message' => 'synced', 'servers' => $servers];
+        } catch (Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage(), 'servers' => []];
+        }
+    }
+
+    public function exec(array $definition): array
+    {
+        return [
+            'ok' => false,
+            'output' => 'Recorded only. Artisan runs in the site container; DockHost does not open a shell.',
+        ];
+    }
+
+    private function configured(): bool
+    {
+        return (bool) config('dockhost.dokploy.url') && (bool) config('dockhost.dokploy.api_key');
+    }
+
+    private function environmentId(): string
+    {
+        $environmentId = (string) config('dockhost.dokploy.environment_id');
+
+        if ($environmentId === '') {
+            throw new RuntimeException('DOKPLOY_ENVIRONMENT_ID is required to create Dokploy resources.');
+        }
+
+        return $environmentId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function post(string $procedure, array $payload): array
+    {
+        $response = $this->request()->post($this->url($procedure), $payload);
+
+        if (! $response->successful()) {
+            throw new RuntimeException("Dokploy {$procedure} failed: HTTP {$response->status()}");
+        }
+
+        $json = $response->json();
+
+        return is_array($json) ? $this->unwrap($json) : [];
+    }
+
+    /**
+     * @return array<string, mixed>|list<mixed>
+     */
+    private function unwrap(mixed $json): array
+    {
+        if (! is_array($json)) {
+            return [];
+        }
+
+        if (isset($json['result']['data'])) {
+            $data = $json['result']['data'];
+
+            if (is_array($data) && isset($data['json']) && is_array($data['json'])) {
+                return $data['json'];
+            }
+
+            return is_array($data) ? $data : [];
+        }
+
+        return $json;
+    }
+
+    private function request(): PendingRequest
+    {
+        return Http::withHeaders([
+            'x-api-key' => (string) config('dockhost.dokploy.api_key'),
+            'Accept' => 'application/json',
+        ])->timeout(20);
+    }
+
+    private function url(string $procedure): string
+    {
+        return rtrim((string) config('dockhost.dokploy.url'), '/').'/api/'.$procedure;
+    }
+
+    private function localId(string $seed): string
+    {
+        return 'local_'.substr(sha1($seed), 0, 12);
     }
 }

@@ -2,7 +2,8 @@
 
 namespace App\Services;
 
-use App\Contracts\InfrastructureDriver;
+use App\Jobs\ProvisionSiteJob;
+use App\Models\Client;
 use App\Models\Pool;
 use App\Models\Recipe;
 use App\Models\Site;
@@ -10,14 +11,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Provisions a site from wizard choices.
- * Does NOT replicate Dokploy UI (deploy logs, SSL UI, cron) — only business
- * options + calls the infra driver for runtime materialization.
+ * Reserves tenant capacity, then runs the recipe job.
+ * Dokploy keeps deploy, SSL, logs, and cron.
  */
 class SiteProvisioningService
 {
     public function __construct(
-        private InfrastructureDriver $driver,
+        private EntitlementGate $entitlements,
+        private PoolLedger $ledger,
+        private AuditLogger $audit,
     ) {}
 
     /**
@@ -25,6 +27,7 @@ class SiteProvisioningService
      *   client_id:int,
      *   domain:string,
      *   recipe_id:int,
+     *   repository?:string|null,
      *   wants_database:bool,
      *   database_pool_id?:int|null,
      *   wants_storage:bool,
@@ -36,9 +39,20 @@ class SiteProvisioningService
      */
     public function provision(array $input): Site
     {
-        $recipe = Recipe::query()->where('enabled', true)->findOrFail($input['recipe_id']);
+        $site = $this->reserve($input);
+        ProvisionSiteJob::dispatchSync($site->id);
 
-        $poolIds = [];
+        return $site->fresh(['client', 'recipe', 'databaseAccount', 'sftpAccount']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    public function reserve(array $input): Site
+    {
+        $recipe = Recipe::query()->where('enabled', true)->findOrFail($input['recipe_id']);
+        $client = Client::query()->findOrFail($input['client_id']);
+
         $options = [
             'wants_database' => (bool) ($input['wants_database'] ?? false),
             'database_pool_id' => null,
@@ -50,39 +64,56 @@ class SiteProvisioningService
             'runtime_pool_id' => null,
         ];
 
+        if ($options['wants_sftp']) {
+            $options['wants_storage'] = true;
+        }
+
+        $this->entitlements->assertCanProvision($client, $recipe, $options);
+
+        $attachments = [];
+
         if ($options['wants_database']) {
             $pool = $this->requirePool($input['database_pool_id'] ?? null, 'database');
             $options['database_pool_id'] = $pool->id;
-            $poolIds[] = $pool->id;
+            $attachments['database'] = $pool->id;
         }
 
-        if ($options['wants_storage'] || $options['wants_sftp']) {
-            // SFTP implies storage path
-            $options['wants_storage'] = true;
+        if ($options['wants_storage']) {
             $pool = $this->requirePool($input['storage_pool_id'] ?? null, 'storage');
             $options['storage_pool_id'] = $pool->id;
-            $poolIds[] = $pool->id;
+            $attachments['storage'] = $pool->id;
         }
 
         if ($options['wants_cache']) {
             $pool = $this->requirePool($input['cache_pool_id'] ?? null, 'cache');
             $options['cache_pool_id'] = $pool->id;
-            $poolIds[] = $pool->id;
+            $attachments['cache'] = $pool->id;
         }
 
-        $runtime = Pool::query()->where('kind', 'runtime')->orderBy('id')->first();
-        if ($runtime) {
-            $options['runtime_pool_id'] = $runtime->id;
-            $poolIds[] = $runtime->id;
+        $runtime = Pool::query()->where('kind', 'runtime')->orderBy('usage')->orderBy('id')->first();
+
+        if (! $runtime) {
+            throw ValidationException::withMessages([
+                'recipe_id' => 'No runtime pool is available.',
+            ]);
         }
 
-        return DB::transaction(function () use ($input, $recipe, $options, $poolIds) {
+        if ($runtime->usage >= $runtime->capacity) {
+            throw ValidationException::withMessages([
+                'recipe_id' => "Runtime pool {$runtime->name} is full.",
+            ]);
+        }
+
+        $options['runtime_pool_id'] = $runtime->id;
+        $attachments['runtime'] = $runtime->id;
+
+        return DB::transaction(function () use ($input, $recipe, $options, $attachments) {
             $site = Site::query()->create([
                 'client_id' => $input['client_id'],
                 'recipe_id' => $recipe->id,
                 'domain' => $input['domain'],
+                'repository' => $input['repository'] ?? null,
                 'status' => 'pending',
-                'pool_ids' => array_values(array_unique($poolIds)),
                 'options' => $options,
                 'meta' => [
                     'provisioned_via' => 'wizard',
@@ -90,31 +121,10 @@ class SiteProvisioningService
                 ],
             ]);
 
-            // Driver calls — Dokploy owns deploy/SSL; we only request creation.
-            if ($options['wants_database']) {
-                // schema/user creation is DockHost responsibility (to be wired)
-            }
+            $this->ledger->attach($site, $attachments);
+            $this->audit->log('site.reserved', $site, ['domain' => $site->domain]);
 
-            $deploy = $this->driver->deployApplication([
-                'domain' => $site->domain,
-                'recipe' => $recipe->slug,
-                'options' => $options,
-            ]);
-
-            $site->dokploy_app_id = $deploy['external_id'] ?? ('app_pending_'.$site->id);
-            $site->status = 'provisioning';
-            $site->save();
-
-            $this->driver->attachDomain([
-                'domain' => $site->domain,
-                'application_id' => $site->dokploy_app_id,
-            ]);
-
-            foreach ($poolIds as $poolId) {
-                Pool::query()->whereKey($poolId)->increment('usage');
-            }
-
-            return $site->fresh(['client', 'recipe']);
+            return $site;
         });
     }
 
@@ -127,6 +137,7 @@ class SiteProvisioningService
         }
 
         $pool = Pool::query()->whereKey($id)->where('kind', $kind)->first();
+
         if (! $pool) {
             throw ValidationException::withMessages([
                 "{$kind}_pool_id" => "Invalid {$kind} pool.",

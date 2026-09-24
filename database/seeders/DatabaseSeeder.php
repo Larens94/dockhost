@@ -10,7 +10,11 @@ use App\Models\Recipe;
 use App\Models\Server;
 use App\Models\ServiceCatalogItem;
 use App\Models\Site;
+use App\Models\SiteDatabase;
+use App\Models\Subscription;
 use App\Models\User;
+use App\Services\EnvironmentBuilder;
+use App\Services\PoolLedger;
 use App\Support\ApplicationToolkit;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -25,6 +29,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'DockHost Admin',
                 'password' => Hash::make('password'),
                 'email_verified_at' => now(),
+                'role' => 'superadmin',
             ]
         );
 
@@ -55,8 +60,9 @@ class DatabaseSeeder extends Seeder
                 'engine' => 'mariadb',
                 'server_id' => $manager->id,
                 'capacity' => 120,
-                'usage' => 34,
+                'usage' => 0,
                 'dokploy_ref' => 'compose:mariadb-shared',
+                'meta' => ['host' => '10.0.0.10', 'port' => 3306, 'mode' => 'shared'],
             ]
         );
 
@@ -67,8 +73,9 @@ class DatabaseSeeder extends Seeder
                 'engine' => 'volume',
                 'server_id' => $worker->id,
                 'capacity' => 200,
-                'usage' => 51,
+                'usage' => 0,
                 'dokploy_ref' => 'compose:storage-sftp',
+                'meta' => ['host' => '10.0.0.11', 'mode' => 'shared'],
             ]
         );
 
@@ -77,9 +84,10 @@ class DatabaseSeeder extends Seeder
             [
                 'kind' => 'runtime',
                 'engine' => 'php-fpm',
+                'runtime_version' => '8.3',
                 'server_id' => $worker->id,
                 'capacity' => 80,
-                'usage' => 22,
+                'usage' => 0,
                 'dokploy_ref' => 'swarm:app-web',
             ]
         );
@@ -91,8 +99,9 @@ class DatabaseSeeder extends Seeder
                 'engine' => 'redis',
                 'server_id' => $manager->id,
                 'capacity' => 50,
-                'usage' => 12,
+                'usage' => 0,
                 'dokploy_ref' => 'compose:redis-shared',
+                'meta' => ['host' => '10.0.0.10', 'port' => 6379],
             ]
         );
 
@@ -214,7 +223,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        Plan::query()->updateOrCreate(
+        $starter = Plan::query()->updateOrCreate(
             ['slug' => 'starter'],
             [
                 'name' => 'Starter',
@@ -224,11 +233,12 @@ class DatabaseSeeder extends Seeder
                 'interval' => 'month',
                 'site_quota' => 3,
                 'features' => ['3 sites', 'Shared DB', 'SFTP', 'Email support'],
+                'entitlements' => ['sftp' => true, 'cache' => false, 'dedicated_database' => false],
                 'active' => true,
             ]
         );
 
-        Plan::query()->updateOrCreate(
+        $business = Plan::query()->updateOrCreate(
             ['slug' => 'business'],
             [
                 'name' => 'Business',
@@ -237,7 +247,8 @@ class DatabaseSeeder extends Seeder
                 'currency' => 'eur',
                 'interval' => 'month',
                 'site_quota' => 15,
-                'features' => ['15 sites', 'Priority pools', 'SFTP', 'Chat support'],
+                'features' => ['15 sites', 'Priority pools', 'SFTP', 'Cache', 'Chat support'],
+                'entitlements' => ['sftp' => true, 'cache' => true, 'dedicated_database' => false],
                 'active' => true,
             ]
         );
@@ -251,7 +262,8 @@ class DatabaseSeeder extends Seeder
                 'currency' => 'eur',
                 'interval' => 'month',
                 'site_quota' => 50,
-                'features' => ['50 sites', 'Multi-pool', 'SFTP', 'SLA'],
+                'features' => ['50 sites', 'Multi-pool', 'SFTP', 'Cache', 'Dedicated DB', 'SLA'],
+                'entitlements' => ['sftp' => true, 'cache' => true, 'dedicated_database' => true],
                 'active' => true,
             ]
         );
@@ -274,17 +286,60 @@ class DatabaseSeeder extends Seeder
                 'company' => 'Beta Retail',
                 'status' => 'active',
                 'billing_email' => 'hello@beta.test',
-                'billing_status' => 'none',
+                'billing_status' => 'active',
             ]
         );
 
-        Site::query()->updateOrCreate(
+        Client::query()->updateOrCreate(
+            ['email' => 'ops@gamma.test'],
+            [
+                'name' => 'Gamma Paused',
+                'company' => 'Gamma',
+                'status' => 'suspended',
+                'billing_email' => 'ops@gamma.test',
+                'billing_status' => 'past_due',
+            ]
+        );
+
+        Subscription::query()->updateOrCreate(
+            ['client_id' => $acme->id, 'plan_id' => $business->id],
+            [
+                'status' => 'active',
+                'stripe_subscription_id' => 'sub_stub_acme',
+                'current_period_end' => now()->addMonth(),
+                'meta' => ['mode' => 'stub'],
+            ]
+        );
+
+        Subscription::query()->updateOrCreate(
+            ['client_id' => $beta->id, 'plan_id' => $starter->id],
+            [
+                'status' => 'active',
+                'stripe_subscription_id' => 'sub_stub_beta',
+                'current_period_end' => now()->addMonth(),
+                'meta' => ['mode' => 'stub'],
+            ]
+        );
+
+        $shop = Site::query()->updateOrCreate(
             ['domain' => 'shop.acme.test'],
             [
                 'client_id' => $acme->id,
                 'recipe_id' => $laravel->id,
                 'status' => 'active',
                 'repository' => 'git@github.com:acme/shop.git',
+                'usage_held' => true,
+                'options' => [
+                    'wants_database' => true,
+                    'database_pool_id' => $dbPool->id,
+                    'wants_storage' => true,
+                    'storage_pool_id' => $fsPool->id,
+                    'wants_sftp' => true,
+                    'wants_cache' => false,
+                    'cache_pool_id' => null,
+                    'runtime_pool_id' => $runtimePool->id,
+                    'storage_path' => '/var/sites/shop',
+                ],
                 'pool_ids' => [$dbPool->id, $fsPool->id, $runtimePool->id],
                 'toolkit_state' => [
                     'schedule_enabled' => true,
@@ -301,7 +356,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        Site::query()->updateOrCreate(
+        $portal = Site::query()->updateOrCreate(
             ['domain' => 'portal.beta.test'],
             [
                 'client_id' => $beta->id,
@@ -311,5 +366,31 @@ class DatabaseSeeder extends Seeder
                 'pool_ids' => [$dbPool->id, $fsPool->id, $runtimePool->id],
             ]
         );
+
+        $ledger = app(PoolLedger::class);
+
+        foreach ([$shop, $portal] as $site) {
+            $ledger->attach($site, [
+                'database' => $dbPool->id,
+                'storage' => $fsPool->id,
+                'runtime' => $runtimePool->id,
+            ]);
+        }
+
+        SiteDatabase::query()->updateOrCreate(
+            ['site_id' => $shop->id],
+            [
+                'pool_id' => $dbPool->id,
+                'engine' => 'mariadb',
+                'schema_name' => 'db_shop',
+                'username' => 'u_shop',
+                'password' => 'seedpassword1',
+                'host' => '10.0.0.10',
+                'port' => 3306,
+                'status' => 'reserved',
+            ]
+        );
+
+        app(EnvironmentBuilder::class)->persist($shop->fresh());
     }
 }

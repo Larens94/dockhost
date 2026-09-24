@@ -1,4 +1,5 @@
 <?php
+
 // PanelController.php — Inertia panel read endpoints.
 //
 // exports: PanelController::dashboard|clients|sites|pools|servers|services|recipes|templates|dokploySettings
@@ -10,6 +11,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\InfrastructureDriver;
+use App\Models\Audit;
 use App\Models\Client;
 use App\Models\InfraTemplate;
 use App\Models\Pool;
@@ -17,6 +20,8 @@ use App\Models\Recipe;
 use App\Models\Server;
 use App\Models\ServiceCatalogItem;
 use App\Models\Site;
+use App\Services\PoolLedger;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Inertia\Inertia;
@@ -47,6 +52,19 @@ class PanelController extends Controller
                 'status' => $site->status,
             ]);
 
+        $audits = Audit::query()
+            ->with('user')
+            ->latest()
+            ->limit(8)
+            ->get()
+            ->map(fn (Audit $audit) => [
+                'id' => $audit->id,
+                'action' => $audit->action,
+                'actor' => $audit->user?->name,
+                'meta' => $audit->meta ?? [],
+                'created_at' => $audit->created_at?->toIso8601String(),
+            ]);
+
         return Inertia::render('Dashboard', [
             'stats' => [
                 'clients' => Client::count(),
@@ -56,6 +74,7 @@ class PanelController extends Controller
             ],
             'recentSites' => $recentSites,
             'pools' => $pools,
+            'audits' => $audits,
         ]);
     }
 
@@ -179,6 +198,7 @@ class PanelController extends Controller
                     'recipe_slug' => $site->recipe?->slug,
                     'stack' => $site->recipe?->stack,
                     'status' => $site->status,
+                    'last_error' => $site->last_error,
                     'pools' => collect($site->pool_ids ?? [])
                         ->map(fn ($id) => $poolNames[$id] ?? "#{$id}")
                         ->values()
@@ -209,6 +229,7 @@ class PanelController extends Controller
             'name' => $pool->name,
             'kind' => $pool->kind,
             'engine' => $pool->engine,
+            'runtime_version' => $pool->runtime_version,
             'server' => $pool->server?->name ?? 'unassigned',
             'usage' => $pool->usage,
             'capacity' => $pool->capacity,
@@ -280,12 +301,51 @@ class PanelController extends Controller
 
         return Inertia::render('Settings/Dokploy', [
             'settings' => [
-                'url' => Config::get('dockhost.dokploy.url') ?: 'https://dokploy.example.com',
+                'url' => Config::get('dockhost.dokploy.url') ?: '',
                 'api_key_masked' => $key ? str_repeat('•', 12).substr($key, -4) : '••••••••',
                 'driver' => Config::get('dockhost.driver', 'dokploy'),
                 'connected' => (bool) Config::get('dockhost.dokploy.url'),
             ],
             'dokployOwns' => Config::get('dockhost.dokploy_owns', []),
         ]);
+    }
+
+    public function pingDokploy(InfrastructureDriver $driver): RedirectResponse
+    {
+        $result = $driver->ping();
+
+        return back()->with(
+            $result['ok'] ? 'success' : 'error',
+            $result['message'] ?? 'Dokploy did not respond.',
+        );
+    }
+
+    public function syncServers(InfrastructureDriver $driver, PoolLedger $ledger): RedirectResponse
+    {
+        $result = $driver->listServers();
+
+        if (! $result['ok']) {
+            return back()->with('error', $result['message'] ?? 'Could not list Dokploy servers.');
+        }
+
+        foreach ($result['servers'] as $server) {
+            if ($server['id'] === '') {
+                continue;
+            }
+
+            Server::query()->updateOrCreate(
+                ['dokploy_server_id' => $server['id']],
+                [
+                    'name' => $server['name'],
+                    'ip' => $server['ip'],
+                    'status' => 'online',
+                    'role' => 'worker',
+                ]
+            );
+        }
+
+        $ledger->recalculate(Pool::query()->pluck('id')->all());
+
+        return back()->with('success', count($result['servers']).' servers synced from Dokploy.');
     }
 }

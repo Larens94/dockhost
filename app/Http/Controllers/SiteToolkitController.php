@@ -1,4 +1,5 @@
 <?php
+
 // SiteToolkitController.php — SiteToolkitController module.
 //
 // exports: SiteToolkitController | SiteToolkitController::show(Site $site): Response | SiteToolkitController::updateSettings(Request $request, Site $site): RedirectResponse | SiteToolkitController::runArtisan(Request $request, Site $site): RedirectResponse
@@ -9,19 +10,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\InfrastructureDriver;
 use App\Models\Pool;
 use App\Models\Site;
+use App\Services\EnvironmentBuilder;
 use App\Support\ApplicationToolkit;
+use App\Support\ArtisanAllowlist;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class SiteToolkitController extends Controller
 {
-    public function show(Site $site): Response
+    public function show(Site $site, EnvironmentBuilder $environment): Response
     {
-        $site->load(['client', 'recipe']);
+        $site->load(['client', 'recipe', 'databaseAccount', 'sftpAccount']);
         $stack = $site->recipe?->stack ?? 'generic';
         $toolkit = $site->recipe?->toolkit ?: ApplicationToolkit::forStack($stack);
 
@@ -55,9 +60,29 @@ class SiteToolkitController extends Controller
                     ->values()
                     ->all(),
                 'options' => $site->options ?? [],
+                'last_error' => $site->last_error,
+                'database' => $site->databaseAccount ? [
+                    'engine' => $site->databaseAccount->engine,
+                    'schema' => $site->databaseAccount->schema_name,
+                    'username' => $site->databaseAccount->username,
+                    'password' => $site->databaseAccount->password,
+                    'host' => $site->databaseAccount->host,
+                    'port' => $site->databaseAccount->port,
+                    'status' => $site->databaseAccount->status,
+                ] : null,
+                'sftp' => $site->sftpAccount ? [
+                    'username' => $site->sftpAccount->username,
+                    'password' => $site->sftpAccount->password,
+                    'path' => $site->sftpAccount->chroot_path,
+                    'status' => $site->sftpAccount->status,
+                ] : null,
             ],
             'toolkit' => $toolkit,
             'state' => $state,
+            'envPreview' => $site->environment
+                ? $environment->masked($site->environment)
+                : ($state['env_preview'] ?? null),
+            'artisanCommands' => ArtisanAllowlist::commands(),
             'dokployUrl' => $dokployBase,
             'dokployConfigured' => (bool) $dokployBase,
             // Useful deep-links when configured — all open Dokploy base (no DockHost rebuild of Dokploy UI).
@@ -73,8 +98,10 @@ class SiteToolkitController extends Controller
         ]);
     }
 
-    public function updateSettings(Request $request, Site $site): RedirectResponse
+    public function updateSettings(Request $request, Site $site, EnvironmentBuilder $environment, InfrastructureDriver $driver): RedirectResponse
     {
+        $this->normalizeBooleans($request, ['schedule_enabled', 'queue_enabled', 'maintenance']);
+
         $data = $request->validate([
             'schedule_enabled' => ['sometimes', 'boolean'],
             'queue_enabled' => ['sometimes', 'boolean'],
@@ -96,27 +123,55 @@ class SiteToolkitController extends Controller
         $site->toolkit_state = $state;
         $site->save();
 
+        if ($site->environment || $site->databaseAccount) {
+            $rendered = $environment->render($environment->persist($site));
+            $driver->updateEnvironment([
+                'application_id' => $site->dokploy_app_id,
+                'env' => $rendered,
+            ]);
+        }
+
         return back()->with('success', 'Toolkit settings updated.');
     }
 
-    public function runArtisan(Request $request, Site $site): RedirectResponse
+    public function runArtisan(Request $request, Site $site, InfrastructureDriver $driver): RedirectResponse
     {
         $data = $request->validate([
-            'command' => ['required', 'string', 'max:200'],
+            'command' => ['required', 'string', 'max:200', Rule::in(ArtisanAllowlist::commands())],
         ]);
 
-        // Stub: real exec goes through worker/SSH against the site runtime.
+        $result = $driver->exec([
+            'application_id' => $site->dokploy_app_id,
+            'command' => $data['command'],
+        ]);
+
         $state = $site->toolkit_state ?? [];
         $history = $state['artisan_history'] ?? [];
         array_unshift($history, [
             'command' => $data['command'],
             'at' => now()->toDateTimeString(),
-            'output' => "[stub] php artisan {$data['command']}\nOK",
+            'output' => $result['output'],
         ]);
         $state['artisan_history'] = array_slice($history, 0, 10);
         $site->toolkit_state = $state;
         $site->save();
 
-        return back()->with('success', "Artisan queued: {$data['command']}");
+        return back()->with('success', "Artisan recorded: {$data['command']}");
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    private function normalizeBooleans(Request $request, array $keys): void
+    {
+        $merged = [];
+
+        foreach ($keys as $key) {
+            if ($request->exists($key)) {
+                $merged[$key] = filter_var($request->input($key), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+            }
+        }
+
+        $request->merge($merged);
     }
 }

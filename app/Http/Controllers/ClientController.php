@@ -1,4 +1,5 @@
 <?php
+
 // ClientController.php — Client anagrafica CRUD (superadmin).
 //
 // exports: ClientController | ClientController::create(): Response | ClientController::store(Request $request): RedirectResponse | ClientController::edit(Client $client): Response | ClientController::update(Request $request, Client $client): RedirectResponse
@@ -10,6 +11,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Services\AuditLogger;
+use App\Services\SiteLifecycle;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -39,10 +42,12 @@ class ClientController extends Controller
     {
         $data = $this->validated($request);
 
-        Client::query()->create([
+        $client = Client::query()->create([
             ...$data,
             'billing_status' => 'none',
         ]);
+
+        app(AuditLogger::class)->log('client.created', $client, ['name' => $client->name]);
 
         return redirect()
             ->route('clients.index')
@@ -80,9 +85,32 @@ class ClientController extends Controller
 
         $client->update($data);
 
+        app(AuditLogger::class)->log('client.updated', $client, ['name' => $client->name]);
+
         return redirect()
             ->route('clients.index')
             ->with('success', 'Client updated.');
+    }
+
+    /**
+     * Remove a client after its sites are deprovisioned.
+     *
+     * Rules:   Release pool capacity before the client row disappears.
+     */
+    public function destroy(Client $client, SiteLifecycle $lifecycle, AuditLogger $audit): RedirectResponse
+    {
+        foreach ($client->sites()->get() as $site) {
+            $lifecycle->deprovision($site);
+        }
+
+        $name = $client->name;
+        $clientId = $client->id;
+        $client->delete();
+        $audit->log('client.deleted', null, ['name' => $name, 'client_id' => $clientId]);
+
+        return redirect()
+            ->route('clients.index')
+            ->with('success', 'Client deleted.');
     }
 
     /**

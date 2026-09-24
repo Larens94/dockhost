@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use Database\Factories\PlanFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Plan extends Model
 {
+    /** @use HasFactory<PlanFactory> */
+    use HasFactory;
+
     protected $fillable = [
         'name',
         'slug',
@@ -16,6 +21,7 @@ class Plan extends Model
         'interval',
         'site_quota',
         'features',
+        'entitlements',
         'active',
     ];
 
@@ -23,6 +29,7 @@ class Plan extends Model
     {
         return [
             'features' => 'array',
+            'entitlements' => 'array',
             'active' => 'boolean',
         ];
     }

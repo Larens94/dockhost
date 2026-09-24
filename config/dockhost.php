@@ -12,6 +12,7 @@ return [
     'dokploy' => [
         'url' => env('DOKPLOY_URL'),
         'api_key' => env('DOKPLOY_API_KEY'),
+        'environment_id' => env('DOKPLOY_ENVIRONMENT_ID'),
     ],
 
     'stripe' => [

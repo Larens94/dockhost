@@ -60,10 +60,14 @@ class BillingController extends Controller
             Plan::query()->findOrFail($data['plan_id']),
         );
 
+        if ($result['checkout_url']) {
+            return redirect()->away($result['checkout_url']);
+        }
+
         return redirect()
             ->route('billing.index')
             ->with('success', $result['subscription']->status === 'active'
-                ? 'Subscription activated (stub or live).'
-                : 'Subscription created — complete Stripe Checkout when wired.');
+                ? 'Subscription activated.'
+                : 'Subscription created. Complete Stripe Checkout to activate it.');
     }
 }

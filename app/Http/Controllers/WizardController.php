@@ -3,25 +3,36 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
-use App\Models\Plan;
 use App\Models\Pool;
 use App\Models\Recipe;
-use App\Models\Site;
-use App\Models\Subscription;
+use App\Services\EntitlementGate;
 use App\Services\SiteProvisioningService;
-use App\Services\StripeBillingService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class WizardController extends Controller
 {
-    public function create(): Response
+    public function create(EntitlementGate $entitlements): Response
     {
+        $clients = Client::query()
+            ->with(['subscriptions.plan'])
+            ->orderBy('name')
+            ->get()
+            ->map(function (Client $client) use ($entitlements) {
+                return [
+                    'id' => $client->id,
+                    'name' => $client->name,
+                    'email' => $client->email,
+                    'billing_status' => $client->billing_status,
+                    'status' => $client->status,
+                    ...$entitlements->summary($client),
+                ];
+            });
+
         return Inertia::render('Wizard/Provision', [
-            'clients' => Client::query()->orderBy('name')->get(['id', 'name', 'email', 'billing_status']),
+            'clients' => $clients,
             'recipes' => Recipe::query()
                 ->where('enabled', true)
                 ->orderBy('sort')
@@ -38,9 +49,17 @@ class WizardController extends Controller
 
     public function store(Request $request, SiteProvisioningService $provisioning): RedirectResponse
     {
+        $this->normalizeBooleans($request, [
+            'wants_database',
+            'wants_storage',
+            'wants_sftp',
+            'wants_cache',
+        ]);
+
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
-            'domain' => ['required', 'string', 'max:255', 'unique:sites,domain'],
+            'domain' => ['required', 'string', 'max:255', 'unique:sites,domain', 'regex:/^(?=.{1,255}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i'],
+            'repository' => ['nullable', 'string', 'max:255'],
             'recipe_id' => ['required', 'exists:recipes,id'],
             'wants_database' => ['required', 'boolean'],
             'database_pool_id' => ['nullable', 'integer', 'exists:pools,id'],
@@ -53,9 +72,31 @@ class WizardController extends Controller
 
         $site = $provisioning->provision($data);
 
+        if ($site->status === 'failed') {
+            return redirect()
+                ->route('sites.toolkit', $site)
+                ->with('error', $site->last_error ?: 'Provisioning failed.');
+        }
+
         return redirect()
-            ->route('sites.index')
-            ->with('success', "Site {$site->domain} queued. Deploy/SSL continue in Dokploy.");
+            ->route('sites.toolkit', $site)
+            ->with('success', "{$site->domain} is {$site->status}. Deploy and SSL continue in Dokploy.");
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    private function normalizeBooleans(Request $request, array $keys): void
+    {
+        $merged = [];
+
+        foreach ($keys as $key) {
+            if ($request->exists($key)) {
+                $merged[$key] = filter_var($request->input($key), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+            }
+        }
+
+        $request->merge($merged);
     }
 
     /**

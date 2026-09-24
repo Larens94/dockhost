@@ -37,8 +37,8 @@ class HandleInertiaRequests extends Middleware
             'appName' => config('app.name', 'DockHost'),
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
             ],
         ];
     }
 }
-
