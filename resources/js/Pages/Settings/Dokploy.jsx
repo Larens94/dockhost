@@ -26,12 +26,12 @@ export default function Dokploy({ settings, dokployOwns }) {
                 <Card className="p-5 text-sm">
                     <div className="flex items-center justify-between">
                         <div className="font-medium">Connection</div>
-                        <StatusBadge status={settings.connected ? 'online' : 'pending'} />
+                        <StatusBadge status={settings.connected ? 'online' : 'unconfigured'} />
                     </div>
                     <dl className="mt-4 space-y-2">
                         <Row label="Driver" value={settings.driver} />
-                        <Row label="URL" value={settings.url} />
-                        <Row label="API key" value={settings.api_key_masked} />
+                        <Row label="URL" value={settings.url || 'Not set'} />
+                        <Row label="API key" value={settings.api_key_masked || 'Not set'} />
                     </dl>
                     <p className="mt-4 text-slate-500">Values come from the environment. DOKPLOY_ENVIRONMENT_ID is required before a live create.</p>
                 </Card>

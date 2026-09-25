@@ -21,6 +21,7 @@ use App\Models\Server;
 use App\Models\ServiceCatalogItem;
 use App\Models\Site;
 use App\Services\PoolLedger;
+use App\Support\OperatorError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -35,7 +36,7 @@ class PanelController extends Controller
             'id' => $pool->id,
             'name' => $pool->name,
             'kind' => $pool->kind,
-            'server' => $pool->server?->name ?? 'unassigned',
+            'server' => $pool->server?->name,
             'usage' => $pool->usage,
             'capacity' => $pool->capacity,
         ]);
@@ -198,7 +199,7 @@ class PanelController extends Controller
                     'recipe_slug' => $site->recipe?->slug,
                     'stack' => $site->recipe?->stack,
                     'status' => $site->status,
-                    'last_error' => $site->last_error,
+                    'last_error' => OperatorError::present($site->last_error),
                     'pools' => collect($site->pool_ids ?? [])
                         ->map(fn ($id) => $poolNames[$id] ?? "#{$id}")
                         ->values()
@@ -230,7 +231,7 @@ class PanelController extends Controller
             'kind' => $pool->kind,
             'engine' => $pool->engine,
             'runtime_version' => $pool->runtime_version,
-            'server' => $pool->server?->name ?? 'unassigned',
+            'server' => $pool->server?->name,
             'usage' => $pool->usage,
             'capacity' => $pool->capacity,
             'dokploy_ref' => $pool->dokploy_ref,
@@ -304,9 +305,9 @@ class PanelController extends Controller
         return Inertia::render('Settings/Dokploy', [
             'settings' => [
                 'url' => Config::get('dockhost.dokploy.url') ?: '',
-                'api_key_masked' => $key ? str_repeat('•', 12).substr($key, -4) : '••••••••',
+                'api_key_masked' => $key ? str_repeat('•', 8).substr((string) $key, -4) : '',
                 'driver' => Config::get('dockhost.driver', 'dokploy'),
-                'connected' => (bool) Config::get('dockhost.dokploy.url'),
+                'connected' => (bool) Config::get('dockhost.dokploy.url') && (bool) $key,
             ],
             'dokployOwns' => Config::get('dockhost.dokploy_owns', []),
         ]);

@@ -2,10 +2,11 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import AuthenticatedLayout, { Card, PageTitle, StatusBadge } from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function Toolkit({ site, toolkit, state, envPreview, artisanCommands, dokployLinks, dokployConfigured, pools }) {
+    const flashError = usePage().props.flash?.error;
     const [tab, setTab] = useState(toolkit.tabs?.[0]?.id || 'dashboard');
     const refresh = useForm({});
     const domain = useForm({ host: '' });
@@ -86,7 +87,7 @@ export default function Toolkit({ site, toolkit, state, envPreview, artisanComma
                 }
             />
 
-            {site.last_error && (
+            {site.last_error && site.last_error !== flashError && (
                 <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{site.last_error}</div>
             )}
 

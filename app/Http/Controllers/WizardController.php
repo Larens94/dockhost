@@ -79,9 +79,7 @@ class WizardController extends Controller
         $site = $provisioning->provision($data);
 
         if ($site->status === 'failed') {
-            return redirect()
-                ->route('sites.toolkit', $site)
-                ->with('error', $site->last_error ?: 'Provisioning failed.');
+            return redirect()->route('sites.toolkit', $site);
         }
 
         return redirect()

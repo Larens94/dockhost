@@ -25,9 +25,12 @@ export default function Index({ pools }) {
                         </div>
                         <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
                             <span>
-                                {pool.server} · {pool.dokploy_ref || 'no Dokploy ref'}
-                                {pool.admin_ready ? ' · admin DSN' : ''}
-                                {pool.ssh_ready ? ' · SSH' : ''}
+                                {[
+                                    pool.server,
+                                    pool.dokploy_ref,
+                                    pool.admin_ready ? 'Admin DSN' : null,
+                                    pool.ssh_ready ? 'SSH' : null,
+                                ].filter(Boolean).join(' · ') || 'No server assigned'}
                             </span>
                             <Link href={route('pools.edit', pool.id)} className="text-blue-700">Edit</Link>
                         </div>

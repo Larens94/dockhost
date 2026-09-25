@@ -27,6 +27,25 @@ class PanelAccessTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->component('Dashboard'));
     }
 
+    public function test_dokploy_settings_say_when_the_api_is_not_configured(): void
+    {
+        config([
+            'dockhost.dokploy.url' => null,
+            'dockhost.dokploy.api_key' => null,
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('settings.dokploy'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('settings.connected', false)
+                ->where('settings.url', '')
+                ->where('settings.api_key_masked', '')
+            );
+    }
+
     public function test_operators_cannot_enter_the_panel(): void
     {
         $user = User::factory()->create(['role' => 'operator']);

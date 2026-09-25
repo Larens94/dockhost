@@ -6,6 +6,7 @@ use App\Contracts\InfrastructureDriver;
 use App\Models\Pool;
 use App\Models\Site;
 use App\Models\SiteDomain;
+use App\Support\OperatorError;
 use Throwable;
 
 class RecipeExecutor
@@ -50,7 +51,7 @@ class RecipeExecutor
         } catch (Throwable $exception) {
             $this->ledger->release($site);
             $site->status = 'failed';
-            $site->last_error = $exception->getMessage();
+            $site->last_error = OperatorError::present($exception->getMessage());
             $site->save();
             $this->audit->log('site.provision_failed', $site, [
                 'domain' => $site->domain,
@@ -166,7 +167,7 @@ class RecipeExecutor
             $result = $this->driver->applicationStatus($applicationId);
         } catch (Throwable $exception) {
             $site->status = $site->status === 'suspended' ? 'suspended' : 'provisioning';
-            $site->last_error = $exception->getMessage();
+            $site->last_error = OperatorError::present($exception->getMessage());
             $site->save();
 
             return $site;

@@ -152,6 +152,8 @@ export function StatusBadge({ status }) {
         past_due: 'bg-red-50 text-red-700',
         none: 'bg-slate-100 text-slate-600',
         online: 'bg-emerald-50 text-emerald-700',
+        offline: 'bg-slate-100 text-slate-600',
+        unconfigured: 'bg-slate-100 text-slate-600',
         stable: 'bg-emerald-50 text-emerald-700',
         beta: 'bg-amber-50 text-amber-700',
         draft: 'bg-slate-100 text-slate-600',

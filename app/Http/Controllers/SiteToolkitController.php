@@ -19,6 +19,7 @@ use App\Services\RecipeExecutor;
 use App\Services\SiteProvisioningService;
 use App\Support\ApplicationToolkit;
 use App\Support\ArtisanAllowlist;
+use App\Support\OperatorError;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -63,7 +64,7 @@ class SiteToolkitController extends Controller
                     ->values()
                     ->all(),
                 'options' => $site->options ?? [],
-                'last_error' => $site->last_error,
+                'last_error' => OperatorError::present($site->last_error),
                 'database' => $site->databaseAccount ? [
                     'engine' => $site->databaseAccount->engine,
                     'schema' => $site->databaseAccount->schema_name,
@@ -108,7 +109,7 @@ class SiteToolkitController extends Controller
         $site = $executor->refreshDeployStatus($site);
 
         if ($site->status !== 'active' && $site->last_error) {
-            return back()->with('error', $site->last_error);
+            return back();
         }
 
         return back()->with('success', "Deploy status is {$site->status}.");
@@ -125,9 +126,7 @@ class SiteToolkitController extends Controller
         $site = $provisioning->retry($site, $data);
 
         if ($site->status === 'failed') {
-            return redirect()
-                ->route('sites.toolkit', $site)
-                ->with('error', $site->last_error ?: 'Provisioning failed.');
+            return redirect()->route('sites.toolkit', $site);
         }
 
         return redirect()

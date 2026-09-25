@@ -259,6 +259,42 @@ class SiteOperationsTest extends TestCase
         $this->assertSame(0, $world['database']->fresh()->usage);
     }
 
+    public function test_unreachable_pool_is_reported_once_in_plain_language(): void
+    {
+        $world = $this->world();
+        $world['database']->update([
+            'meta' => ['host' => '127.0.0.1', 'port' => 1, 'mode' => 'shared'],
+            'credentials' => [
+                'host' => '127.0.0.1',
+                'port' => 1,
+                'admin_username' => 'root',
+                'admin_password' => 'secret',
+            ],
+        ]);
+
+        $response = $this->actingAs($world['user'])
+            ->post(route('wizard.store'), $this->payload($world, [
+                'domain' => 'down.example.test',
+                'wants_sftp' => 0,
+            ]));
+
+        $response->assertRedirect();
+        $response->assertSessionMissing('error');
+
+        $site = Site::query()->where('domain', 'down.example.test')->firstOrFail();
+        $this->assertSame('failed', $site->status);
+        $this->assertSame('Could not reach the database pool. Check the admin host and port.', $site->last_error);
+
+        $site->last_error = 'SQLSTATE[HY000] [2002] Connection refused';
+        $site->save();
+
+        $page = $this->actingAs($world['user'])->get(route('sites.toolkit', $site));
+        $page->assertOk();
+        $html = $page->getContent();
+        $this->assertSame(1, substr_count($html, 'Could not reach the database pool'));
+        $this->assertStringNotContainsString('SQLSTATE', $html);
+    }
+
     public function test_alias_domain_is_recorded(): void
     {
         $world = $this->world();
