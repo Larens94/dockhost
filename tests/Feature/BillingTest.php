@@ -181,6 +181,73 @@ class BillingTest extends TestCase
         $this->assertTrue($site->fresh()->usage_held);
     }
 
+    public function test_paid_invoice_restarts_sites_and_cancellation_stops_them(): void
+    {
+        $client = Client::factory()->create([
+            'stripe_customer_id' => 'cus_live_4',
+            'billing_status' => 'past_due',
+            'status' => 'active',
+        ]);
+        $subscription = Subscription::factory()->create([
+            'client_id' => $client->id,
+            'status' => 'past_due',
+            'stripe_subscription_id' => 'sub_live_4',
+        ]);
+        $site = Site::factory()->create([
+            'client_id' => $client->id,
+            'status' => 'suspended',
+            'usage_held' => true,
+            'dokploy_app_id' => 'local_bill_4',
+            'meta' => ['status_before_suspend' => 'active'],
+        ]);
+
+        $paid = json_encode([
+            'type' => 'invoice.paid',
+            'data' => [
+                'object' => [
+                    'customer' => 'cus_live_4',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            route('stripe.webhook'),
+            [],
+            [],
+            [],
+            ['HTTP_STRIPE_SIGNATURE' => $this->signature($paid)],
+            $paid,
+        )->assertOk();
+
+        $this->assertSame('active', $client->fresh()->billing_status);
+        $this->assertSame('active', $subscription->fresh()->status);
+        $this->assertSame('active', $site->fresh()->status);
+
+        $deleted = json_encode([
+            'type' => 'customer.subscription.deleted',
+            'data' => [
+                'object' => [
+                    'id' => 'sub_live_4',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->call(
+            'POST',
+            route('stripe.webhook'),
+            [],
+            [],
+            [],
+            ['HTTP_STRIPE_SIGNATURE' => $this->signature($deleted)],
+            $deleted,
+        )->assertOk();
+
+        $this->assertSame('canceled', $client->fresh()->billing_status);
+        $this->assertSame('suspended', $site->fresh()->status);
+        $this->assertTrue($site->fresh()->usage_held);
+    }
+
     public function test_webhook_rejects_a_bad_signature(): void
     {
         config(['dockhost.stripe.webhook_secret' => 'whsec_test']);

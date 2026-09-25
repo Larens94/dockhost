@@ -63,9 +63,12 @@ class SiteProvisioningService
             'wants_sftp' => (bool) ($input['wants_sftp'] ?? false),
             'wants_cache' => (bool) ($input['wants_cache'] ?? false),
             'cache_pool_id' => null,
+            'cache_mode' => ($input['cache_mode'] ?? 'shared') === 'dedicated' ? 'dedicated' : 'shared',
+            'wants_object_storage' => (bool) ($input['wants_object_storage'] ?? false),
             'runtime_pool_id' => null,
             'database_mode' => ($input['database_mode'] ?? 'shared') === 'dedicated' ? 'dedicated' : 'shared',
             'git_branch' => $input['git_branch'] ?? 'main',
+            'git_ssh_key_id' => $input['git_ssh_key_id'] ?? null,
         ];
 
         if ($options['wants_sftp']) {

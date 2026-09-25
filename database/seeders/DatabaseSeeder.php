@@ -126,7 +126,24 @@ class DatabaseSeeder extends Seeder
                 'summary' => 'Dense hosting baseline: MariaDB, volumes, SFTP daemon',
                 'version' => '1.0.0',
                 'services' => ['mariadb', 'volumes', 'sftp'],
-                'compose' => "# stub — real compose lives in git / Dokploy templates\n",
+                'compose' => <<<'YAML'
+services:
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: change-me
+      MARIADB_DATABASE: app
+    volumes:
+      - mariadb:/var/lib/mysql
+  sftp:
+    image: atmoz/sftp:latest
+    command: "dockhost:change-me:1001"
+    volumes:
+      - files:/home/dockhost/files
+volumes:
+  mariadb:
+  files:
+YAML,
             ]
         );
 
@@ -137,6 +154,24 @@ class DatabaseSeeder extends Seeder
                 'summary' => 'Shared Postgres and Redis for modern apps',
                 'version' => '1.0.0',
                 'services' => ['postgres', 'redis'],
+                'compose' => <<<'YAML'
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: app
+    volumes:
+      - postgres:/var/lib/postgresql/data
+  redis:
+    image: redis:7
+    command: ["redis-server", "--requirepass", "change-me"]
+    volumes:
+      - redis:/data
+volumes:
+  postgres:
+  redis:
+YAML,
             ]
         );
 

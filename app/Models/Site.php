@@ -27,6 +27,7 @@ class Site extends Model
         'options',
         'toolkit_state',
         'environment',
+        'service_secrets',
         'last_error',
         'usage_held',
     ];
@@ -39,6 +40,7 @@ class Site extends Model
             'options' => 'array',
             'toolkit_state' => 'array',
             'environment' => 'encrypted:array',
+            'service_secrets' => 'encrypted:array',
             'usage_held' => 'boolean',
         ];
     }

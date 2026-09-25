@@ -54,10 +54,19 @@ class WizardController extends Controller
             'wants_storage',
             'wants_sftp',
             'wants_cache',
+            'wants_object_storage',
         ]);
 
         if ($request->input('git_branch') === '') {
             $request->merge(['git_branch' => null]);
+        }
+
+        if ($request->input('git_ssh_key_id') === '') {
+            $request->merge(['git_ssh_key_id' => null]);
+        }
+
+        if (! $request->exists('wants_object_storage')) {
+            $request->merge(['wants_object_storage' => false]);
         }
 
         $data = $request->validate([
@@ -72,8 +81,11 @@ class WizardController extends Controller
             'wants_sftp' => ['required', 'boolean'],
             'wants_cache' => ['required', 'boolean'],
             'cache_pool_id' => ['nullable', 'integer', 'exists:pools,id'],
+            'cache_mode' => ['nullable', 'in:shared,dedicated'],
+            'wants_object_storage' => ['required', 'boolean'],
             'database_mode' => ['nullable', 'in:shared,dedicated'],
             'git_branch' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z0-9._\-\/]+$/'],
+            'git_ssh_key_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
         ]);
 
         $site = $provisioning->provision($data);

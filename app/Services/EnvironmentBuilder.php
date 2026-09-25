@@ -18,6 +18,8 @@ class EnvironmentBuilder
         'DB_PASSWORD',
         'REDIS_PASSWORD',
         'SFTP_PASSWORD',
+        'AWS_SECRET_ACCESS_KEY',
+        'MINIO_ROOT_PASSWORD',
     ];
 
     /**
@@ -43,11 +45,15 @@ class EnvironmentBuilder
             'DOCKHOST_MAINTENANCE' => ! empty($state['maintenance']) ? 'true' : 'false',
         ];
 
+        $secrets = $site->service_secrets ?? [];
+
         if ($database = $site->databaseAccount) {
-            $postgres = str_starts_with(strtolower($database->engine), 'postgres');
-            $env['DB_CONNECTION'] = $postgres ? 'pgsql' : 'mysql';
+            $engine = strtolower($database->engine);
+            $postgres = str_starts_with($engine, 'postgres');
+            $mongo = str_starts_with($engine, 'mongo');
+            $env['DB_CONNECTION'] = $mongo ? 'mongodb' : ($postgres ? 'pgsql' : 'mysql');
             $env['DB_HOST'] = $database->host ?: '127.0.0.1';
-            $env['DB_PORT'] = (string) ($database->port ?: ($postgres ? 5432 : 3306));
+            $env['DB_PORT'] = (string) ($database->port ?: ($mongo ? 27017 : ($postgres ? 5432 : 3306)));
             $env['DB_DATABASE'] = $database->schema_name;
             $env['DB_USERNAME'] = $database->username;
             $env['DB_PASSWORD'] = (string) $database->password;
@@ -55,10 +61,24 @@ class EnvironmentBuilder
 
         if (! empty($options['cache_pool_id'])) {
             $cache = Pool::query()->find($options['cache_pool_id']);
-            $env['REDIS_HOST'] = $cache?->meta['host'] ?? '127.0.0.1';
-            $env['REDIS_PORT'] = (string) ($cache?->meta['port'] ?? 6379);
+            $env['REDIS_HOST'] = $secrets['redis_host'] ?? $cache?->meta['host'] ?? '127.0.0.1';
+            $env['REDIS_PORT'] = (string) ($secrets['redis_port'] ?? $cache?->meta['port'] ?? 6379);
             $env['CACHE_STORE'] = 'redis';
             $env['QUEUE_CONNECTION'] = 'redis';
+
+            if (! empty($secrets['redis_password'])) {
+                $env['REDIS_PASSWORD'] = (string) $secrets['redis_password'];
+            }
+        }
+
+        if (! empty($options['wants_object_storage'])) {
+            $env['FILESYSTEM_DISK'] = 's3';
+            $env['AWS_ACCESS_KEY_ID'] = (string) ($secrets['minio_access_key'] ?? 'dockhost');
+            $env['AWS_SECRET_ACCESS_KEY'] = (string) ($secrets['minio_secret_key'] ?? '');
+            $env['AWS_DEFAULT_REGION'] = 'us-east-1';
+            $env['AWS_BUCKET'] = 'site-'.$site->id;
+            $env['AWS_ENDPOINT'] = (string) ($secrets['minio_endpoint'] ?? '');
+            $env['AWS_USE_PATH_STYLE_ENDPOINT'] = 'true';
         }
 
         if (! empty($options['runtime_pool_id'])) {

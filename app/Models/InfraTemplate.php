@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class InfraTemplate extends Model
 {
     protected $fillable = [
-        'name', 'slug', 'summary', 'version', 'services', 'compose',
+        'name', 'slug', 'summary', 'version', 'services', 'compose', 'dokploy_ref',
     ];
 
     protected function casts(): array

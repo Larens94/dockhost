@@ -29,6 +29,16 @@ class SshRuntimeAdmin implements RuntimeAdmin
         $this->run($pool, $this->script($username, $password, $chroot));
     }
 
+    public function deleteSftpUser(Pool $pool, string $username): void
+    {
+        if (! $this->canManage($pool)) {
+            throw new RuntimeException('Storage pool has no SSH credentials.');
+        }
+
+        $user = $this->assertUser($username);
+        $this->run($pool, "userdel -r {$user} >/dev/null 2>&1 || userdel {$user} >/dev/null 2>&1 || true");
+    }
+
     private function script(string $username, string $password, string $chroot): string
     {
         $user = $this->assertUser($username);

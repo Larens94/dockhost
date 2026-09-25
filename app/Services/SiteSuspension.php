@@ -31,7 +31,7 @@ class SiteSuspension
     private function shouldStop(Client $client): bool
     {
         return in_array($client->status, ['suspended', 'archived'], true)
-            || $client->billing_status === 'past_due';
+            || in_array($client->billing_status, ['past_due', 'canceled'], true);
     }
 
     private function stopSites(Client $client): void

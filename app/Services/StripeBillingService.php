@@ -100,6 +100,10 @@ class StripeBillingService
             $this->markPastDue((string) ($object['customer'] ?? ''));
         }
 
+        if (in_array($type, ['invoice.paid', 'invoice.payment_succeeded'], true)) {
+            $this->markRecovered((string) ($object['customer'] ?? ''));
+        }
+
         if ($type === 'customer.subscription.deleted') {
             $this->cancelSubscription((string) ($object['id'] ?? ''));
         }
@@ -245,6 +249,30 @@ class StripeBillingService
             $subscription->client->billing_status = 'canceled';
             $subscription->client->save();
         }
+
+        if ($subscription->client) {
+            $this->sites->apply($subscription->client);
+        }
+    }
+
+    private function markRecovered(string $customerId): void
+    {
+        if ($customerId === '') {
+            return;
+        }
+
+        $client = Client::query()->where('stripe_customer_id', $customerId)->first();
+
+        if (! $client || $client->billing_status === 'active') {
+            return;
+        }
+
+        $client->billing_status = 'active';
+        $client->save();
+        $client->subscriptions()->where('status', 'past_due')->update([
+            'status' => 'active',
+        ]);
+        $this->sites->apply($client);
     }
 
     private function stripe(): PendingRequest

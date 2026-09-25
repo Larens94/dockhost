@@ -10,6 +10,7 @@ use App\Models\Recipe;
 use App\Models\Site;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\EnvironmentBuilder;
 use App\Services\PoolLedger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -153,6 +154,8 @@ class SiteOperationsTest extends TestCase
             {
                 $this->calls++;
             }
+
+            public function deleteSftpUser(Pool $pool, string $username): void {}
         };
         $this->app->instance(RuntimeAdmin::class, $fake);
 
@@ -182,6 +185,8 @@ class SiteOperationsTest extends TestCase
             {
                 throw new \RuntimeException('ssh unavailable');
             }
+
+            public function deleteSftpUser(Pool $pool, string $username): void {}
         });
 
         $this->actingAs($world['user'])
@@ -313,6 +318,173 @@ class SiteOperationsTest extends TestCase
             'host' => 'www.alias.example.test',
             'primary' => false,
         ]);
+    }
+
+    public function test_dedicated_redis_minio_mongo_and_private_git_are_sent_to_dokploy(): void
+    {
+        config([
+            'dockhost.dokploy.url' => 'https://dokploy.test',
+            'dockhost.dokploy.api_key' => 'test-key',
+            'dockhost.dokploy.environment_id' => 'env_123',
+        ]);
+
+        Http::fake(function ($request) {
+            $url = $request->url();
+
+            if (str_contains($url, 'mongo.create')) {
+                return Http::response(['mongoId' => 'mongo_1'], 200);
+            }
+
+            if (str_contains($url, 'redis.create')) {
+                return Http::response(['redisId' => 'redis_1'], 200);
+            }
+
+            if (str_contains($url, 'compose.create')) {
+                return Http::response(['composeId' => 'cmp_1'], 200);
+            }
+
+            return Http::response(['applicationId' => 'app_services', 'applicationStatus' => 'idle'], 200);
+        });
+
+        $world = $this->world();
+        $world['database']->update(['engine' => 'mongo']);
+        $cache = Pool::factory()->create([
+            'name' => 'cache-a',
+            'kind' => 'cache',
+            'engine' => 'redis',
+            'meta' => ['host' => '10.0.0.10', 'port' => 6379, 'mode' => 'shared'],
+        ]);
+
+        $this->actingAs($world['user'])
+            ->post(route('wizard.store'), $this->payload($world, [
+                'domain' => 'stack.example.test',
+                'repository' => 'git@github.com:acme/private.git',
+                'git_ssh_key_id' => 'key_private',
+                'wants_cache' => 1,
+                'cache_pool_id' => $cache->id,
+                'cache_mode' => 'dedicated',
+                'wants_object_storage' => 1,
+            ]))
+            ->assertRedirect();
+
+        $site = Site::query()->where('domain', 'stack.example.test')->firstOrFail();
+
+        $this->assertSame('provisioned', $site->databaseAccount->status);
+        $this->assertSame('mongo_1', $site->databaseAccount->dokploy_ref);
+        $this->assertSame('mongodb', $site->environment['DB_CONNECTION']);
+        $this->assertSame('redis_1', $site->meta['services']['redis']['external_id']);
+        $this->assertSame('redis-'.$site->id, $site->environment['REDIS_HOST']);
+        $this->assertNotSame('', $site->environment['REDIS_PASSWORD']);
+        $this->assertSame('cmp_1', $site->meta['services']['minio']['external_id']);
+        $this->assertSame('s3', $site->environment['FILESYSTEM_DISK']);
+        $this->assertStringContainsString('REDIS_PASSWORD=••••••••', app(EnvironmentBuilder::class)->masked($site->environment));
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/mongo.create'
+            && $request['databaseUser'] === $site->databaseAccount->username
+            && ! isset($request['databaseName']));
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/redis.create'
+            && $request['databasePassword'] === $site->service_secrets['redis_password']);
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/compose.update'
+            && str_contains($request['composeFile'], 'minio/minio:latest'));
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/compose.deploy');
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/application.saveGitProvider'
+            && $request['customGitSSHKeyId'] === 'key_private');
+    }
+
+    public function test_refresh_command_marks_a_finished_deploy_active(): void
+    {
+        config([
+            'dockhost.dokploy.url' => 'https://dokploy.test',
+            'dockhost.dokploy.api_key' => 'test-key',
+        ]);
+
+        Http::fake([
+            'https://dokploy.test/api/application.one*' => Http::response([
+                'applicationStatus' => 'done',
+                'environment' => ['projectId' => 'proj_9', 'environmentId' => 'env_9'],
+            ], 200),
+        ]);
+
+        $world = $this->world();
+        $site = Site::factory()->create([
+            'client_id' => $world['client']->id,
+            'recipe_id' => $world['recipe']->id,
+            'domain' => 'waiting.example.test',
+            'status' => 'provisioning',
+            'dokploy_app_id' => 'app_waiting',
+        ]);
+        Site::factory()->create([
+            'client_id' => $world['client']->id,
+            'recipe_id' => $world['recipe']->id,
+            'domain' => 'local.example.test',
+            'status' => 'provisioning',
+            'dokploy_app_id' => 'local_skip',
+        ]);
+
+        $this->artisan('dockhost:refresh-deploys')->assertSuccessful();
+
+        $this->assertSame('active', $site->fresh()->status);
+        $this->assertSame('provisioning', Site::query()->where('domain', 'local.example.test')->first()->status);
+    }
+
+    public function test_deleting_a_site_removes_dokploy_database_domain_and_cache(): void
+    {
+        config([
+            'dockhost.dokploy.url' => 'https://dokploy.test',
+            'dockhost.dokploy.api_key' => 'test-key',
+        ]);
+
+        Http::fake([
+            'https://dokploy.test/api/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $world = $this->world();
+        $site = Site::factory()->create([
+            'client_id' => $world['client']->id,
+            'recipe_id' => $world['recipe']->id,
+            'domain' => 'gone.example.test',
+            'status' => 'active',
+            'dokploy_app_id' => 'app_gone',
+            'usage_held' => true,
+            'options' => ['storage_pool_id' => $world['storage']->id],
+            'meta' => [
+                'services' => [
+                    'redis' => ['external_id' => 'redis_gone'],
+                    'minio' => ['external_id' => 'cmp_gone'],
+                ],
+            ],
+        ]);
+        $site->databaseAccount()->create([
+            'pool_id' => $world['database']->id,
+            'engine' => 'mariadb',
+            'schema_name' => 'db_gone',
+            'username' => 'u_gone',
+            'password' => 'secret',
+            'status' => 'provisioned',
+            'dokploy_ref' => 'mdb_gone',
+        ]);
+        $site->domains()->create([
+            'host' => 'gone.example.test',
+            'primary' => true,
+            'dokploy_domain_id' => 'dom_gone',
+        ]);
+
+        $this->actingAs($world['user'])
+            ->delete(route('sites.destroy', $site))
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('sites', ['id' => $site->id]);
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/domain.delete'
+            && $request['domainId'] === 'dom_gone');
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/redis.remove'
+            && $request['redisId'] === 'redis_gone');
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/compose.delete'
+            && $request['composeId'] === 'cmp_gone'
+            && $request['deleteVolumes'] === true);
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/mariadb.remove'
+            && $request['mariadbId'] === 'mdb_gone');
+        Http::assertSent(fn ($request) => $request->url() === 'https://dokploy.test/api/application.delete'
+            && $request['applicationId'] === 'app_gone');
     }
 
     /**

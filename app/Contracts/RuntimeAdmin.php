@@ -9,4 +9,6 @@ interface RuntimeAdmin
     public function canManage(Pool $pool): bool;
 
     public function createSftpUser(Pool $pool, string $username, string $password, string $chroot): void;
+
+    public function deleteSftpUser(Pool $pool, string $username): void;
 }

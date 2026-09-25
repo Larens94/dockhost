@@ -7,6 +7,7 @@ use App\Models\Pool;
 use App\Models\Site;
 use App\Models\SiteDomain;
 use App\Support\OperatorError;
+use Illuminate\Support\Collection;
 use Throwable;
 
 class RecipeExecutor
@@ -14,6 +15,8 @@ class RecipeExecutor
     public function __construct(
         private TenantDatabaseProvisioner $databases,
         private TenantSftpProvisioner $sftp,
+        private TenantCacheProvisioner $cache,
+        private TenantObjectStorageProvisioner $objectStorage,
         private EnvironmentBuilder $environment,
         private InfrastructureDriver $driver,
         private PoolLedger $ledger,
@@ -90,7 +93,36 @@ class RecipeExecutor
             }
         }
 
+        $options = $site->options ?? [];
+
+        if (! empty($options['wants_cache']) && ! $ops->contains('ensure_cache')) {
+            $ops = $this->insertBefore($ops, 'ensure_cache', 'write_env');
+        }
+
+        if (! empty($options['wants_object_storage']) && ! $ops->contains('ensure_object_storage')) {
+            $ops = $this->insertBefore($ops, 'ensure_object_storage', 'write_env');
+        }
+
         return $ops->values()->all();
+    }
+
+    /**
+     * @param  Collection<int, string>  $ops
+     * @return Collection<int, string>
+     */
+    private function insertBefore(Collection $ops, string $step, string $before): Collection
+    {
+        $at = $ops->search($before);
+
+        if ($at === false) {
+            $ops->push($step);
+
+            return $ops;
+        }
+
+        $ops->splice($at, 0, [$step]);
+
+        return $ops;
     }
 
     private function run(Site $site, string $op): void
@@ -106,6 +138,12 @@ class RecipeExecutor
                 : null,
             'ensure_sftp_user' => ! empty($options['wants_sftp'])
                 ? $this->sftp->ensure($site, $this->pool((int) $options['storage_pool_id']))
+                : null,
+            'ensure_cache' => ! empty($options['wants_cache'])
+                ? $this->cache->ensure($site, $this->pool((int) $options['cache_pool_id']))
+                : null,
+            'ensure_object_storage' => ! empty($options['wants_object_storage'])
+                ? $this->objectStorage->ensure($site)
                 : null,
             'write_env' => $this->environment->persist($site->refresh()),
             'deploy_application' => $this->deploy($site->refresh()),
@@ -133,6 +171,7 @@ class RecipeExecutor
             'recipe' => $site->recipe?->slug,
             'repository' => $site->repository,
             'branch' => $site->options['git_branch'] ?? 'main',
+            'ssh_key_id' => $site->options['git_ssh_key_id'] ?? null,
             'env' => $this->environment->render($env),
             'environment_id' => config('dockhost.dokploy.environment_id'),
             'application_id' => is_string($existingId) && $existingId !== '' && ! str_starts_with($existingId, 'local_')

@@ -70,12 +70,23 @@ class DokployDriver implements InfrastructureDriver
             'name' => $definition['name'] ?? 'compose',
             'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
             'composeType' => 'docker-compose',
-            'composeFile' => $definition['compose'] ?? null,
             'appName' => $definition['app_name'] ?? null,
         ], fn ($value) => $value !== null && $value !== ''));
 
+        $composeId = $created['composeId'] ?? $created['id'] ?? null;
+
+        if (is_string($composeId) && $composeId !== '' && ! empty($definition['compose'])) {
+            $this->post('compose.update', [
+                'composeId' => $composeId,
+                'composeFile' => $definition['compose'],
+            ]);
+            $this->post('compose.deploy', [
+                'composeId' => $composeId,
+            ]);
+        }
+
         return [
-            'external_id' => $created['composeId'] ?? $created['id'] ?? null,
+            'external_id' => is_string($composeId) ? $composeId : null,
             'raw' => $created,
         ];
     }
@@ -119,6 +130,7 @@ class DokployDriver implements InfrastructureDriver
                 'application_id' => $applicationId,
                 'repository' => $definition['repository'],
                 'branch' => $definition['branch'] ?? 'main',
+                'ssh_key_id' => $definition['ssh_key_id'] ?? null,
             ]);
         }
 
@@ -147,13 +159,14 @@ class DokployDriver implements InfrastructureDriver
             (string) ($definition['branch'] ?? 'main'),
         );
 
-        $saved = $this->post('application.saveGitProvider', [
+        $saved = $this->post('application.saveGitProvider', array_filter([
             'applicationId' => $applicationId,
             'customGitUrl' => $git['url'],
             'customGitBranch' => $git['branch'],
             'customGitBuildPath' => '/',
+            'customGitSSHKeyId' => $definition['ssh_key_id'] ?? null,
             'watchPaths' => [],
-        ]);
+        ], fn ($value) => $value !== null && $value !== ''));
 
         return ['ok' => true, 'raw' => $saved];
     }
@@ -232,19 +245,29 @@ class DokployDriver implements InfrastructureDriver
         }
 
         $engine = strtolower((string) ($definition['engine'] ?? 'mariadb'));
-        $procedure = str_starts_with($engine, 'postgres') ? 'postgres.create' : 'mariadb.create';
+        [$procedure, $idKey] = match (true) {
+            str_starts_with($engine, 'postgres') => ['postgres.create', 'postgresId'],
+            str_starts_with($engine, 'mongo') => ['mongo.create', 'mongoId'],
+            $engine === 'mysql' => ['mysql.create', 'mysqlId'],
+            default => ['mariadb.create', 'mariadbId'],
+        };
 
-        $created = $this->post($procedure, array_filter([
+        $payload = [
             'name' => $definition['name'] ?? 'database',
             'appName' => $definition['app_name'] ?? null,
             'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
-            'databaseName' => $definition['database'],
             'databaseUser' => $definition['username'],
             'databasePassword' => $definition['password'],
             'dockerImage' => $definition['image'] ?? null,
-        ], fn ($value) => $value !== null && $value !== ''));
+        ];
 
-        $id = $created['mariadbId'] ?? $created['postgresId'] ?? $created['id'] ?? null;
+        if (! str_starts_with($engine, 'mongo')) {
+            $payload['databaseName'] = $definition['database'];
+        }
+
+        $created = $this->post($procedure, array_filter($payload, fn ($value) => $value !== null && $value !== ''));
+
+        $id = $created[$idKey] ?? $created['id'] ?? null;
 
         return [
             'ok' => true,
@@ -252,6 +275,87 @@ class DokployDriver implements InfrastructureDriver
             'status' => 'provisioned',
             'raw' => $created,
         ];
+    }
+
+    public function createCache(array $definition): array
+    {
+        $host = (string) ($definition['app_name'] ?? $definition['name'] ?? 'redis');
+
+        if (! $this->configured()) {
+            return [
+                'ok' => true,
+                'external_id' => null,
+                'status' => 'reserved',
+                'host' => $host,
+                'raw' => ['status' => 'local'],
+            ];
+        }
+
+        $created = $this->post('redis.create', array_filter([
+            'name' => $definition['name'] ?? 'redis',
+            'appName' => $definition['app_name'] ?? null,
+            'environmentId' => $definition['environment_id'] ?? $this->environmentId(),
+            'databasePassword' => $definition['password'],
+            'dockerImage' => $definition['image'] ?? 'redis:7',
+        ], fn ($value) => $value !== null && $value !== ''));
+
+        $id = $created['redisId'] ?? $created['id'] ?? null;
+
+        return [
+            'ok' => true,
+            'external_id' => $id ? (string) $id : null,
+            'status' => 'provisioned',
+            'host' => $host,
+            'raw' => $created,
+        ];
+    }
+
+    public function removeService(string $kind, string $id): array
+    {
+        if (! $this->configured() || $id === '' || str_starts_with($id, 'local_')) {
+            return ['ok' => true, 'raw' => ['status' => 'local']];
+        }
+
+        $normalized = strtolower($kind);
+
+        if (str_starts_with($normalized, 'postgres')) {
+            $normalized = 'postgres';
+        } elseif (str_contains($normalized, 'maria')) {
+            $normalized = 'mariadb';
+        } elseif (str_starts_with($normalized, 'mongo')) {
+            $normalized = 'mongo';
+        }
+
+        [$procedure, $key, $extra] = match ($normalized) {
+            'redis' => ['redis.remove', 'redisId', []],
+            'mongo' => ['mongo.remove', 'mongoId', []],
+            'mysql' => ['mysql.remove', 'mysqlId', []],
+            'postgres' => ['postgres.remove', 'postgresId', []],
+            'mariadb' => ['mariadb.remove', 'mariadbId', []],
+            'compose', 'minio', 'sftp', 'object', 'object-storage' => ['compose.delete', 'composeId', ['deleteVolumes' => true]],
+            default => [null, null, []],
+        };
+
+        if ($procedure === null || $key === null) {
+            return ['ok' => true, 'raw' => ['status' => 'skipped']];
+        }
+
+        $removed = $this->post($procedure, array_merge([$key => $id], $extra));
+
+        return ['ok' => true, 'raw' => $removed];
+    }
+
+    public function deleteDomain(string $domainId): array
+    {
+        if (! $this->configured() || $domainId === '') {
+            return ['ok' => true, 'raw' => ['status' => 'local']];
+        }
+
+        $removed = $this->post('domain.delete', [
+            'domainId' => $domainId,
+        ]);
+
+        return ['ok' => true, 'raw' => $removed];
     }
 
     public function updateEnvironment(array $definition): array

@@ -17,8 +17,11 @@ export default function Provision({ clients, recipes, pools }) {
         wants_sftp: false,
         wants_cache: false,
         cache_pool_id: pools.cache[0]?.id || '',
+        cache_mode: 'shared',
+        wants_object_storage: false,
         database_mode: 'shared',
         git_branch: 'main',
+        git_ssh_key_id: '',
     });
 
     const client = clients.find((item) => String(item.id) === String(data.client_id));
@@ -43,7 +46,10 @@ export default function Provision({ clients, recipes, pools }) {
             wants_storage: payload.wants_storage ? 1 : 0,
             wants_sftp: payload.wants_sftp ? 1 : 0,
             wants_cache: payload.wants_cache ? 1 : 0,
+            wants_object_storage: payload.wants_object_storage ? 1 : 0,
+            cache_mode: payload.wants_cache && payload.cache_mode === 'dedicated' ? 'dedicated' : 'shared',
             database_mode: payload.wants_database && payload.database_mode === 'dedicated' ? 'dedicated' : 'shared',
+            git_ssh_key_id: payload.git_ssh_key_id || null,
             database_pool_id: payload.wants_database ? payload.database_pool_id : null,
             storage_pool_id: payload.wants_storage || payload.wants_sftp ? payload.storage_pool_id : null,
             cache_pool_id: payload.wants_cache ? payload.cache_pool_id : null,
@@ -101,7 +107,12 @@ export default function Provision({ clients, recipes, pools }) {
                             <TextInput value={data.git_branch} onChange={(event) => setData('git_branch', event.target.value)} className="mt-1 block w-full" placeholder="main" />
                         </label>
                         <InputError message={errors.git_branch} />
-                        <p className="text-xs text-slate-500">When Dokploy is connected, DockHost saves this repository before the first deploy.</p>
+                        <label className="block text-sm">
+                            Dokploy SSH key id
+                            <TextInput value={data.git_ssh_key_id} onChange={(event) => setData('git_ssh_key_id', event.target.value)} className="mt-1 block w-full" placeholder="Optional, for private repositories" />
+                        </label>
+                        <InputError message={errors.git_ssh_key_id} />
+                        <p className="text-xs text-slate-500">When Dokploy is connected, DockHost saves this repository before the first deploy. Private repositories use an SSH key already stored in Dokploy.</p>
                     </Card>
 
                     <Card className="p-5">
@@ -172,6 +183,22 @@ export default function Provision({ clients, recipes, pools }) {
                         >
                             <PoolSelect pools={pools.cache} value={data.cache_pool_id} onChange={(value) => setData('cache_pool_id', value)} />
                             <InputError message={errors.cache_pool_id} />
+                            <label className="mt-3 flex items-center gap-2 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={data.cache_mode === 'dedicated'}
+                                    onChange={(event) => setData('cache_mode', event.target.checked ? 'dedicated' : 'shared')}
+                                />
+                                Dedicated Redis on Dokploy
+                            </label>
+                        </Toggle>
+                        <Toggle
+                            label="Object storage"
+                            checked={data.wants_object_storage}
+                            onChange={(value) => setData('wants_object_storage', value)}
+                            error={errors.wants_object_storage}
+                        >
+                            <p className="text-xs text-slate-500">Creates a MinIO service on Dokploy and writes S3 credentials into the site environment.</p>
                         </Toggle>
                     </Card>
                 </div>
@@ -183,6 +210,7 @@ export default function Provision({ clients, recipes, pools }) {
                         <li>Hold one slot on each selected pool.</li>
                         <li>Reserve a database user and, when the pool has an admin DSN, create the schema.</li>
                         <li>Reserve an SFTP account when requested.</li>
+                        <li>Create a dedicated database, Redis, or MinIO service on Dokploy when those options are selected.</li>
                         <li>Write the site .env, connect the Git repository, and ask Dokploy to deploy. The site stays provisioning until Dokploy reports the app is up.</li>
                     </ul>
                     <PrimaryButton className="mt-5" disabled={processing || (client && !client.can_provision)}>

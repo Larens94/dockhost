@@ -41,6 +41,22 @@ interface InfrastructureDriver
 
     /**
      * @param  array<string, mixed>  $definition
+     * @return array{ok: bool, external_id: string|null, status: string, host: string, raw?: mixed}
+     */
+    public function createCache(array $definition): array;
+
+    /**
+     * @return array{ok: bool, raw?: mixed}
+     */
+    public function removeService(string $kind, string $id): array;
+
+    /**
+     * @return array{ok: bool, raw?: mixed}
+     */
+    public function deleteDomain(string $domainId): array;
+
+    /**
+     * @param  array<string, mixed>  $definition
      * @return array{ok: bool, raw?: mixed}
      */
     public function updateEnvironment(array $definition): array;

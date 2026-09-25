@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\PoolController;
@@ -48,8 +49,10 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
     Route::patch('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::post('/servers/sync', [PanelController::class, 'syncServers'])->name('servers.sync');
     Route::get('/services', [PanelController::class, 'services'])->name('services.index');
+    Route::post('/services/{service}/deploy', [CatalogController::class, 'deployService'])->name('services.deploy');
     Route::get('/recipes', [PanelController::class, 'recipes'])->name('recipes.index');
     Route::get('/templates', [PanelController::class, 'templates'])->name('templates.index');
+    Route::post('/templates/{template}/deploy', [CatalogController::class, 'deployTemplate'])->name('templates.deploy');
 
     Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
     Route::post('/billing/assign', [BillingController::class, 'assign'])->name('billing.assign');

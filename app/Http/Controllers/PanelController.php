@@ -265,6 +265,7 @@ class PanelController extends Controller
             'image' => $s->image,
             'mode' => $s->mode,
             'support' => $s->support,
+            'dokploy_ref' => $s->meta['dokploy_ref'] ?? null,
         ]);
 
         return Inertia::render('Services/Index', compact('services'));
@@ -293,6 +294,7 @@ class PanelController extends Controller
             'summary' => $t->summary,
             'version' => $t->version,
             'services' => $t->services ?? [],
+            'dokploy_ref' => $t->dokploy_ref,
         ]);
 
         return Inertia::render('Templates/Index', compact('templates'));

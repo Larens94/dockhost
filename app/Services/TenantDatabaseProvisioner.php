@@ -36,12 +36,17 @@ class TenantDatabaseProvisioner
                 'username' => $existing?->username ?? $this->identifier('u', $site),
                 'password' => $existing?->password ?: Str::password(24, symbols: false),
                 'host' => $connection['host'] ?? null,
-                'port' => (int) ($connection['port'] ?? (str_starts_with($engine, 'postgres') ? 5432 : 3306)),
+                'port' => (int) ($connection['port'] ?? match (true) {
+                    str_starts_with($engine, 'postgres') => 5432,
+                    str_starts_with($engine, 'mongo') => 27017,
+                    default => 3306,
+                }),
                 'status' => 'reserved',
             ]
         );
 
-        $dedicated = ($site->options['database_mode'] ?? null) === 'dedicated'
+        $dedicated = str_starts_with($engine, 'mongo')
+            || ($site->options['database_mode'] ?? null) === 'dedicated'
             || $connection['mode'] === 'dedicated';
 
         if ($dedicated) {
@@ -58,6 +63,11 @@ class TenantDatabaseProvisioner
 
             $account->dokploy_ref = $remote['external_id'] ?? null;
             $account->status = ($remote['status'] ?? 'reserved') === 'provisioned' ? 'provisioned' : 'reserved';
+
+            if (! $account->host) {
+                $account->host = 'db-'.$site->id;
+            }
+
             $account->save();
 
             return $account;
@@ -81,6 +91,12 @@ class TenantDatabaseProvisioner
         }
 
         $connection = $pool->adminConnection();
+
+        if ($account->dokploy_ref) {
+            $this->driver->removeService($account->engine, (string) $account->dokploy_ref);
+
+            return;
+        }
 
         if ($connection['mode'] === 'dedicated') {
             return;
