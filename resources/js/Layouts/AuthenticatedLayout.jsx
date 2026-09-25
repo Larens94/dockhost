@@ -58,9 +58,9 @@ export default function AuthenticatedLayout({ header, children }) {
     const { auth, flash, appName } = usePage().props;
 
     return (
-        <div className="min-h-screen bg-slate-100 text-slate-900">
-            <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200 bg-white md:flex">
-                <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-4">
+        <div className="h-screen overflow-hidden bg-slate-100 text-slate-900">
+            <aside className="fixed inset-y-0 left-0 z-30 hidden h-screen w-60 flex-col border-r border-slate-200 bg-white md:flex">
+                <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4">
                     <span className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-sm font-semibold text-white">
                         DH
                     </span>
@@ -69,13 +69,13 @@ export default function AuthenticatedLayout({ header, children }) {
                         <div className="text-xs text-slate-500">Control plane</div>
                     </div>
                 </div>
-                <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
+                <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
                     <NavLinks />
                 </nav>
             </aside>
 
-            <div className="md:pl-60">
-                <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+            <div className="flex h-screen flex-col md:pl-60">
+                <header className="z-20 shrink-0 border-b border-slate-200 bg-white">
                     <div className="flex h-14 items-center justify-between px-4 md:px-6">
                         <div className="text-sm font-semibold md:hidden">{appName || 'DockHost'}</div>
                         <div className="hidden text-sm text-slate-500 md:block">
@@ -100,22 +100,21 @@ export default function AuthenticatedLayout({ header, children }) {
                     </nav>
                 </header>
 
-                {(flash?.success || flash?.error) && (
-                    <div className="px-4 pt-4 md:px-6">
-                        {flash.success && (
-                            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                                {flash.success}
-                            </div>
-                        )}
-                        {flash.error && (
-                            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                                {flash.error}
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                <main className="px-4 py-6 md:px-6">
+                <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
+                    {(flash?.success || flash?.error) && (
+                        <div className="mb-4">
+                            {flash.success && (
+                                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                                    {flash.success}
+                                </div>
+                            )}
+                            {flash.error && (
+                                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                                    {flash.error}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {header && typeof header !== 'string' && <div className="mb-6">{header}</div>}
                     {children}
                 </main>
