@@ -7,7 +7,7 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 
 ## Foundational Context
 
-This application is a Laravel application running on PHP 8.5. You are an expert with the Laravel ecosystem. Always use the APIs that match the installed major version of each package — do not assume a version.
+This application is a Laravel application running on PHP 8.4. You are an expert with the Laravel ecosystem. Always use the APIs that match the installed major version of each package — do not assume a version.
 
 Before relying on a package's API, confirm its installed version:
 - PHP packages: run `composer show --direct` to list direct dependencies with versions, or `composer show <vendor/package>` for a single package.
@@ -78,21 +78,6 @@ Before relying on a package's API, confirm its installed version:
 - Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
 - Activate the `deploying-to-cloud` skill whenever deploying to Laravel Cloud, configuring Cloud environments or resources, using the Cloud CLI, or troubleshooting Cloud deployments.
 
-=== inertia-laravel/core rules ===
-
-# Inertia
-
-- Inertia creates fully client-side rendered SPAs without modern SPA complexity, leveraging existing server-side patterns.
-- Components live in `resources/js/Pages` (unless specified in `vite.config.js`). Use `Inertia::render()` for server-side routing instead of Blade views.
-- ALWAYS use `search-docs` tool for version-specific Inertia documentation and updated code examples.
-- IMPORTANT: Activate `inertia-react-development` when working with Inertia client-side patterns.
-
-# Inertia v2
-
-- Use all Inertia features from v1 and v2. Check the documentation before making changes to ensure the correct approach.
-- New features: deferred props, infinite scroll, merging props, polling, prefetching, once props, flash data.
-- When using deferred props, add an empty state with a pulsing or animated skeleton.
-
 === laravel/core rules ===
 
 # Do Things the Laravel Way
@@ -144,10 +129,16 @@ Before relying on a package's API, confirm its installed version:
 - Rerun a test after each change to it.
 - Run `vendor/bin/phpunit` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
 
-=== inertia-react/core rules ===
-
-# Inertia + React
-
-- IMPORTANT: Activate `inertia-react-development` when working with Inertia React client-side patterns.
-
 </laravel-boost-guidelines>
+
+---
+
+# CodeDNA v0.9 (complements Laravel Boost — do not replace it)
+
+Laravel Boost rules above remain authoritative for PHP/Laravel style, Artisan, Pint, and tests. CodeDNA is the **shared in-source architecture channel**.
+
+1. At session start read `.codedna` (Level 0: packages, `cross_cutting_patterns`, recent `agent_sessions`).
+2. Follow `.cursorrules` for the CodeDNA edit protocol (headers, `exports:` / `used_by:` / `rules:` / `agent:`, `codedna impact` / `verify`).
+3. New/edited PHP, Vue, JS, and Blade sources need a valid CodeDNA header in native comment syntax (`//` for PHP, `<!-- -->` for Vue SFC).
+4. Architecture truths already in `.codedna`: panel (customers/spaces/domains/stacks) vs Dokploy (git/deploy/logs); one infra = one compose on shared `dokploy-network` (aliases `${slug}-mariadb` etc.); site DB users `user@'%'` GRANT on one database only; never delete infras; never print secrets.
+5. CLI: `codedna doctor --path .` on onboarding; `codedna impact FILE --path .` before public changes; `codedna verify .` after structural edits; `codedna session append ...` at session end (do not hand-edit `agent_sessions:`).

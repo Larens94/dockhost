@@ -1,67 +1,69 @@
-# DockHost
+# Silicore Host
 
-Control plane for dense multi-tenant hosting on top of **Dokploy**.
+Pannello hosting clienti sopra [Dokploy](https://dokploy.com). Non è un fork di Dokploy e non vive in vibes-bridge.
 
-DockHost is the **admin panel** (anagrafica, wizard, billing, pools).  
-**Laravel is the first installable application** in the recipe catalog — not “the panel”.
+- **Dokploy** = Swarm, Git deploy, SSL, log, terminal.
+- **Questo pannello** = cliente → spazio (iscrizione) → dominio → DB condiviso opzionale + storage/SFTP, poi Laravel/Dokploy opzionale.
 
-Durable pieces:
+Vedi [docs/PLAN.md](docs/PLAN.md).
 
-- **Domain**: clients, sites, pools, servers, recipes, templates
-- **Recipes**: installable apps (Laravel first; WordPress / Node / static / custom next)
-- **InfrastructureDriver**: Dokploy API today; swappable later
+## Repo layout
 
-Dokploy remains the runtime executor (deploy, SSL, logs, cron). DockHost owns anagrafica and provisioning choices.
+- `infra/` — template Compose (il pannello lo pubblica su Dokploy via API)
+- root — Laravel 13 + Inertia Vue pannello admin
 
-## Architecture
+## Avvio locale
 
-```
-DockHost (panel: clients, billing, wizard, pools)
-    └── recipes → first app: Laravel (others later)
-    └── InfrastructureDriver → Dokploy API
-            └── Swarm / remote VPS
-```
-
-Data HA / volume replication is intentionally **phase 2**.
-
-## Layers
-
-| Layer | Role |
-|---|---|
-| Admin panel | DockHost (UI + business logic) |
-| Installable apps | Recipes — Laravel is #1 product |
-| Infra services | MariaDB, Postgres, Redis, SFTP… |
-| Driver | Dokploy API |
-
-## Quick start
+Herd PHP va lanciato senza `auto_prepend` (dump-loader rotto):
 
 ```bash
-cd dockhost
-composer install
-npm install --legacy-peer-deps
-php artisan migrate --seed
-npm run build
-php artisan serve
+PHP="/Users/fabriziocorpora/Library/Application Support/Herd/bin/php84 -d auto_prepend_file= -d auto_append_file="
+cp .env.example .env
+$PHP artisan key:generate
+$PHP artisan migrate --force
+$PHP artisan db:seed
+npm install && npm run build
+# artisan serve re-applies Herd dump-loader; use the built-in server:
+$PHP -S 127.0.0.1:8000 -t public
 ```
 
-Login: `admin@dockhost.local` / `password` (superadmin only — public registration disabled)
+Login: `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`.env.example` usa `admin@example.com`; se `ADMIN_PASSWORD` è vuota lo seed imposta `password`).
 
-```
-DOKPLOY_URL=https://your-dokploy.example
-DOKPLOY_API_KEY=...
-STRIPE_KEY=
-STRIPE_SECRET=
-STRIPE_WEBHOOK_SECRET=
+Test:
+
+```bash
+$PHP vendor/bin/phpunit
 ```
 
-CodeDNA (agent support): https://github.com/Larens94/codedna — `.codedna` + L1 headers installed.
+Non eseguire `php artisan config:cache` in build Docker.
 
-## Billing & wizard
+## Deploy su Dokploy
 
-- **Billing**: Stripe plans/subscriptions on clients (`/billing`). Stub without keys.
-- **Wizard** (`/wizard`): sì/no + pool for DB, storage, SFTP, cache, then choose app recipe (Laravel first).
-- Do **not** rebuild Dokploy features (deployments, logs, SSL UI, cron, docker inspect).
+Remote: `https://git.silicoreautomation.com/internal/dokhosts.git` (`main`).
 
-## UI
+Il pannello è un’Application autonoma (SQLite + volume). Da UI *Infrastructures* il pannello crea un **nuovo progetto Dokploy** (`project.create` + environment production + `compose.create` / `update` / `deploy`, isolated off, `dokploy-network`). Non mette lo stack nel progetto del pannello.
 
-Light theme by default, patterned after Dokploy (sidebar, home metrics, Projects-style lists) so DockHost reads as a companion extension.
+- Provider GitLab, branch `main`, build **Dockerfile**, porta **80**, isolated **off**
+- Volume persistente su `database/` e `storage/`
+- Env runtime (secret solo in Dokploy):
+
+```
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://<pannello>
+APP_KEY=base64:...
+DB_CONNECTION=sqlite
+DB_DATABASE=/var/www/html/database/database.sqlite
+DOKPLOY_URL=https://<dokploy>
+DOKPLOY_API_KEY=
+DOKPLOY_ENVIRONMENT_ID=
+DOKPLOY_SELF_APPLICATION_ID=
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+```
+
+`DOKPLOY_ENVIRONMENT_ID` è solo un default storico; le Application Laravel vanno nell'environment dell'infra (`infrastructure.dokploy_environment_id`). Il pannello non monta i volumi delle infra: lo stack espone `{slug}-sftp-sync`. `config:cache` solo a runtime.
+
+## Sicurezza
+
+Token Dokploy e password SQL admin solo in env server. Mai in chat, mai nel frontend.

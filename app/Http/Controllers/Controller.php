@@ -1,18 +1,12 @@
 <?php
+
+
 // Controller.php — Controller module.
 //
 // exports: Controller
-// used_by: app/Http/Controllers/Auth/AuthenticatedSessionController.php
-//                   app/Http/Controllers/Auth/ConfirmablePasswordController.php
-//                   app/Http/Controllers/Auth/EmailVerificationNotificationController.php
-//                   app/Http/Controllers/Auth/EmailVerificationPromptController.php
-//                   app/Http/Controllers/Auth/NewPasswordController.php
-//                   app/Http/Controllers/Auth/PasswordController.php
-//                   app/Http/Controllers/Auth/PasswordResetLinkController.php
-//                   app/Http/Controllers/Auth/RegisteredUserController.php
-//                   app/Http/Controllers/Auth/VerifyEmailController.php
+// used_by: app/Http/Controllers/Auth/LoginController.php
 // rules:   none
-// agent:   composer | cursor | 2026-09-18 | s_20260918_client_crud | Note ClientController extends base Controller
+// agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 // message: 
 
 namespace App\Http\Controllers;

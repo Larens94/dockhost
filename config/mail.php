@@ -1,5 +1,14 @@
 <?php
 
+// mail.php — mail module.
+//
+// exports: none
+// used_by: none
+// rules:   MAIL_ENCRYPTION maps to smtp scheme at config cache time (tls=null STARTTLS, ssl=smtps).
+// agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+// agent:   composer-2.5-fast | cursor | 2026-09-25 | s_smtp_panel_fix | MAIL_ENCRYPTION→scheme for Dokploy env.
+// message:
+
 return [
 
     /*
@@ -39,7 +48,7 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            'scheme' => env('MAIL_SCHEME') ?: (env('MAIL_ENCRYPTION') === 'ssl' ? 'smtps' : null),
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),

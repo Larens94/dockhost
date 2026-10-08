@@ -1,20 +1,21 @@
+{{-- app.blade.php — app template.
+--
+-- exports: none
+-- used_by: none
+-- rules:   none
+-- agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+--}}
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-
-        <title inertia>{{ config('app.name', 'DockHost') }}</title>
-
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
-
-        @routes
-        @viteReactRefresh
-        @vite(['resources/js/app.jsx'])
+        <title inertia>{{ config('app.name', 'Silicore Host') }}</title>
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
         @inertiaHead
     </head>
-    <body class="font-sans antialiased">
+        <body class="min-h-screen bg-neutral-50 antialiased">
         @inertia
     </body>
 </html>

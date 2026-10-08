@@ -1,0 +1,226 @@
+# Isolated Deployments MUST be off in Dokploy.
+# This file is the same template the panel deploys via compose.create.
+# Applications use DB_HOST=${INFRA_SLUG}-mariadb on dokploy-network.
+
+services:
+  mariadb:
+    image: mariadb:11
+    hostname: ${INFRA_SLUG:-infra1}-mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme}
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: infra
+      MYSQL_USER: ${MYSQL_APP_USER:-infra}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:-changeme}
+    volumes:
+      - mariadb:/var/lib/mysql
+    networks:
+      dokploy-network:
+        aliases:
+          - ${INFRA_SLUG:-infra1}-mariadb
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+  mysql-grants:
+    image: mariadb:11
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    environment:
+      MYSQL_PWD: ${MYSQL_ROOT_PASSWORD:-changeme}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-changeme}
+      INFRA_SLUG: ${INFRA_SLUG:-infra1}
+    command:
+      - |
+        set -e
+        echo GRANT_START
+        if [ -z "$$MYSQL_APP_PASSWORD" ] || [ -z "$$MYSQL_PWD" ] || [ -z "$$INFRA_SLUG" ]; then
+          echo GRANT_FAIL
+          exit 1
+        fi
+        q() { printf "'%s'" "$$(printf '%s' "$$1" | sed "s/'/''/g")"; }
+        {
+          printf '%s' "CREATE USER IF NOT EXISTS 'infra'@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD("
+          q "$$MYSQL_APP_PASSWORD"
+          printf '%s\n' ");"
+          printf '%s' "ALTER USER 'infra'@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD("
+          q "$$MYSQL_APP_PASSWORD"
+          printf '%s\n' ");"
+          printf '%s\n' "GRANT ALL PRIVILEGES ON *.* TO 'infra'@'%' WITH GRANT OPTION;"
+          printf '%s\n' "FLUSH PRIVILEGES;"
+        } > /tmp/grants.sql
+        if mariadb --protocol=tcp -h"$$INFRA_SLUG-mariadb" -uroot -p"$$MYSQL_PWD" < /tmp/grants.sql; then
+          echo GRANT_OK
+        else
+          echo GRANT_FAIL
+          exit 1
+        fi
+    networks:
+      - dokploy-network
+    restart: "no"
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    hostname: ${INFRA_SLUG:-infra1}-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: ${INFRA_SLUG:-infra1}-mariadb
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      dokploy-network:
+        aliases:
+          - ${INFRA_SLUG:-infra1}-phpmyadmin
+
+  sftp-users-init:
+    image: alpine:3.20
+    environment:
+      SFTP_BOOTSTRAP_USER: ${SFTP_BOOTSTRAP_USER:-infra}
+      SFTP_BOOTSTRAP_PASSWORD: ${SFTP_BOOTSTRAP_PASSWORD:-changeme}
+    volumes:
+      - sftp_config:/etc/sftp
+      - sftp_ssh:/ssh-host-keys
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /etc/sftp /ssh-host-keys
+        if [ ! -s /etc/sftp/users.conf ]; then
+          printf '%s\n' "${SFTP_BOOTSTRAP_USER:-infra}:${SFTP_BOOTSTRAP_PASSWORD:-changeme}:1001:1001" > /etc/sftp/users.conf
+        fi
+        if [ ! -f /ssh-host-keys/ssh_host_ed25519_key ]; then
+          apk add --no-cache openssh-keygen
+          ssh-keygen -t ed25519 -f /ssh-host-keys/ssh_host_ed25519_key -N ""
+          ssh-keygen -t rsa -b 4096 -f /ssh-host-keys/ssh_host_rsa_key -N ""
+        fi
+
+  sftp-sync:
+    image: python:3.12-alpine
+    hostname: ${INFRA_SLUG:-infra1}-sftp-sync
+    restart: unless-stopped
+    environment:
+      SFTP_SYNC_TOKEN: ${SFTP_SYNC_TOKEN:-changeme}
+    volumes:
+      - data:/data
+      - sftp_config:/etc/sftp
+    networks:
+      dokploy-network:
+        aliases:
+          - ${INFRA_SLUG:-infra1}-sftp-sync
+    command:
+      - python
+      - -c
+      - |
+        import json, os, http.server
+        TOKEN = os.environ.get("SFTP_SYNC_TOKEN", "")
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                return
+            def _ok(self, body=b"ok"):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(body)
+            def do_GET(self):
+                if self.path == "/health":
+                    self._ok()
+                    return
+                self.send_response(404)
+                self.end_headers()
+            def do_POST(self):
+                if self.path != "/sync" or self.headers.get("Authorization") != "Bearer " + TOKEN:
+                    self.send_response(401 if self.path == "/sync" else 404)
+                    self.end_headers()
+                    return
+                n = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(n) or b"{}")
+                os.makedirs("/etc/sftp", exist_ok=True)
+                lines = []
+                for user in body.get("users") or []:
+                    name = str(user.get("username", ""))
+                    password = str(user.get("password", ""))
+                    if name and password and ":" not in name and ":" not in password:
+                        lines.append(name + ":" + password + ":1001:1001")
+                open("/etc/sftp/users.conf", "w").write(("\n".join(lines) + "\n") if lines else "")
+                for directory in body.get("directories") or []:
+                    path = os.path.realpath(str(directory))
+                    if path == "/data" or path.startswith("/data/"):
+                        os.makedirs(path, mode=0o750, exist_ok=True)
+                self._ok(b'{"ok":true}')
+        http.server.HTTPServer(("0.0.0.0", 8787), H).serve_forever()
+
+  sftp:
+    image: atmoz/sftp:alpine
+    hostname: ${INFRA_SLUG:-infra1}-sftp
+    restart: unless-stopped
+    environment:
+      SFTP_BOOTSTRAP_USER: ${SFTP_BOOTSTRAP_USER:-infra}
+      SFTP_BOOTSTRAP_PASSWORD: ${SFTP_BOOTSTRAP_PASSWORD:-changeme}
+    volumes:
+      - data:/home
+      - data:/data
+      - sftp_config:/etc/sftp
+      - sftp_ssh:/ssh-host-keys:ro
+    command:
+      - sh
+      - -c
+      - |
+        if [ -f /ssh-host-keys/ssh_host_ed25519_key ]; then
+          cp /ssh-host-keys/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
+          cp /ssh-host-keys/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null || true
+        fi
+        if [ -f /ssh-host-keys/ssh_host_rsa_key ]; then
+          cp /ssh-host-keys/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key
+          cp /ssh-host-keys/ssh_host_rsa_key.pub /etc/ssh/ssh_host_rsa_key.pub 2>/dev/null || true
+        fi
+        exec /entrypoint "${SFTP_BOOTSTRAP_USER:-infra}:${SFTP_BOOTSTRAP_PASSWORD:-changeme}:1001:1001"
+    depends_on:
+      sftp-users-init:
+        condition: service_completed_successfully
+    networks:
+      dokploy-network:
+        aliases:
+          - ${INFRA_SLUG:-infra1}-sftp
+    ports:
+      - "${SFTP_HOST_PORT:-2222}:22"
+
+  postgres:
+    image: postgres:16
+    hostname: ${INFRA_SLUG:-infra1}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_USER: ${POSTGRES_USER:-infra}
+      POSTGRES_DB: infra
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    networks:
+      dokploy-network:
+        aliases:
+          - ${INFRA_SLUG:-infra1}-postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-infra} -d infra"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  mariadb:
+  data:
+    name: ${INFRA_SLUG:-infra1}_data
+  postgres:
+  sftp_config:
+  sftp_ssh:
+
+networks:
+  dokploy-network:
+    external: true

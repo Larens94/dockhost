@@ -1,18 +1,17 @@
 <?php
 
-use App\Models\Pool;
-use App\Services\PoolLedger;
+
+// console.php — console module.
+//
+// exports: none
+// used_by: none
+// rules:   none
+// agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+// message: 
+
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
-
-Schedule::command('dockhost:refresh-deploys')->everyMinute();
-
-Artisan::command('dockhost:reconcile-usage', function () {
-    app(PoolLedger::class)->recalculate(Pool::query()->pluck('id')->all());
-    $this->info('Pool usage recalculated from sites that still hold capacity.');
-})->purpose('Recalculate pool usage from held site attachments');

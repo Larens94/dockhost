@@ -19,7 +19,6 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
-        <env name="APP_KEY" value="base64:MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
@@ -33,5 +32,16 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="APP_KEY" value="base64:2fl+KTV4HMiLGk4YV4GfL0UyYoXnfI/O5LZoxjYEU7w="/>
+        <env name="DOKPLOY_URL" value="https://dokploy.test"/>
+        <env name="DOKPLOY_API_KEY" value="testing"/>
+        <env name="DOKPLOY_PUBLIC_HOST" value="cloud.silicoreautomation.com"/>
+        <env name="DOKPLOY_SELF_APPLICATION_ID" value="" force="true"/>
+        <env name="INFRA_MYSQL_HOST" value="infra1-mariadb"/>
+        <env name="INFRA_MYSQL_PORT" value="3306"/>
+        <env name="INFRA_POSTGRES_HOST" value="infra1-postgres"/>
+        <env name="INFRA_POSTGRES_PORT" value="5432"/>
+        <env name="INFRA_STORAGE_ROOT" value="storage/framework/testing/data"/>
+        <env name="INFRA_SFTP_USERS_FILE" value="storage/framework/testing/sftp/users.conf"/>
     </php>
 </phpunit>

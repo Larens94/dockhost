@@ -1,0 +1,15 @@
+{
+    "comment": "MCP Dokploy v1.3: + get_*_deploy_status, get_compose_env_summary, list/restart application containers. Segreti env mascherati. Riavvia MCP in Cursor dopo aggiornamenti.",
+    "mcpServers": {
+        "dokploy": {
+            "type": "stdio",
+            "command": "node",
+            "args": ["./mcp/dokploy/server.mjs"],
+            "env": {
+                "DOKPLOY_URL": "${DOKPLOY_URL}",
+                "DOKPLOY_API_KEY": "${DOKPLOY_API_KEY}",
+                "DOKHOSTS_ROOT": "."
+            }
+        }
+    }
+}

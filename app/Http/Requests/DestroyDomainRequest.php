@@ -1,0 +1,30 @@
+<?php
+
+
+// DestroyDomainRequest.php — DestroyDomainRequest module.
+//
+// exports: DestroyDomainRequest | DestroyDomainRequest::authorize(): bool | DestroyDomainRequest::rules(): array
+// used_by: app/Http/Controllers/DomainController.php
+// rules:   none
+// agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+// message: 
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class DestroyDomainRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return $this->user() !== null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [];
+    }
+}

@@ -1,9 +1,19 @@
 <?php
 
+
+// SubscriptionFactory.php — SubscriptionFactory module.
+//
+// exports: SubscriptionFactory | SubscriptionFactory::definition(): array
+// used_by: none
+// rules:   none
+// agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+// message: 
+
 namespace Database\Factories;
 
-use App\Models\Client;
-use App\Models\Plan;
+use App\Enums\SubscriptionStatus;
+use App\Models\Customer;
+use App\Models\ServicePlan;
 use App\Models\Subscription;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,12 +28,10 @@ class SubscriptionFactory extends Factory
     public function definition(): array
     {
         return [
-            'client_id' => Client::factory(),
-            'plan_id' => Plan::factory(),
-            'status' => 'active',
-            'stripe_subscription_id' => 'sub_stub_'.fake()->unique()->bothify('??????'),
-            'current_period_end' => now()->addMonth(),
-            'meta' => ['mode' => 'stub'],
+            'customer_id' => Customer::factory(),
+            'service_plan_id' => ServicePlan::factory(),
+            'name' => fake()->unique()->domainName(),
+            'status' => SubscriptionStatus::Active,
         ];
     }
 }

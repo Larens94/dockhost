@@ -1,11 +1,11 @@
 <?php
 
-use App\Http\Middleware\EnsureSuperAdmin;
+use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\User;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -15,20 +15,26 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
-            AddLinkHeadersForPreloadedAssets::class,
         ]);
 
         $middleware->alias([
-            'superadmin' => EnsureSuperAdmin::class,
-        ]);
-
-        $middleware->validateCsrfTokens(except: [
-            'stripe/webhook',
+            'admin' => EnsureUserIsAdmin::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));
+        $middleware->redirectUsersTo(function (Request $request) {
+            $user = $request->user();
+
+            if ($user instanceof User && ! $user->isAdmin()) {
+                return route('domains.index');
+            }
+
+            return route('customers.index');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

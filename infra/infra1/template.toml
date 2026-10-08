@@ -1,0 +1,20 @@
+[variables]
+main_domain = "${domain}"
+mysql_root_password = "${password:32}"
+mysql_app_password = "${password:24}"
+sftp_bootstrap_password = "${password:24}"
+
+[config]
+[[config.domains]]
+serviceName = "phpmyadmin"
+port = 80
+host = "${main_domain}"
+
+[config.env]
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+MYSQL_APP_USER = "infra"
+MYSQL_APP_PASSWORD = "${mysql_app_password}"
+POSTGRES_PASSWORD = "${password:32}"
+POSTGRES_USER = "infra"
+SFTP_BOOTSTRAP_USER = "infra"
+SFTP_BOOTSTRAP_PASSWORD = "${sftp_bootstrap_password}"

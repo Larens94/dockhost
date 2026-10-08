@@ -1,5 +1,14 @@
 <?php
 
+
+// logging.php — logging module.
+//
+// exports: none
+// used_by: none
+// rules:   none
+// agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+// message: 
+
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;

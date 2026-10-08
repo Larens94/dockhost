@@ -1,5 +1,13 @@
 <?php
 
+// UserFactory.php — UserFactory module.
+//
+// exports: UserFactory | UserFactory::definition(): array | UserFactory::unverified(): static
+// used_by: none
+// rules:   none
+// agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+// message:
+
 namespace Database\Factories;
 
 use App\Models\User;
@@ -29,9 +37,16 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
-            'role' => 'superadmin',
             'remember_token' => Str::random(10),
+            'is_admin' => true,
         ];
+    }
+
+    public function member(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_admin' => false,
+        ]);
     }
 
     /**

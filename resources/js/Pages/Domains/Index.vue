@@ -1,0 +1,72 @@
+<!-- Index.vue — Elenco hosting visibili all'utente (tutti per admin, pivot per membri).
+
+  exports: defineProps
+  used_by: DomainController::index
+  rules:   Etichette in italiano.
+  agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_acl | Member landing page.
+-->
+
+<script setup>
+import { Link } from '@inertiajs/vue3';
+import AppLayout from '../../Layouts/AppLayout.vue';
+import ResponsiveTable from '../../Components/ResponsiveTable.vue';
+
+defineProps({
+    domains: {
+        type: Array,
+        required: true,
+    },
+    isAdmin: {
+        type: Boolean,
+        default: false,
+    },
+});
+</script>
+
+<template>
+    <AppLayout
+        :title="isAdmin ? 'Domini' : 'I miei hosting'"
+        :description="
+            isAdmin
+                ? 'Tutti gli hosting del pannello.'
+                : 'Hosting a cui hai accesso. Database, SFTP e toolkit restano qui nel pannello.'
+        "
+    >
+        <div
+            v-if="domains.length === 0"
+            class="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center"
+        >
+            <p class="text-sm font-medium">Nessun hosting</p>
+            <p v-if="!isAdmin" class="mt-1 text-sm text-zinc-500">
+                Chiedi a un amministratore di aggiungerti dalla scheda «Accessi» del dominio.
+            </p>
+        </div>
+
+        <ResponsiveTable v-else>
+            <template #table>
+                <thead class="border-b border-neutral-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">Dominio</th>
+                        <th class="px-4 py-3 font-medium">Cliente</th>
+                        <th class="px-4 py-3 font-medium">Stack</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-100">
+                    <tr v-for="domain in domains" :key="domain.id" class="hover:bg-zinc-50/80">
+                        <td class="px-4 py-3">
+                            <Link :href="`/domains/${domain.id}`" class="font-medium text-zinc-900 hover:underline">
+                                {{ domain.fqdn }}
+                            </Link>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-zinc-600">
+                            {{ domain.customer?.name || '—' }}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-zinc-600">
+                            {{ domain.stack_label || domain.stack || '—' }}
+                        </td>
+                    </tr>
+                </tbody>
+            </template>
+        </ResponsiveTable>
+    </AppLayout>
+</template>
