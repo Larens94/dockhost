@@ -1,13 +1,12 @@
 <?php
 
-
 // AttachPgadminDomainRequest.php — AttachPgadminDomainRequest module.
 //
 // exports: AttachPgadminDomainRequest | AttachPgadminDomainRequest::authorize(): bool | AttachPgadminDomainRequest::rules(): array | AttachPgadminDomainRequest::withValidator(Validator $validator): void
 // used_by: app/Http/Controllers/InfrastructureController.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace App\Http\Requests;
 
@@ -42,14 +41,14 @@ class AttachPgadminDomainRequest extends FormRequest
             if (! $infrastructure->isPanelManaged()) {
                 $validator->errors()->add(
                     'pgadmin',
-                    'Solo gli stack creati da DokHosts possono ricevere il dominio pgAdmin.',
+                    __('panel.validation.pgadmin_panel_only'),
                 );
             }
 
             if (! $infrastructure->hasService('pgadmin')) {
                 $validator->errors()->add(
                     'pgadmin',
-                    'pgAdmin non è attivo su questo stack. Attivalo e aggiorna lo stack prima.',
+                    __('panel.validation.pgadmin_off'),
                 );
             }
         });

@@ -1,13 +1,12 @@
 <?php
 
-
 // AttachPhpmyadminDomainRequest.php — AttachPhpmyadminDomainRequest module.
 //
 // exports: AttachPhpmyadminDomainRequest | AttachPhpmyadminDomainRequest::authorize(): bool | AttachPhpmyadminDomainRequest::rules(): array | AttachPhpmyadminDomainRequest::withValidator(Validator $validator): void
 // used_by: app/Http/Controllers/InfrastructureController.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace App\Http\Requests;
 
@@ -42,14 +41,14 @@ class AttachPhpmyadminDomainRequest extends FormRequest
             if (! $infrastructure->isPanelManaged()) {
                 $validator->errors()->add(
                     'phpmyadmin',
-                    'Solo gli stack creati da DokHosts possono ricevere il dominio phpMyAdmin.',
+                    __('panel.validation.phpmyadmin_panel_only'),
                 );
             }
 
             if (! $infrastructure->hasService('phpmyadmin')) {
                 $validator->errors()->add(
                     'phpmyadmin',
-                    'phpMyAdmin non è attivo su questo stack. Attivalo e aggiorna lo stack prima.',
+                    __('panel.validation.phpmyadmin_off'),
                 );
             }
         });

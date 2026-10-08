@@ -1,13 +1,12 @@
 <?php
 
-
 // AttachMinioDomainRequest.php — AttachMinioDomainRequest module.
 //
 // exports: AttachMinioDomainRequest | AttachMinioDomainRequest::authorize(): bool | AttachMinioDomainRequest::rules(): array | AttachMinioDomainRequest::withValidator(Validator $validator): void
 // used_by: app/Http/Controllers/InfrastructureController.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace App\Http\Requests;
 
@@ -42,14 +41,14 @@ class AttachMinioDomainRequest extends FormRequest
             if (! $infrastructure->isPanelManaged()) {
                 $validator->errors()->add(
                     'minio',
-                    'Solo gli stack creati da DokHosts possono ricevere il dominio MinIO.',
+                    __('panel.validation.minio_panel_only'),
                 );
             }
 
             if (! $infrastructure->hasService('minio')) {
                 $validator->errors()->add(
                     'minio',
-                    'MinIO non è attivo su questo stack. Attivalo e aggiorna lo stack prima.',
+                    __('panel.validation.minio_off'),
                 );
             }
         });

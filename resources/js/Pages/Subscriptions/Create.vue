@@ -4,11 +4,15 @@
   used_by: none
   rules:   none
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
+  agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Space create copy uses panel translations.
 -->
 
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 
 const props = defineProps({
     customers: {
@@ -37,9 +41,9 @@ const submit = () => {
 </script>
 
 <template>
-    <AppLayout title="Nuovo spazio" description="Associa un cliente a un piano di servizio.">
+    <AppLayout :title="t('spaces_form.create_title')" :description="t('spaces_form.create_description')">
         <template #actions>
-            <Link href="/subscriptions" class="text-sm text-zinc-600 hover:text-zinc-900">Indietro</Link>
+            <Link href="/subscriptions" class="text-sm text-zinc-600 hover:text-zinc-900">{{ t('common.back') }}</Link>
         </template>
 
         <form
@@ -47,7 +51,7 @@ const submit = () => {
             @submit.prevent="submit"
         >
             <div>
-                <label class="block text-sm font-medium" for="customer_id">Cliente</label>
+                <label class="block text-sm font-medium" for="customer_id">{{ t('common.customer') }}</label>
                 <select
                     id="customer_id"
                     v-model="form.customer_id"
@@ -61,7 +65,7 @@ const submit = () => {
                 <p v-if="form.errors.customer_id" class="mt-1 text-sm text-red-600">{{ form.errors.customer_id }}</p>
             </div>
             <div>
-                <label class="block text-sm font-medium" for="service_plan_id">Piano</label>
+                <label class="block text-sm font-medium" for="service_plan_id">{{ t('common.plan') }}</label>
                 <select
                     id="service_plan_id"
                     v-model="form.service_plan_id"
@@ -75,7 +79,7 @@ const submit = () => {
                 <p v-if="form.errors.service_plan_id" class="mt-1 text-sm text-red-600">{{ form.errors.service_plan_id }}</p>
             </div>
             <div>
-                <label class="block text-sm font-medium" for="name">Nome spazio</label>
+                <label class="block text-sm font-medium" for="name">{{ t('spaces_form.space_name') }}</label>
                 <input
                     id="name"
                     v-model="form.name"
@@ -91,7 +95,7 @@ const submit = () => {
                 class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                 :disabled="form.processing"
             >
-                Crea
+                {{ t('common.create') }}
             </button>
         </form>
     </AppLayout>

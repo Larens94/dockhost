@@ -4,11 +4,15 @@
   used_by: none
   rules:   none
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
+  agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Customer create copy uses panel translations.
 -->
 
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 
 const form = useForm({
     name: '',
@@ -22,9 +26,9 @@ const submit = () => {
 </script>
 
 <template>
-    <AppLayout title="Nuovo cliente" description="Il cliente raggruppa spazi, domini e credenziali su un’infra condivisa.">
+    <AppLayout :title="t('customers_form.create_title')" :description="t('customers_form.create_description')">
         <template #actions>
-            <Link href="/customers" class="text-sm text-zinc-600 hover:text-zinc-900">Indietro</Link>
+            <Link href="/customers" class="text-sm text-zinc-600 hover:text-zinc-900">{{ t('common.back') }}</Link>
         </template>
 
         <form
@@ -32,7 +36,7 @@ const submit = () => {
             @submit.prevent="submit"
         >
             <div>
-                <label class="block text-sm font-medium" for="name">Nome</label>
+                <label class="block text-sm font-medium" for="name">{{ t('common.name') }}</label>
                 <input
                     id="name"
                     v-model="form.name"
@@ -43,7 +47,7 @@ const submit = () => {
                 <p v-if="form.errors.name" class="mt-1 text-sm text-red-600">{{ form.errors.name }}</p>
             </div>
             <div>
-                <label class="block text-sm font-medium" for="email">Email</label>
+                <label class="block text-sm font-medium" for="email">{{ t('common.email') }}</label>
                 <input
                     id="email"
                     v-model="form.email"
@@ -53,7 +57,7 @@ const submit = () => {
                 <p v-if="form.errors.email" class="mt-1 text-sm text-red-600">{{ form.errors.email }}</p>
             </div>
             <div>
-                <label class="block text-sm font-medium" for="notes">Note</label>
+                <label class="block text-sm font-medium" for="notes">{{ t('common.notes') }}</label>
                 <textarea
                     id="notes"
                     v-model="form.notes"
@@ -66,7 +70,7 @@ const submit = () => {
                 class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                 :disabled="form.processing"
             >
-                Crea
+                {{ t('common.create') }}
             </button>
         </form>
     </AppLayout>

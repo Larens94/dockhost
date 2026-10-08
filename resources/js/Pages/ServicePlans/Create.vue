@@ -8,7 +8,10 @@
 
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 
 const form = useForm({
     name: 'Unlimited',
@@ -23,9 +26,9 @@ const submit = () => {
 </script>
 
 <template>
-    <AppLayout title="Nuovo piano" description="Limiti del piano. Lascia vuoto per illimitato.">
+    <AppLayout :title="t('plans.create_title')" :description="t('plans.create_description')">
         <template #actions>
-            <Link href="/service-plans" class="text-sm text-zinc-600 hover:text-zinc-900">Indietro</Link>
+            <Link href="/service-plans" class="text-sm text-zinc-600 hover:text-zinc-900">{{ t('common.back') }}</Link>
         </template>
 
         <form
@@ -33,7 +36,7 @@ const submit = () => {
             @submit.prevent="submit"
         >
             <div>
-                <label class="block text-sm font-medium" for="name">Nome</label>
+                <label class="block text-sm font-medium" for="name">{{ t('common.name') }}</label>
                 <input
                     id="name"
                     v-model="form.name"
@@ -44,7 +47,7 @@ const submit = () => {
                 <p v-if="form.errors.name" class="mt-1 text-sm text-red-600">{{ form.errors.name }}</p>
             </div>
             <div>
-                <label class="block text-sm font-medium" for="slug">Slug</label>
+                <label class="block text-sm font-medium" for="slug">{{ t('common.slug') }}</label>
                 <input
                     id="slug"
                     v-model="form.slug"
@@ -54,7 +57,7 @@ const submit = () => {
                 <p v-if="form.errors.slug" class="mt-1 text-sm text-red-600">{{ form.errors.slug }}</p>
             </div>
             <div>
-                <label class="block text-sm font-medium" for="max_domains">Max domini</label>
+                <label class="block text-sm font-medium" for="max_domains">{{ t('plans.max_domains') }}</label>
                 <input
                     id="max_domains"
                     v-model="form.max_domains"
@@ -64,7 +67,7 @@ const submit = () => {
                 />
             </div>
             <div>
-                <label class="block text-sm font-medium" for="disk_mb">Disco (MB)</label>
+                <label class="block text-sm font-medium" for="disk_mb">{{ t('plans.disk_mb') }}</label>
                 <input
                     id="disk_mb"
                     v-model="form.disk_mb"
@@ -78,7 +81,7 @@ const submit = () => {
                 class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                 :disabled="form.processing"
             >
-                Crea
+                {{ t('common.create') }}
             </button>
         </form>
     </AppLayout>

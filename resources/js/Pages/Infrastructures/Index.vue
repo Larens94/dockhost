@@ -8,7 +8,10 @@
 
 <script setup>
 import { Link } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 import InfrastructureStatusBadge from '../../Components/InfrastructureStatusBadge.vue';
 import ResponsiveTable from '../../Components/ResponsiveTable.vue';
 
@@ -22,15 +25,15 @@ defineProps({
 
 <template>
     <AppLayout
-        title="Infrastrutture"
-        description="Ogni infrastruttura è un progetto Dokploy e uno stack Compose con MariaDB, Postgres e SFTP."
+        :title="t('infrastructures.title')"
+        :description="t('infrastructures.description')"
     >
         <template #actions>
             <Link
                 href="/infrastructures/create"
                 class="inline-flex items-center rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800"
             >
-                Nuova infrastruttura
+                {{ t('infrastructures.new') }}
             </Link>
         </template>
 
@@ -38,15 +41,15 @@ defineProps({
             v-if="infrastructures.length === 0"
             class="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center"
         >
-            <p class="text-sm font-medium">Nessuna infrastruttura del pannello</p>
+            <p class="text-sm font-medium">{{ t('infrastructures.empty_title') }}</p>
             <p class="mt-1 text-sm text-zinc-500">
-                Crea infra1: nasce un progetto Dokploy a parte, non dentro il progetto del pannello.
+                {{ t('infrastructures.empty_body') }}
             </p>
             <Link
                 href="/infrastructures/create"
                 class="mt-4 inline-flex rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white"
             >
-                Nuova infrastruttura
+                {{ t('infrastructures.new') }}
             </Link>
         </div>
 
@@ -54,12 +57,12 @@ defineProps({
             <template #table>
                 <thead class="border-b border-neutral-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                     <tr>
-                        <th class="px-4 py-3 font-medium">Slug</th>
-                        <th class="px-4 py-3 font-medium">Nome</th>
-                        <th class="px-4 py-3 font-medium">Stato</th>
+                        <th class="px-4 py-3 font-medium">{{ t('common.slug') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ t('infrastructures.name') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ t('infrastructures.state') }}</th>
                         <th class="px-4 py-3 font-medium">MySQL</th>
-                        <th class="px-4 py-3 font-medium">SFTP</th>
-                        <th class="px-4 py-3 font-medium text-right">Azioni</th>
+                        <th class="px-4 py-3 font-medium">{{ t('common.sftp') }}</th>
+                        <th class="px-4 py-3 font-medium text-right">{{ t('common.actions') }}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-100">
@@ -93,7 +96,7 @@ defineProps({
                                     :href="`/infrastructures/${infra.id}?tab=pericolo`"
                                     class="text-xs font-medium text-red-700 hover:underline"
                                 >
-                                    Elimina
+                                    {{ t('common.delete') }}
                                 </Link>
                             </div>
                         </td>
@@ -147,7 +150,7 @@ defineProps({
                             :href="`/infrastructures/${infra.id}`"
                             class="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium hover:bg-zinc-50"
                         >
-                            Apri
+                            {{ t('common.open') }}
                         </Link>
                         <a
                             v-if="infra.dokploy_project_url"

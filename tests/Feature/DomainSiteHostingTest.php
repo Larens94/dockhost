@@ -6,10 +6,12 @@
 // used_by: none
 // rules:   Http::fake Dokploy; secrets redacted in Inertia; readonly 403; foreign domain 404.
 // agent:   composer-2.5-fast | cursor | 2026-09-25 | s_domain_site_env | Feature tests for site env + deploy.
+//          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Deploy rewrites composer install before build
 
 namespace Tests\Feature;
 
 use App\Enums\DomainMemberRole;
+use App\Enums\DomainStack;
 use App\Models\Domain;
 use App\Models\Infrastructure;
 use App\Models\User;
@@ -83,7 +85,12 @@ class DomainSiteHostingTest extends TestCase
     public function test_deploy_triggers_application_deploy_and_audit(): void
     {
         Http::preventStrayRequests();
+        $install = 'mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci';
         Http::fake([
+            'https://dokploy.test/api/application.one*' => Http::response([
+                'applicationId' => 'app-site',
+                'env' => "DB_HOST=infra1-mariadb\nDB_PASSWORD=keep-this\nNIXPACKS_INSTALL_CMD={$install}\nNIXPACKS_START_CMD=php artisan migrate --force\n",
+            ]),
             'https://dokploy.test/api/application.deploy' => Http::response(['ok' => true]),
         ]);
 
@@ -95,6 +102,7 @@ class DomainSiteHostingTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('success', 'Deploy del sito avviato su Dokploy.');
 
+        Http::assertNotSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.saveEnvironment');
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.deploy'
             && $request['applicationId'] === 'app-site');
 
@@ -102,6 +110,148 @@ class DomainSiteHostingTest extends TestCase
             'user_id' => $user->id,
             'action' => 'domain.deploy',
         ]);
+    }
+
+    public function test_deploy_refreshes_stale_laravel_install_command_and_keeps_db_host(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/application.one*' => Http::response([
+                'applicationId' => 'app-site',
+                'env' => "DB_HOST=infra1-mariadb\nDB_PASSWORD=keep-this\nNIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs && npm ci\nNIXPACKS_START_CMD=php artisan migrate --force\n",
+            ]),
+            'https://dokploy.test/api/application.saveEnvironment' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/application.deploy' => Http::response(['ok' => true]),
+        ]);
+
+        $user = User::factory()->create();
+        $domain = $this->domainWithApplication('app-site');
+
+        $this->actingAs($user)
+            ->post(route('domains.deploy', $domain))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Deploy del sito avviato su Dokploy.');
+
+        $saved = '';
+        Http::assertSent(function (Request $request) use (&$saved): bool {
+            if ($request->url() !== 'https://dokploy.test/api/application.saveEnvironment') {
+                return false;
+            }
+
+            $saved = (string) $request['env'];
+
+            return $request['applicationId'] === 'app-site';
+        });
+
+        $this->assertStringContainsString(
+            'NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci',
+            $saved,
+        );
+        $this->assertStringContainsString('DB_HOST=infra1-mariadb', $saved);
+        $this->assertStringContainsString('DB_PASSWORD=keep-this', $saved);
+        $this->assertStringContainsString('NIXPACKS_START_CMD=php artisan migrate --force', $saved);
+        $this->assertSame(1, substr_count($saved, 'NIXPACKS_INSTALL_CMD='));
+        $this->assertStringNotContainsString('composer install --ignore-platform-reqs &&', $saved);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.deploy'
+            && $request['applicationId'] === 'app-site');
+    }
+
+    public function test_deploy_writes_laravel_install_command_when_missing(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/application.one*' => Http::response([
+                'applicationId' => 'app-site',
+                'env' => "DB_HOST=infra1-mariadb\nDB_PASSWORD=keep-this\n",
+            ]),
+            'https://dokploy.test/api/application.saveEnvironment' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/application.deploy' => Http::response(['ok' => true]),
+        ]);
+
+        $user = User::factory()->create();
+        $domain = $this->domainWithApplication('app-site');
+
+        $this->actingAs($user)
+            ->post(route('domains.deploy', $domain))
+            ->assertRedirect();
+
+        $saved = '';
+        Http::assertSent(function (Request $request) use (&$saved): bool {
+            if ($request->url() !== 'https://dokploy.test/api/application.saveEnvironment') {
+                return false;
+            }
+
+            $saved = (string) $request['env'];
+
+            return true;
+        });
+
+        $this->assertStringContainsString(
+            'NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci',
+            $saved,
+        );
+        $this->assertStringContainsString('DB_HOST=infra1-mariadb', $saved);
+        $this->assertStringContainsString('DB_PASSWORD=keep-this', $saved);
+    }
+
+    public function test_deploy_refreshes_php_composer_install_without_unsetting_db_host(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/application.one*' => Http::response([
+                'applicationId' => 'app-php',
+                'env' => "DB_HOST=infra1-mariadb\nDB_PASSWORD=keep-this\nNIXPACKS_INSTALL_CMD=composer install --no-dev --optimize-autoloader\n",
+            ]),
+            'https://dokploy.test/api/application.saveEnvironment' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/application.deploy' => Http::response(['ok' => true]),
+        ]);
+
+        $user = User::factory()->create();
+        $domain = $this->domainWithApplication('app-php', null, DomainStack::Php);
+
+        $this->actingAs($user)
+            ->post(route('domains.deploy', $domain))
+            ->assertRedirect();
+
+        $saved = '';
+        Http::assertSent(function (Request $request) use (&$saved): bool {
+            if ($request->url() !== 'https://dokploy.test/api/application.saveEnvironment') {
+                return false;
+            }
+
+            $saved = (string) $request['env'];
+
+            return true;
+        });
+
+        $this->assertStringContainsString(
+            'NIXPACKS_INSTALL_CMD=composer install --no-dev --optimize-autoloader --no-interaction --no-scripts',
+            $saved,
+        );
+        $this->assertStringContainsString('DB_HOST=infra1-mariadb', $saved);
+        $this->assertStringContainsString('DB_PASSWORD=keep-this', $saved);
+    }
+
+    public function test_deploy_of_node_stack_does_not_rewrite_install_command(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/application.deploy' => Http::response(['ok' => true]),
+        ]);
+
+        $user = User::factory()->create();
+        $domain = $this->domainWithApplication('app-node', null, DomainStack::Node);
+
+        $this->actingAs($user)
+            ->post(route('domains.deploy', $domain))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Deploy del sito avviato su Dokploy.');
+
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'application.one')
+            || $request->url() === 'https://dokploy.test/api/application.saveEnvironment');
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.deploy'
+            && $request['applicationId'] === 'app-node');
     }
 
     public function test_readonly_member_cannot_update_site_env_or_deploy(): void
@@ -143,15 +293,16 @@ class DomainSiteHostingTest extends TestCase
             ->assertNotFound();
     }
 
-    private function domainWithApplication(string $applicationId, ?Infrastructure $infrastructure = null): Domain
+    private function domainWithApplication(string $applicationId, ?Infrastructure $infrastructure = null, DomainStack $stack = DomainStack::Laravel): Domain
     {
         $infrastructure ??= $this->panelInfrastructure([
             'dokploy_project_id' => 'proj-1',
             'dokploy_environment_id' => 'env-1',
         ]);
-        $domain = Domain::factory()->laravel()->create([
+        $domain = Domain::factory()->create([
             'infrastructure_id' => $infrastructure->id,
             'infra_slug' => $infrastructure->slug,
+            'stack' => $stack,
         ]);
         $domain->dokployApplication()->create([
             'dokploy_application_id' => $applicationId,

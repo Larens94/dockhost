@@ -40,7 +40,8 @@ class LocalePreferenceTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('locale', 'it')
                 ->where('translations.layout.nav.customers', 'Clienti')
-                ->where('translations.customers.title', 'Clienti'));
+                ->where('translations.customers.title', 'Clienti')
+                ->where('translations.domains.show.heading', 'Dominio'));
 
         $this->actingAs($user)
             ->put(route('account.locale.update'), ['locale' => 'en'])
@@ -68,7 +69,9 @@ class LocalePreferenceTest extends TestCase
             ->get(route('domains.index'))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('locale', 'en')
-                ->where('translations.domains.title', 'Domains'));
+                ->where('translations.domains.title', 'Domains')
+                ->where('translations.domains.show.heading', 'Domain')
+                ->where('translations.domains.show.readonly', 'Read-only access: you can see credentials and logs, but you cannot create DB/SFTP users, run commands, or change deploys.'));
     }
 
     public function test_invalid_locale_is_rejected_and_the_panel_stays_italian(): void

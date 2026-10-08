@@ -27,15 +27,7 @@ enum DomainStack: string
 
     public function label(): string
     {
-        return match ($this) {
-            self::None => 'Solo hosting',
-            self::Static => 'HTML / CSS / JS',
-            self::Php => 'PHP',
-            self::Laravel => 'Laravel',
-            self::Node => 'Node.js',
-            self::Python => 'Python',
-            self::Go => 'Go',
-        };
+        return __('panel.stacks.'.$this->value);
     }
 
     public function createsApplication(): bool

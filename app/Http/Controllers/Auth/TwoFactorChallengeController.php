@@ -37,7 +37,7 @@ class TwoFactorChallengeController extends Controller
 
         if (! is_int($userId) && ! is_string($userId)) {
             throw ValidationException::withMessages([
-                'code' => 'Sessione scaduta. Accedi di nuovo.',
+                'code' => __('panel.auth.session_expired'),
             ]);
         }
 
@@ -51,7 +51,7 @@ class TwoFactorChallengeController extends Controller
             $request->session()->forget('login.two_factor_user_id');
 
             throw ValidationException::withMessages([
-                'code' => 'Sessione non valida. Accedi di nuovo.',
+                'code' => __('panel.auth.session_invalid'),
             ]);
         }
 
@@ -72,7 +72,7 @@ class TwoFactorChallengeController extends Controller
 
         if (! $authenticated) {
             throw ValidationException::withMessages([
-                'code' => 'Codice non valido.',
+                'code' => __('panel.auth.invalid_code'),
             ]);
         }
 

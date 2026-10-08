@@ -1,13 +1,12 @@
 <?php
 
-
 // StoreInfrastructureDatabaseUserRequest.php — StoreInfrastructureDatabaseUserRequest module.
 //
 // exports: StoreInfrastructureDatabaseUserRequest | StoreInfrastructureDatabaseUserRequest::authorize(): bool | StoreInfrastructureDatabaseUserRequest::rules(): array | StoreInfrastructureDatabaseUserRequest::messages(): array | StoreInfrastructureDatabaseUserRequest::withValidator(Validator $validator): void | StoreInfrastructureDatabaseUserRequest::sourceAccount(): DatabaseAccount
 // used_by: app/Http/Controllers/InfrastructureController.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace App\Http\Requests;
 
@@ -42,8 +41,8 @@ class StoreInfrastructureDatabaseUserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'database_account_id.required' => 'Scegli il database su cui concedere i privilegi.',
-            'privilege.required' => 'Scegli i privilegi: completi (ALL) o sola lettura (SELECT).',
+            'database_account_id.required' => __('panel.validation.db_required'),
+            'privilege.required' => __('panel.validation.privilege_required'),
         ];
     }
 
@@ -60,7 +59,7 @@ class StoreInfrastructureDatabaseUserRequest extends FormRequest
             if ((int) $account->infrastructure_id !== (int) $infrastructure->id && $account->infra_slug !== $infrastructure->slug) {
                 $validator->errors()->add(
                     'database_account_id',
-                    'Il database non appartiene a questa infrastruttura.',
+                    __('panel.validation.db_wrong_infra'),
                 );
             }
         });

@@ -5,11 +5,14 @@
 // exports: DomainSiteEnvManager | DomainSiteEnvManager::panelState(Domain $domain): array | DomainSiteEnvManager::mergeEntries(Domain $domain, list<array{key: string, value: string|null}> $entries): array | DomainSiteEnvManager::deploy(Domain $domain): void
 // used_by: app/Http/Controllers/DomainController.php
 // rules:   merge via DokployApplicationEnv::replaceAssignments only — never wipe unrelated keys. Blank value on sensitive key keeps existing assignment. Never log env values.
+//          deploy refreshes composer NIXPACKS_INSTALL_CMD from the preset before application.deploy and leaves DB_* in place.
 // agent:   composer-2.5-fast | cursor | 2026-09-25 | s_domain_site_env | Domain-scoped env + deploy without Dokploy UI login.
+//          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Deploy refreshes composer install command before the build
 
 namespace App\Services\Hosting;
 
 use App\Models\Domain;
+use App\Services\Dokploy\DokployApplicationAttacher;
 use App\Services\Dokploy\DokployApplicationEnv;
 use App\Services\Dokploy\DokployClient;
 use App\Services\GitLab\GitLabProjectReference;
@@ -23,6 +26,7 @@ class DomainSiteEnvManager
         private DokployClient $dokploy,
         private DokployApplicationEnv $envParser,
         private DokployEnvPresentation $presentation,
+        private DokployApplicationAttacher $attacher,
     ) {}
 
     /**
@@ -121,7 +125,10 @@ class DomainSiteEnvManager
         }
 
         try {
+            $this->attacher->refreshNixpacksInstallCommand($domain);
             $this->dokploy->deploy(['applicationId' => $applicationId]);
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             throw ValidationException::withMessages([
                 'deploy' => $this->dokploy->errorMessage($exception),

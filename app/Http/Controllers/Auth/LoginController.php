@@ -36,7 +36,7 @@ class LoginController extends Controller
 
         if (! Auth::attempt($credentials, $request->boolean('remember'))) {
             throw ValidationException::withMessages([
-                'email' => 'Credenziali non valide.',
+                'email' => __('panel.auth.invalid_credentials'),
             ]);
         }
 

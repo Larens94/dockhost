@@ -8,7 +8,10 @@
 
 <script setup>
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { usePanelTranslations } from '@/composables/usePanelTranslations';
 import { Head } from '@inertiajs/vue3';
+
+const { t } = usePanelTranslations();
 
 defineProps({
     logs: {
@@ -31,18 +34,18 @@ const formatMeta = (meta) => {
 </script>
 
 <template>
-    <AppLayout title="Audit" description="Ultime azioni rilevanti nel pannello.">
+    <AppLayout :title="t('audit.title')" :description="t('audit.description')">
         <Head title="Audit" />
 
         <div class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
             <table class="min-w-full divide-y divide-neutral-200 text-sm">
                 <thead class="bg-neutral-50 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
                     <tr>
-                        <th class="px-4 py-3">Quando</th>
-                        <th class="px-4 py-3">Utente</th>
-                        <th class="px-4 py-3">Azione</th>
-                        <th class="px-4 py-3">Dettagli</th>
-                        <th class="px-4 py-3">IP</th>
+                        <th class="px-4 py-3">{{ t('common.when') }}</th>
+                        <th class="px-4 py-3">{{ t('common.user') }}</th>
+                        <th class="px-4 py-3">{{ t('common.action') }}</th>
+                        <th class="px-4 py-3">{{ t('common.details') }}</th>
+                        <th class="px-4 py-3">{{ t('common.ip') }}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-neutral-100">
@@ -59,7 +62,7 @@ const formatMeta = (meta) => {
                         <td class="whitespace-nowrap px-4 py-3 text-zinc-500">{{ log.ip || '—' }}</td>
                     </tr>
                     <tr v-if="!logs.length">
-                        <td colspan="5" class="px-4 py-8 text-center text-zinc-500">Nessuna voce di audit.</td>
+                        <td colspan="5" class="px-4 py-8 text-center text-zinc-500">{{ t('audit.empty') }}</td>
                     </tr>
                 </tbody>
             </table>

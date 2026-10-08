@@ -13,7 +13,10 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 import LaravelToolkitPanel from '../../Components/LaravelToolkitPanel.vue';
 import StackToolkitPanel from '../../Components/StackToolkitPanel.vue';
 
@@ -96,19 +99,19 @@ const isLaravelStack = computed(() => (props.domain.stack || 'none') === 'larave
 
 const tabs = computed(() => {
     const base = [
-        { id: 'generale', label: 'Generale' },
-        { id: 'database', label: 'Database' },
-        { id: 'sftp', label: 'SFTP' },
+        { id: 'generale', label: t('domains.tabs.general') },
+        { id: 'database', label: t('domains.tabs.database') },
+        { id: 'sftp', label: t('domains.tabs.sftp') },
     ];
 
     if (isLaravelStack.value) {
-        base.push({ id: 'laravel', label: 'Laravel' });
+        base.push({ id: 'laravel', label: t('domains.tabs.laravel') });
     } else {
-        base.push({ id: 'sito', label: 'Sito' });
+        base.push({ id: 'sito', label: t('domains.tabs.site') });
     }
 
     if (props.canDestroyDomain) {
-        base.push({ id: 'pericolo', label: 'Pericolo' });
+        base.push({ id: 'pericolo', label: t('domains.tabs.danger') });
     }
 
     return base;
@@ -120,11 +123,11 @@ const accessForm = useForm({
     role: 'developer',
 });
 
-const roleOptions = [
-    { value: 'owner', label: 'Proprietario' },
-    { value: 'developer', label: 'Sviluppatore' },
-    { value: 'readonly', label: 'Sola lettura' },
-];
+const roleOptions = computed(() => [
+    { value: 'owner', label: t('roles.owner') },
+    { value: 'developer', label: t('roles.developer') },
+    { value: 'readonly', label: t('roles.readonly') },
+]);
 
 const page = usePage();
 const allowedTabs = computed(() => tabs.value.map((tab) => tab.id));
@@ -237,7 +240,7 @@ const createSftpUser = () => {
     sftpUserForm.post(actionUrl(`/domains/${props.domain.id}/sftp-users`), { preserveScroll: true });
 };
 
-const privilegeLabel = (privilege) => (privilege === 'select' ? 'Solo lettura (SELECT)' : 'Completi (ALL)');
+const privilegeLabel = (privilege) => (privilege === 'select' ? t('common.privilege_select') : t('common.privilege_all'));
 
 const installLaravel = () => {
     laravelForm.post(actionUrl(`/domains/${props.domain.id}/laravel`));
@@ -288,7 +291,7 @@ const saveFqdn = () => {
 const deleteDomain = () => {
     if (
         !window.confirm(
-            `Eliminare ${props.domain.fqdn}? Accessi, storage nel pannello e app Dokploy collegata vengono rimossi.`,
+            t('domains.show.delete_confirm', { fqdn: props.domain.fqdn }),
         )
     ) {
         return;
@@ -307,7 +310,7 @@ const grantAccess = () => {
 };
 
 const revokeAccess = (memberId) => {
-    if (!window.confirm('Rimuovere l’accesso a questo hosting?')) {
+    if (!window.confirm(t('domains.show.revoke_confirm'))) {
         return;
     }
 
@@ -322,7 +325,7 @@ const updateMemberRole = (memberId, role) => {
 <template>
     <AppLayout
         :title="domain.fqdn"
-        :description="`Spazio ${spazio?.name || 'spazio'} · ${spazio?.customer?.name || domain.customer?.name || 'cliente'} · ${spazio?.service_plan?.name || 'piano'}`"
+        :description="t('domains.show.description', { space: spazio?.name || t('common.fallback_space'), customer: spazio?.customer?.name || domain.customer?.name || t('common.fallback_customer'), plan: spazio?.service_plan?.name || t('common.fallback_plan') })"
     >
         <template #actions>
             <Link
@@ -330,7 +333,7 @@ const updateMemberRole = (memberId, role) => {
                 :href="`/subscriptions/${domain.subscription_id}`"
                 class="text-sm text-zinc-600 hover:text-zinc-900"
             >
-                Spazio
+                {{ t('common.space') }}
             </Link>
         </template>
 
@@ -338,8 +341,7 @@ const updateMemberRole = (memberId, role) => {
             v-if="!canMutateHosting"
             class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
-            Accesso in sola lettura: puoi vedere credenziali e log, ma non creare utenti DB/SFTP né eseguire comandi o
-            modificare deploy.
+            {{ t('domains.show.readonly') }}
         </p>
 
         <p v-if="dokployAccessNote" class="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
@@ -352,7 +354,7 @@ const updateMemberRole = (memberId, role) => {
                 :href="`/subscriptions/${domain.subscription_id}`"
                 class="hover:underline"
             >
-                {{ spazio?.name || 'Spazio' }}
+                {{ spazio?.name || t('common.space') }}
             </Link>
             <span v-if="canViewSubscription && domain.subscription_id" class="mx-1.5 text-zinc-300">→</span>
             {{ domain.fqdn }}
@@ -362,21 +364,21 @@ const updateMemberRole = (memberId, role) => {
             v-if="revealedForDomain.length"
             class="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
-            <p class="font-medium">Password mostrata una sola volta</p>
+            <p class="font-medium">{{ t('domains.show.password_once') }}</p>
             <ul class="mt-2 space-y-2">
                 <li v-for="(item, index) in revealedForDomain" :key="`${item.kind}-${index}`">
                     <span class="text-xs uppercase tracking-wide text-amber-800">
-                        {{ item.kind === 'database' ? 'Database' : 'SFTP' }}
+                        {{ item.kind === 'database' ? t('common.database') : t('common.sftp') }}
                     </span>
                     <p class="mt-0.5 font-mono break-all">{{ item.username }} / {{ item.password }}</p>
                     <p v-if="item.kind === 'sftp' && sftpEndpoint" class="mt-0.5 text-xs text-amber-800">
-                        Host {{ sftpEndpoint }}
+                        {{ t('domains.show.host_endpoint', { endpoint: sftpEndpoint }) }}
                     </p>
                 </li>
             </ul>
         </div>
 
-        <nav class="-mx-1 mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" aria-label="Sezioni">
+        <nav class="-mx-1 mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" :aria-label="t('common.sections')">
             <Link
                 v-for="tab in tabs"
                 :key="tab.id"
@@ -392,14 +394,14 @@ const updateMemberRole = (memberId, role) => {
 
         <div v-show="currentTab === 'generale'" class="min-w-0 space-y-6">
             <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">Dominio</h2>
+                <h2 class="text-base font-semibold">{{ t('domains.show.heading') }}</h2>
                 <form
                     v-if="canEditFqdn"
                     class="mt-5 grid gap-4 sm:grid-cols-[1fr_auto]"
                     @submit.prevent="saveFqdn"
                 >
                     <div>
-                        <label class="block text-sm font-medium" :for="`fqdn-edit-${domain.id}`">FQDN</label>
+                        <label class="block text-sm font-medium" :for="`fqdn-edit-${domain.id}`">{{ t('common.fqdn') }}</label>
                         <input
                             :id="`fqdn-edit-${domain.id}`"
                             v-model="fqdnForm.fqdn"
@@ -415,13 +417,13 @@ const updateMemberRole = (memberId, role) => {
                             class="rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
                             :disabled="fqdnForm.processing"
                         >
-                            Salva FQDN
+                            {{ t('domains.show.save_fqdn') }}
                         </button>
                     </div>
                 </form>
                 <dl v-else class="mt-5">
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">FQDN</dt>
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.fqdn') }}</dt>
                         <dd class="mt-1 text-sm font-medium">{{ domain.fqdn }}</dd>
                     </div>
                 </dl>
@@ -429,15 +431,15 @@ const updateMemberRole = (memberId, role) => {
 
             <dl class="grid min-w-0 gap-4 sm:grid-cols-2">
                 <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Infra</dt>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.infra') }}</dt>
                     <dd class="mt-2 text-sm font-medium">{{ domain.infra_slug }}</dd>
                 </div>
                 <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Stack</dt>
-                    <dd class="mt-2 text-sm font-medium">{{ domain.stack_label || domain.stack || 'Solo hosting' }}</dd>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.stack') }}</dt>
+                    <dd class="mt-2 text-sm font-medium">{{ domain.stack_label || domain.stack || t('common.hosting_only') }}</dd>
                 </div>
                 <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Cliente</dt>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.customer') }}</dt>
                     <dd class="mt-2 text-sm font-medium">
                         {{ spazio?.customer?.name || domain.customer?.name || '—' }}
                     </dd>
@@ -447,7 +449,7 @@ const updateMemberRole = (memberId, role) => {
                     :key="share.id"
                     class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:col-span-2"
                 >
-                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">Storage</dt>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.storage') }}</dt>
                     <dd class="mt-2 break-all text-sm font-medium">{{ share.path }}</dd>
                 </div>
             </dl>
@@ -456,14 +458,11 @@ const updateMemberRole = (memberId, role) => {
                 v-if="phpSettingsApplicable"
                 class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
             >
-                <h2 class="text-base font-semibold">PHP</h2>
+                <h2 class="text-base font-semibold">{{ t('domains.show.php_heading') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
-                    Equivalente alle direttive PHP di Plesk. Salvataggio → env Dokploy + prefix su
-                    <span class="font-mono text-xs">NIXPACKS_START_CMD</span> che scrive
-                    <span class="font-mono text-xs">dokhosts.ini</span> (memory, upload, timeout) su stack Laravel/PHP Nixpacks.
-                    Artisan: <span class="font-mono text-xs">RUNTS_SYNC_MEMORY_LIMIT</span> /
-                    <span class="font-mono text-xs">ARTISAN_MEMORY_LIMIT</span>.
-                    <strong class="font-medium text-zinc-700">Dopo Salva PHP serve deploy del sito</strong> (o spunta deploy immediato).
+                    {{ t('domains.show.php_help') }}
+                    <strong class="font-medium text-zinc-700">{{ t('domains.show.php_deploy_note') }}</strong>
+                    {{ t('domains.show.php_deploy_note_rest') }}
                 </p>
                 <p v-if="page.props.flash?.success && currentTab === 'generale'" class="mt-3 text-sm text-emerald-700">
                     {{ page.props.flash.success }}
@@ -484,7 +483,7 @@ const updateMemberRole = (memberId, role) => {
                         </p>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium" :for="`php-artisan-${domain.id}`">Memoria Artisan / CLI</label>
+                        <label class="block text-sm font-medium" :for="`php-artisan-${domain.id}`">{{ t('domains.show.artisan_memory') }}</label>
                         <input
                             :id="`php-artisan-${domain.id}`"
                             v-model="phpSettingsForm.artisan_memory_limit"
@@ -558,14 +557,14 @@ const updateMemberRole = (memberId, role) => {
                     <div class="sm:col-span-2 flex flex-wrap items-center gap-4">
                         <label class="inline-flex items-center gap-2 text-sm text-zinc-700">
                             <input v-model="phpSettingsForm.deploy_now" type="checkbox" class="rounded border-zinc-300" />
-                            Deploy ora
+                            {{ t('domains.show.deploy_now') }}
                         </label>
                         <button
                             type="submit"
                             class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                             :disabled="phpSettingsForm.processing"
                         >
-                            Salva PHP
+                            {{ t('domains.show.save_php') }}
                         </button>
                     </div>
                     <p v-if="phpSettingsForm.errors.php_settings" class="sm:col-span-2 text-sm text-red-600">
@@ -578,7 +577,7 @@ const updateMemberRole = (memberId, role) => {
                         <dd class="mt-1 text-sm font-medium">{{ phpSettings.memory_limit }}</dd>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">Artisan / CLI</dt>
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('domains.show.artisan_cli') }}</dt>
                         <dd class="mt-1 text-sm font-medium">{{ phpSettings.artisan_memory_limit }}</dd>
                     </div>
                 </dl>
@@ -590,10 +589,9 @@ const updateMemberRole = (memberId, role) => {
             >
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h2 class="text-base font-semibold">Env del sito</h2>
+                        <h2 class="text-base font-semibold">{{ t('domains.show.site_env') }}</h2>
                         <p class="mt-1 text-sm text-zinc-500">
-                            Variabili Dokploy dell’application collegata a questo dominio. I segreti sono mascherati; lascia
-                            vuoto il valore per mantenerli invariati.
+                            {{ t('domains.show.site_env_help') }}
                         </p>
                     </div>
                     <button
@@ -603,34 +601,34 @@ const updateMemberRole = (memberId, role) => {
                         :disabled="deploySiteForm.processing"
                         @click="deploySite"
                     >
-                        Deploy sito
+                        {{ t('domains.show.deploy_site') }}
                     </button>
                 </div>
                 <p v-if="siteHosting.error" class="mt-3 text-sm text-red-600">{{ siteHosting.error }}</p>
                 <p v-if="deploySiteForm.errors.deploy" class="mt-3 text-sm text-red-600">{{ deploySiteForm.errors.deploy }}</p>
                 <div v-if="siteHosting.git" class="mt-5 grid gap-3 sm:grid-cols-3">
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Sorgente Git</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('domains.show.git_source') }}</p>
                         <p class="mt-1 text-sm font-medium">{{ siteHosting.git.source_type || '—' }}</p>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2 sm:col-span-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Repository</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.repository') }}</p>
                         <p class="mt-1 break-all text-sm font-medium">{{ siteHosting.git.repository || '—' }}</p>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Branch</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.branch') }}</p>
                         <p class="mt-1 text-sm font-medium">{{ siteHosting.git.branch || '—' }}</p>
                     </div>
                 </div>
                 <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">
-                    Repository Git non configurato su Dokploy per questa application.
+                    {{ t('domains.show.git_missing') }}
                 </p>
                 <div v-if="siteHosting.variables.length" class="mt-5 overflow-x-auto">
                     <table class="min-w-full text-left text-sm">
                         <thead>
                             <tr class="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
-                                <th class="py-2 pr-4 font-medium">Chiave</th>
-                                <th class="py-2 font-medium">Valore</th>
+                                <th class="py-2 pr-4 font-medium">{{ t('common.key') }}</th>
+                                <th class="py-2 font-medium">{{ t('common.value') }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -641,17 +639,17 @@ const updateMemberRole = (memberId, role) => {
                             >
                                 <td class="py-2 pr-4 font-mono text-xs">{{ row.key }}</td>
                                 <td class="py-2 font-mono text-xs break-all">
-                                    <span v-if="row.redacted" class="text-zinc-500">•••••• (nascosto)</span>
+                                    <span v-if="row.redacted" class="text-zinc-500">{{ t('domains.show.redacted') }}</span>
                                     <span v-else>{{ row.value }}</span>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">Nessuna variabile env.</p>
+                <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">{{ t('domains.show.no_env') }}</p>
                 <form v-if="canMutateHosting" class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="saveSiteEnv">
                     <div>
-                        <label class="block text-sm font-medium" :for="`site-env-key-${domain.id}`">Chiave</label>
+                        <label class="block text-sm font-medium" :for="`site-env-key-${domain.id}`">{{ t('common.key') }}</label>
                         <input
                             :id="`site-env-key-${domain.id}`"
                             v-model="siteEnvKey"
@@ -665,14 +663,14 @@ const updateMemberRole = (memberId, role) => {
                         </p>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium" :for="`site-env-val-${domain.id}`">Valore</label>
+                        <label class="block text-sm font-medium" :for="`site-env-val-${domain.id}`">{{ t('common.value') }}</label>
                         <input
                             :id="`site-env-val-${domain.id}`"
                             v-model="siteEnvValue"
                             type="text"
                             :class="inputClass"
                         />
-                        <p class="mt-1 text-xs text-zinc-500">Segreti: vuoto = non modificare</p>
+                        <p class="mt-1 text-xs text-zinc-500">{{ t('domains.show.secret_blank') }}</p>
                     </div>
                     <div class="sm:col-span-2">
                         <button
@@ -680,7 +678,7 @@ const updateMemberRole = (memberId, role) => {
                             class="rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
                             :disabled="siteEnvForm.processing"
                         >
-                            Salva chiave env
+                            {{ t('domains.show.save_env_key') }}
                         </button>
                     </div>
                     <p v-if="siteEnvForm.errors.site_env" class="sm:col-span-2 text-sm text-red-600">
@@ -693,11 +691,9 @@ const updateMemberRole = (memberId, role) => {
                 v-if="canManageAccess"
                 class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
             >
-                <h2 class="text-base font-semibold">Accessi</h2>
+                <h2 class="text-base font-semibold">{{ t('domains.show.access') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
-                    Le credenziali di accesso al pannello arrivano via email: i nuovi utenti impostano la password dal
-                    link nell’invito; gli utenti già registrati ricevono la notifica di accesso. Dokploy resta fuori dal
-                    progetto infrastruttura condiviso.
+                    {{ t('domains.show.access_help') }}
                 </p>
                 <ul v-if="domainMembers.length" class="mt-4 divide-y divide-zinc-100 rounded-lg border border-zinc-100">
                     <li
@@ -721,24 +717,24 @@ const updateMemberRole = (memberId, role) => {
                                 class="text-red-700 hover:underline"
                                 @click="revokeAccess(member.id)"
                             >
-                                Rimuovi
+                                {{ t('common.remove') }}
                             </button>
                         </div>
                     </li>
                 </ul>
-                <p v-else class="mt-4 text-sm text-zinc-500">Nessun utente con accesso limitato.</p>
+                <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_members') }}</p>
                 <form class="mt-5 grid gap-3 sm:grid-cols-2" @submit.prevent="grantAccess">
                     <div class="sm:col-span-2">
-                        <label class="block text-sm font-medium" for="access-email">Email</label>
+                        <label class="block text-sm font-medium" for="access-email">{{ t('common.email') }}</label>
                         <input id="access-email" v-model="accessForm.email" type="email" required :class="inputClass" />
                         <p v-if="accessForm.errors.email" class="mt-1 text-sm text-red-600">{{ accessForm.errors.email }}</p>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium" for="access-name">Nome (solo nuovo utente)</label>
+                        <label class="block text-sm font-medium" for="access-name">{{ t('domains.show.name_new_user') }}</label>
                         <input id="access-name" v-model="accessForm.name" type="text" :class="inputClass" />
                     </div>
                     <div>
-                        <label class="block text-sm font-medium" for="access-role">Ruolo</label>
+                        <label class="block text-sm font-medium" for="access-role">{{ t('common.role') }}</label>
                         <select id="access-role" v-model="accessForm.role" :class="inputClass">
                             <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
                                 {{ opt.label }}
@@ -752,7 +748,7 @@ const updateMemberRole = (memberId, role) => {
                             class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                             :disabled="accessForm.processing"
                         >
-                            Invita
+                            {{ t('common.invite') }}
                         </button>
                     </div>
                 </form>
@@ -764,13 +760,13 @@ const updateMemberRole = (memberId, role) => {
                 v-if="canMutateHosting && !domain.database_accounts?.length"
                 class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
             >
-                <h2 class="text-base font-semibold">Crea database</h2>
+                <h2 class="text-base font-semibold">{{ t('domains.show.create_database') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
-                    Sul DB condiviso dello stack scelto (non un container MariaDB per sito).
+                    {{ t('domains.show.create_database_help') }}
                 </p>
                 <form class="mt-5 grid gap-3 sm:grid-cols-2" @submit.prevent="createDatabase">
                     <div>
-                        <label class="block text-sm font-medium" :for="`infra-${domain.id}`">Infrastruttura</label>
+                        <label class="block text-sm font-medium" :for="`infra-${domain.id}`">{{ t('domains.create.infra_legend') }}</label>
                         <select
                             :id="`infra-${domain.id}`"
                             v-model="databaseForm.infra_slug"
@@ -786,10 +782,10 @@ const updateMemberRole = (memberId, role) => {
                         </p>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium" :for="`engine-${domain.id}`">Motore</label>
+                        <label class="block text-sm font-medium" :for="`engine-${domain.id}`">{{ t('common.engine') }}</label>
                         <select :id="`engine-${domain.id}`" v-model="databaseForm.engine" :class="inputClass">
-                            <option value="mysql" :disabled="!selectedInfra?.can_mysql">MySQL / MariaDB</option>
-                            <option value="postgres" :disabled="!selectedInfra?.can_postgres">Postgres</option>
+                            <option value="mysql" :disabled="!selectedInfra?.can_mysql">{{ t('common.mysql') }}</option>
+                            <option value="postgres" :disabled="!selectedInfra?.can_postgres">{{ t('common.postgres') }}</option>
                         </select>
                     </div>
                     <div class="sm:col-span-2">
@@ -798,47 +794,46 @@ const updateMemberRole = (memberId, role) => {
                             class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                             :disabled="databaseForm.processing || !canCreateSelectedDatabase"
                         >
-                            Crea database
+                            {{ t('domains.show.create_database') }}
                         </button>
                     </div>
                 </form>
                 <p v-if="selectedInfra && !canCreateSelectedDatabase" class="mt-2 text-sm text-amber-700">
-                    Questo stack non ha il motore selezionato (o non è deployato).
+                    {{ t('domains.show.engine_missing') }}
                 </p>
                 <p v-if="databaseForm.errors.engine" class="mt-1 text-sm text-red-600">{{ databaseForm.errors.engine }}</p>
             </section>
 
             <section v-else class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">Database</h2>
+                <h2 class="text-base font-semibold">{{ t('common.database') }}</h2>
                 <div v-for="account in domain.database_accounts" :key="account.id" class="mt-5 grid gap-3 sm:grid-cols-2">
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Nome</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.name') }}</p>
                         <p class="mt-1 text-sm font-medium">{{ account.database_name }}</p>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Host</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.host') }}</p>
                         <p class="mt-1 text-sm font-medium">{{ account.host }}:{{ account.port }}</p>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Utente</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.user') }}</p>
                         <p class="mt-1 text-sm font-medium">{{ account.username }}</p>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Privilegi</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.privileges') }}</p>
                         <p class="mt-1 text-sm font-medium">{{ privilegeLabel(account.privilege) }}</p>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Motore</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.engine') }}</p>
                         <p class="mt-1 text-sm font-medium">{{ account.engine }} · {{ account.infra_slug }}</p>
                     </div>
                 </div>
             </section>
 
             <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">Utenti database</h2>
+                <h2 class="text-base font-semibold">{{ t('domains.show.db_users') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
-                    Utenti extra sullo stesso database condiviso dello stack. Privilegi: completi (ALL) o sola lettura
-                    (SELECT). Nessun container MariaDB nuovo.
+                    {{ t('domains.show.db_users_help') }}
                 </p>
                 <ul v-if="domain.database_accounts?.length" class="mt-4 space-y-2">
                     <li
@@ -852,22 +847,22 @@ const updateMemberRole = (memberId, role) => {
                         </span>
                     </li>
                 </ul>
-                <p v-else class="mt-4 text-sm text-zinc-500">Nessun database su questo dominio.</p>
+                <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_database') }}</p>
                 <form
                     v-if="canMutateHosting"
                     class="mt-4 grid gap-3 sm:grid-cols-2"
                     @submit.prevent="createDatabaseUser"
                 >
                     <div>
-                        <label class="block text-sm font-medium" :for="`db-priv-${domain.id}`">Privilegi</label>
+                        <label class="block text-sm font-medium" :for="`db-priv-${domain.id}`">{{ t('common.privileges') }}</label>
                         <select
                             :id="`db-priv-${domain.id}`"
                             v-model="databaseUserForm.privilege"
                             required
                             :class="inputClass"
                         >
-                            <option value="all">Completi (ALL)</option>
-                            <option value="select">Solo lettura (SELECT)</option>
+                            <option value="all">{{ t('common.privilege_all') }}</option>
+                            <option value="select">{{ t('common.privilege_select') }}</option>
                         </select>
                         <p v-if="databaseUserForm.errors.privilege" class="mt-1 text-sm text-red-600">
                             {{ databaseUserForm.errors.privilege }}
@@ -879,7 +874,7 @@ const updateMemberRole = (memberId, role) => {
                             class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                             :disabled="databaseUserForm.processing || !domain.database_accounts?.length"
                         >
-                            Crea utente database
+                            {{ t('domains.show.create_db_user') }}
                         </button>
                     </div>
                 </form>
@@ -888,14 +883,13 @@ const updateMemberRole = (memberId, role) => {
 
         <div v-show="currentTab === 'sftp'" class="min-w-0 space-y-6">
             <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">SFTP</h2>
+                <h2 class="text-base font-semibold">{{ t('common.sftp') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
-                    Accesso file sullo stack atmoz/sftp. FTPS arriverà dopo. Home nel volume dati / storage del
-                    dominio; chroot è implicito.
+                    {{ t('domains.show.sftp_help') }}
                 </p>
                 <dl class="mt-5 grid gap-3 sm:grid-cols-2">
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">Host</dt>
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.host') }}</dt>
                         <dd class="mt-1 text-sm font-medium">{{ sftpEndpoint || '—' }}</dd>
                     </div>
                     <div
@@ -904,16 +898,16 @@ const updateMemberRole = (memberId, role) => {
                         class="contents"
                     >
                         <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                            <dt class="text-xs uppercase tracking-wide text-zinc-500">Utente</dt>
+                            <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.user') }}</dt>
                             <dd class="mt-1 text-sm font-medium">{{ user.username }}</dd>
                         </div>
                         <div class="rounded-lg bg-zinc-50 px-3 py-2 sm:col-span-2">
-                            <dt class="text-xs uppercase tracking-wide text-zinc-500">Home</dt>
+                            <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.home') }}</dt>
                             <dd class="mt-1 break-all text-sm font-medium">{{ user.home_path }}</dd>
                         </div>
                     </div>
                 </dl>
-                <p v-if="!domain.sftp_users?.length" class="mt-4 text-sm text-zinc-500">Nessun utente SFTP.</p>
+                <p v-if="!domain.sftp_users?.length" class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_sftp') }}</p>
                 <form v-if="canMutateHosting" class="mt-5" @submit.prevent="createSftpUser">
                     <p v-if="sftpUserForm.errors.username" class="mb-2 text-sm text-red-600">
                         {{ sftpUserForm.errors.username }}
@@ -923,7 +917,7 @@ const updateMemberRole = (memberId, role) => {
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="sftpUserForm.processing"
                     >
-                        Crea utente SFTP
+                        {{ t('domains.show.create_sftp') }}
                     </button>
                 </form>
             </section>
@@ -944,11 +938,9 @@ const updateMemberRole = (memberId, role) => {
                 v-if="canMutateHosting"
                 class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
             >
-                <h2 class="text-base font-semibold">Env di avvio</h2>
+                <h2 class="text-base font-semibold">{{ t('domains.show.boot_env') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
-                    Aggiunge le chiavi mancanti (APP_KEY se assente, APP_ENV, APP_DEBUG, APP_NAME, LOG_CHANNEL).
-                    La sessione va sul database, con cookie Secure limitato a questo host. Non sovrascrive
-                    APP_KEY già impostata né DB_* o altri segreti.
+                    {{ t('domains.show.boot_env_help') }}
                 </p>
                 <p v-if="page.props.flash?.success" class="mt-3 text-sm text-emerald-700">
                     {{ page.props.flash.success }}
@@ -962,7 +954,7 @@ const updateMemberRole = (memberId, role) => {
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="alignEnvForm.processing || !domain.dokploy_application"
                     >
-                        Allinea env di avvio
+                        {{ t('domains.show.align_boot_env') }}
                     </button>
                 </form>
             </section>
@@ -984,9 +976,9 @@ const updateMemberRole = (memberId, role) => {
             v-show="currentTab === 'pericolo'"
             class="min-w-0 rounded-xl border border-red-200 bg-white p-6 shadow-sm"
         >
-            <h2 class="text-base font-semibold text-red-800">Elimina dominio</h2>
+            <h2 class="text-base font-semibold text-red-800">{{ t('domains.show.delete_heading') }}</h2>
             <p class="mt-1 mb-5 text-sm text-zinc-500">
-                Rimuove accessi, storage nel pannello e l’application Dokploy collegata. Il cliente e lo spazio restano.
+                {{ t('domains.show.delete_help') }}
             </p>
             <p v-if="deleteDomainForm.errors.domain" class="mb-4 text-sm text-red-600">
                 {{ deleteDomainForm.errors.domain }}
@@ -997,7 +989,7 @@ const updateMemberRole = (memberId, role) => {
                 :disabled="deleteDomainForm.processing"
                 @click="deleteDomain"
             >
-                Elimina
+                {{ t('common.delete') }}
             </button>
         </section>
     </AppLayout>

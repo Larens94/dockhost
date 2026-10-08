@@ -1,6 +1,5 @@
 <?php
 
-
 // DestroyInfrastructureRequest.php — DestroyInfrastructureRequest module.
 //
 // exports: DestroyInfrastructureRequest | DestroyInfrastructureRequest::authorize(): bool | DestroyInfrastructureRequest::rules(): array | DestroyInfrastructureRequest::messages(): array | DestroyInfrastructureRequest::withValidator(Validator $validator): void
@@ -8,7 +7,7 @@
 // rules:   Agents must NOT invent infra-delete shortcuts — only this FormRequest may authorize destroy.
 //          Do not weaken confirmation / authorization checks; never auto-delete stacks from other flows.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-//          composer | cursor | 2026-09-21 | s_20260921_codedna | harden no-delete agent rule 
+//          composer | cursor | 2026-09-21 | s_20260921_codedna | harden no-delete agent rule
 
 namespace App\Http\Requests;
 
@@ -43,8 +42,8 @@ class DestroyInfrastructureRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'slug.required' => 'Digita lo slug per confermare l\'eliminazione.',
-            'slug.in' => 'Lo slug non corrisponde.',
+            'slug.required' => __('panel.validation.slug_delete_required'),
+            'slug.in' => __('panel.validation.slug_mismatch'),
         ];
     }
 
@@ -58,7 +57,7 @@ class DestroyInfrastructureRequest extends FormRequest
             }
 
             if ($infrastructure->domains()->exists()) {
-                $validator->errors()->add('slug', 'Ci sono domini collegati');
+                $validator->errors()->add('slug', __('panel.validation.domains_linked'));
             }
         });
     }

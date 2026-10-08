@@ -62,7 +62,7 @@ class StoreDomainDatabaseRequest extends FormRequest
             if (! $infrastructure instanceof Infrastructure || ! $infrastructure->isPanelManaged()) {
                 $validator->errors()->add(
                     'infra_slug',
-                    'Scegli un’infrastruttura creata da DokHosts.',
+                    __('panel.validation.infra_required'),
                 );
 
                 return;
@@ -73,14 +73,14 @@ class StoreDomainDatabaseRequest extends FormRequest
             if ($engine === DatabaseEngine::Mysql->value && ! $infrastructure->canProvisionMysql()) {
                 $validator->errors()->add(
                     'engine',
-                    'MariaDB non è disponibile su '.$infrastructure->slug.'.',
+                    __('panel.validation.mariadb_short', ['slug' => $infrastructure->slug]),
                 );
             }
 
             if ($engine === DatabaseEngine::Postgres->value && ! $infrastructure->canProvisionPostgres()) {
                 $validator->errors()->add(
                     'engine',
-                    'Postgres non è disponibile su '.$infrastructure->slug.'.',
+                    __('panel.validation.postgres_short', ['slug' => $infrastructure->slug]),
                 );
             }
         });

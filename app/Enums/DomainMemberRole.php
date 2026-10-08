@@ -20,11 +20,7 @@ enum DomainMemberRole: string
 
     public function label(): string
     {
-        return match ($this) {
-            self::Owner => 'Proprietario',
-            self::Developer => 'Sviluppatore',
-            self::Readonly => 'Sola lettura',
-        };
+        return __('panel.roles.'.$this->value);
     }
 
     public function canMutateHosting(): bool

@@ -47,8 +47,8 @@ class DestroySubscriptionRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'confirmation.required' => 'Digita il testo di conferma per eliminare lo spazio.',
-            'confirmation.in' => 'Il testo non corrisponde.',
+            'confirmation.required' => __('panel.validation.space_confirm_required'),
+            'confirmation.in' => __('panel.validation.confirm_mismatch'),
         ];
     }
 }

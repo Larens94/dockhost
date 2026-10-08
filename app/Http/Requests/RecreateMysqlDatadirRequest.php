@@ -1,13 +1,12 @@
 <?php
 
-
 // RecreateMysqlDatadirRequest.php — RecreateMysqlDatadirRequest module.
 //
 // exports: RecreateMysqlDatadirRequest | RecreateMysqlDatadirRequest::authorize(): bool | RecreateMysqlDatadirRequest::rules(): array | RecreateMysqlDatadirRequest::messages(): array
 // used_by: app/Http/Controllers/InfrastructureController.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace App\Http\Requests;
 
@@ -41,8 +40,8 @@ class RecreateMysqlDatadirRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'slug.required' => 'Digita lo slug per confermare la ricreazione del datadir MariaDB.',
-            'slug.in' => 'Lo slug non corrisponde.',
+            'slug.required' => __('panel.validation.mysql_slug_required'),
+            'slug.in' => __('panel.validation.slug_mismatch'),
         ];
     }
 }

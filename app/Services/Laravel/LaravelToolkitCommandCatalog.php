@@ -21,10 +21,33 @@ class LaravelToolkitCommandCatalog
     public function fallbackForUi(): array
     {
         return [
-            'artisan' => self::FALLBACK_ARTISAN_CATEGORIES,
-            'composer' => self::FALLBACK_COMPOSER_CATEGORIES,
-            'npm' => self::FALLBACK_NPM_CATEGORIES,
+            'artisan' => $this->translateCategoryLabels('artisan', self::FALLBACK_ARTISAN_CATEGORIES),
+            'composer' => $this->translateCategoryLabels('composer', self::FALLBACK_COMPOSER_CATEGORIES),
+            'npm' => $this->translateCategoryLabels('npm', self::FALLBACK_NPM_CATEGORIES),
         ];
+    }
+
+    /**
+     * @param  list<array{id: string, label: string, commands: list<array<string, mixed>>}>  $categories
+     * @return list<array{id: string, label: string, commands: list<array<string, mixed>>}>
+     */
+    private function translateCategoryLabels(string $kind, array $categories): array
+    {
+        return array_map(function (array $category) use ($kind): array {
+            $category['label'] = __('panel.toolkit.catalog.'.$kind.'.'.$category['id']);
+
+            if ($kind === 'npm') {
+                $category['commands'] = array_map(function (array $command): array {
+                    if (($command['command'] ?? '') === 'run dev') {
+                        $command['label'] = __('panel.toolkit.npm_dev');
+                    }
+
+                    return $command;
+                }, $category['commands']);
+            }
+
+            return $category;
+        }, $categories);
     }
 
     /**

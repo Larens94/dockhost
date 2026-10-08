@@ -176,8 +176,8 @@ class DomainController extends Controller
 
         $keys = [...$result['added'], ...$result['updated']];
         $message = $keys === []
-            ? 'Nessuna modifica env (segreti lasciati vuoti restano invariati).'
-            : 'Env del sito aggiornato: '.implode(', ', $keys).'.';
+            ? __('panel.domains.flash.site_env_unchanged')
+            : __('panel.domains.flash.site_env_updated', ['keys' => implode(', ', $keys)]);
 
         return $this->redirectToDomain($domain, 'generale')->with('success', $message);
     }
@@ -196,7 +196,7 @@ class DomainController extends Controller
             'trigger' => 'panel',
         ]);
 
-        return $this->redirectToDomain($domain, 'generale')->with('success', 'Deploy del sito avviato su Dokploy.');
+        return $this->redirectToDomain($domain, 'generale')->with('success', __('panel.domains.flash.deploy_started'));
     }
 
     public function updatePhpSettings(
@@ -228,10 +228,10 @@ class DomainController extends Controller
 
         if ($sync['env_synced']) {
             $message = $deployNow
-                ? 'Env aggiornato e deploy avviato.'
-                : 'Env aggiornato. Dopo Salva PHP serve deploy del sito perché le direttive si applichino.';
+                ? __('panel.domains.flash.php_deployed')
+                : __('panel.domains.flash.php_needs_deploy');
         } else {
-            $message = 'Impostazioni PHP salvate. Collega l’application Dokploy per scriverle sull’env.';
+            $message = __('panel.domains.flash.php_no_app');
         }
 
         return $this->redirectToDomain($domain, 'generale')->with('success', $message);
@@ -322,10 +322,10 @@ class DomainController extends Controller
         $result = $attacher->alignBootEnv($domain);
 
         $message = $result['generated_app_key']
-            ? 'APP_KEY generata. Env di avvio allineato su Dokploy (chiavi assenti soltanto).'
+            ? __('panel.domains.flash.boot_generated')
             : ($result['added'] === []
-                ? 'Env di avvio già allineato su Dokploy.'
-                : 'Env di avvio allineato su Dokploy (chiavi assenti soltanto).');
+                ? __('panel.domains.flash.boot_already')
+                : __('panel.domains.flash.boot_aligned'));
 
         return $this->redirectToDomain($domain, 'laravel')->with('success', $message);
     }
@@ -339,8 +339,8 @@ class DomainController extends Controller
         $result = $attacher->applyStackPreset($domain);
 
         $message = $result['added'] === []
-            ? 'Preset Nixpacks già presente su Dokploy (nessuna chiave nuova).'
-            : 'Preset Nixpacks applicato su Dokploy: '.implode(', ', $result['added']).'.';
+            ? __('panel.domains.flash.preset_already')
+            : __('panel.domains.flash.preset_applied', ['keys' => implode(', ', $result['added'])]);
 
         return $this->redirectToDomain($domain, 'sito')->with('success', $message);
     }
@@ -355,8 +355,8 @@ class DomainController extends Controller
 
         $written = [...$result['updated'], ...$result['added']];
         $message = $written === []
-            ? 'Build e avvio Nixpacks già allineati su Dokploy.'
-            : 'Build e avvio scritti su Dokploy: '.implode(', ', $written).'. Lancia Deploy del sito perché Nixpacks li legga.';
+            ? __('panel.domains.flash.deploy_config_already')
+            : __('panel.domains.flash.deploy_config_written', ['keys' => implode(', ', $written)]);
 
         return redirect()->route('domains.show', [
             'domain' => $domain,

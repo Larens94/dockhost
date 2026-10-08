@@ -9,7 +9,10 @@
 <script setup>
 import { computed } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 import LaravelLogo from '../../Components/LaravelLogo.vue';
 
 const props = defineProps({
@@ -66,19 +69,19 @@ const inputClass =
 
 <template>
     <AppLayout
-        title="Aggiungi dominio"
-        :description="`Spazio ${subscription.name} · ${subscription.customer?.name || 'cliente'} · ${subscription.service_plan?.name || 'piano'}`"
+        :title="t('domains.create.title')"
+        :description="t('domains.create.description', { space: subscription.name, customer: subscription.customer?.name || t('common.fallback_customer'), plan: subscription.service_plan?.name || t('common.fallback_plan') })"
     >
         <template #actions>
             <Link :href="`/subscriptions/${subscription.id}`" class="text-sm text-zinc-600 hover:text-zinc-900">
-                Spazio
+                {{ t('common.space') }}
             </Link>
         </template>
 
         <p class="mb-4 text-sm text-zinc-500">
             <Link :href="`/subscriptions/${subscription.id}`" class="hover:underline">{{ subscription.name }}</Link>
             <span class="mx-1.5 text-zinc-300">→</span>
-            nuovo dominio
+            {{ t('domains.create.breadcrumb') }}
         </p>
 
         <form
@@ -86,15 +89,11 @@ const inputClass =
             @submit.prevent="submit"
         >
             <p class="text-sm text-zinc-500">
-                Scegli l’infrastruttura (infra1, infra2, …) e lo stack applicativo. Ogni app diversa da «Solo
-                hosting» nasce nello stesso progetto/environment Dokploy dell’infra, con volume dati e env DB_*
-                se crei un database (le infra nuove usano la rete
-                <span class="font-mono">{slug}-db</span>). Nixpacks costruisce il repo; DokHosts collega l’infra.
-                GitLab e Deploy restano su Dokploy.
+                {{ t('domains.create.intro') }}
             </p>
 
             <div>
-                <label class="block text-sm font-medium" for="fqdn">FQDN</label>
+                <label class="block text-sm font-medium" for="fqdn">{{ t('common.fqdn') }}</label>
                 <input
                     id="fqdn"
                     v-model="form.fqdn"
@@ -107,9 +106,9 @@ const inputClass =
             </div>
 
             <fieldset>
-                <legend class="text-sm font-medium">Infrastruttura</legend>
+                <legend class="text-sm font-medium">{{ t('domains.create.infra_legend') }}</legend>
                 <p class="mt-1 text-xs text-zinc-500">
-                    Database, storage e Application Dokploy restano su questo stack compose.
+                    {{ t('domains.create.infra_help') }}
                 </p>
                 <div class="mt-3 grid gap-3 sm:grid-cols-2">
                     <button
@@ -132,7 +131,7 @@ const inputClass =
                     </button>
                 </div>
                 <p v-if="infrastructures.length === 0" class="mt-2 text-sm text-amber-700">
-                    Crea prima infra1 (o infra2) in Infrastrutture.
+                    {{ t('domains.create.infra_empty') }}
                 </p>
                 <p v-if="form.errors.infra_slug" class="mt-2 text-sm text-red-600">{{ form.errors.infra_slug }}</p>
             </fieldset>
@@ -145,22 +144,20 @@ const inputClass =
                     :disabled="!canCreateSelectedDatabase"
                 />
                 <span>
-                    <span class="font-medium">Crea database</span>
+                    <span class="font-medium">{{ t('domains.create.create_database') }}</span>
                     <span class="block text-xs text-zinc-500">
-                        Sul DB condiviso dell’infra scelta. L’app riceve DB_HOST = hostname interno (es.
-                        {{ form.infra_slug || 'infra1' }}-mariadb) sulla stessa rete.
+                        {{ t('domains.create.create_database_help', { host: `${form.infra_slug || 'infra1'}-mariadb` }) }}
                     </span>
                 </span>
             </label>
             <p v-if="selectedInfra && !canCreateSelectedDatabase" class="text-sm text-amber-700">
-                Questo stack non ha {{ form.engine === 'postgres' ? 'Postgres' : 'MariaDB' }} deployato. Non si può
-                creare il database qui.
+                {{ t('domains.create.engine_missing', { engine: form.engine === 'postgres' ? 'Postgres' : 'MariaDB' }) }}
             </p>
             <div v-if="form.create_database">
-                <label class="block text-sm font-medium" for="engine">Motore</label>
+                <label class="block text-sm font-medium" for="engine">{{ t('domains.create.engine') }}</label>
                 <select id="engine" v-model="form.engine" :class="inputClass">
-                    <option value="mysql" :disabled="!selectedInfra?.can_mysql">MySQL / MariaDB</option>
-                    <option value="postgres" :disabled="!selectedInfra?.can_postgres">Postgres</option>
+                    <option value="mysql" :disabled="!selectedInfra?.can_mysql">{{ t('common.mysql') }}</option>
+                    <option value="postgres" :disabled="!selectedInfra?.can_postgres">{{ t('common.postgres') }}</option>
                 </select>
                 <p v-if="form.errors.engine" class="mt-1 text-sm text-red-600">{{ form.errors.engine }}</p>
                 <p v-if="form.errors.create_database" class="mt-1 text-sm text-red-600">
@@ -169,11 +166,9 @@ const inputClass =
             </div>
 
             <fieldset>
-                <legend class="text-sm font-medium">Stack applicativo</legend>
+                <legend class="text-sm font-medium">{{ t('domains.create.stack_legend') }}</legend>
                 <p class="mt-1 text-xs text-zinc-500">
-                    Come su Plesk: scegli il tipo di sito. Solo Laravel riceve APP_KEY / session / artisan toolkit.
-                    Per Node/Python/Go, Nixpacks rileva il framework dal repo (Django, Gin, Next, …) su Dokploy, non
-                    qui.
+                    {{ t('domains.create.stack_help') }}
                 </p>
                 <div class="mt-3 grid gap-3 sm:grid-cols-2">
                     <button
@@ -200,15 +195,13 @@ const inputClass =
                                 <span class="block font-semibold">{{ stack.label }}</span>
                                 <span class="mt-1 block text-xs text-zinc-500">
                                     <template v-if="stack.value === 'none'">
-                                        Nessuna Application. Solo dominio, storage e SFTP.
+                                        {{ t('domains.create.stack_none') }}
                                     </template>
                                     <template v-else-if="stack.is_laravel">
-                                        Application + env Laravel (APP_KEY, DB_*), volume
-                                        {{ form.infra_slug || 'infra' }}_data, HTTPS.
+                                        {{ t('domains.create.stack_laravel', { volume: `${form.infra_slug || 'infra'}_data` }) }}
                                     </template>
                                     <template v-else>
-                                        Application nello stesso environment dell’infra, volume e env di
-                                        collegamento (senza chiavi Laravel).
+                                        {{ t('domains.create.stack_other') }}
                                     </template>
                                 </span>
                             </span>
@@ -218,9 +211,7 @@ const inputClass =
             </fieldset>
             <p v-if="form.errors.stack" class="text-sm text-red-600">{{ form.errors.stack }}</p>
             <p v-if="selectedStack?.creates_application" class="text-xs text-zinc-500">
-                Dopo «Aggiungi dominio» apri l’application su Dokploy: Provider → GitLab Silicore Internal,
-                repository, branch, poi Deploy. DokHosts ha già messo l’app sull’infra scelta (rete + volume +
-                env). Segreti dell’app (API keys, mail) li aggiungi nell’editor env di Dokploy.
+                {{ t('domains.create.after_create') }}
             </p>
 
             <button
@@ -228,7 +219,7 @@ const inputClass =
                 class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                 :disabled="form.processing || infrastructures.length === 0"
             >
-                Aggiungi dominio
+                {{ t('domains.create.submit') }}
             </button>
         </form>
     </AppLayout>

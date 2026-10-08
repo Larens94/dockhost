@@ -28,16 +28,33 @@ class ComposeTemplate
     public function catalog(): array
     {
         return [
-            ['key' => 'mariadb', 'label' => 'MariaDB', 'required' => true, 'default_enabled' => true, 'picker' => true, 'role' => 'database', 'hostname_suffix' => 'mariadb', 'summary' => 'Database MySQL condiviso'],
-            ['key' => 'mysql-grants', 'label' => 'Grant MariaDB', 'required' => true, 'default_enabled' => true, 'picker' => false, 'role' => 'helper', 'hostname_suffix' => null, 'summary' => 'Grant CREATE DATABASE'],
-            ['key' => 'postgres', 'label' => 'Postgres', 'required' => true, 'default_enabled' => true, 'picker' => true, 'role' => 'database', 'hostname_suffix' => 'postgres', 'summary' => 'Database Postgres condiviso'],
-            ['key' => 'sftp-users-init', 'label' => 'Init SFTP', 'required' => true, 'default_enabled' => true, 'picker' => false, 'role' => 'helper', 'hostname_suffix' => null, 'summary' => 'Inizializza users.conf'],
-            ['key' => 'sftp-sync', 'label' => 'Sync SFTP', 'required' => true, 'default_enabled' => true, 'picker' => false, 'role' => 'helper', 'hostname_suffix' => 'sftp-sync', 'summary' => 'API interna users.conf e cartelle'],
-            ['key' => 'sftp', 'label' => 'SFTP', 'required' => true, 'default_enabled' => true, 'picker' => true, 'role' => 'storage', 'hostname_suffix' => 'sftp', 'summary' => 'File e storage /data'],
-            ['key' => 'phpmyadmin', 'label' => 'phpMyAdmin', 'required' => false, 'default_enabled' => true, 'picker' => true, 'role' => 'ui', 'hostname_suffix' => 'phpmyadmin', 'summary' => 'GUI MariaDB, dominio pma-'],
-            ['key' => 'pgadmin', 'label' => 'pgAdmin', 'required' => false, 'default_enabled' => false, 'picker' => true, 'role' => 'ui', 'hostname_suffix' => 'pgadmin', 'summary' => 'GUI Postgres, dominio pga-'],
-            ['key' => 'redis', 'label' => 'Redis', 'required' => false, 'default_enabled' => false, 'picker' => true, 'role' => 'cache', 'hostname_suffix' => 'redis', 'summary' => 'Cache interna, senza dominio'],
-            ['key' => 'minio', 'label' => 'MinIO', 'required' => false, 'default_enabled' => false, 'picker' => true, 'role' => 'storage', 'hostname_suffix' => 'minio', 'summary' => 'Object storage S3, console minio-'],
+            $this->service('mariadb', true, true, true, 'database', 'mariadb'),
+            $this->service('mysql-grants', true, true, false, 'helper', null),
+            $this->service('postgres', true, true, true, 'database', 'postgres'),
+            $this->service('sftp-users-init', true, true, false, 'helper', null),
+            $this->service('sftp-sync', true, true, false, 'helper', 'sftp-sync'),
+            $this->service('sftp', true, true, true, 'storage', 'sftp'),
+            $this->service('phpmyadmin', false, true, true, 'ui', 'phpmyadmin'),
+            $this->service('pgadmin', false, false, true, 'ui', 'pgadmin'),
+            $this->service('redis', false, false, true, 'cache', 'redis'),
+            $this->service('minio', false, false, true, 'storage', 'minio'),
+        ];
+    }
+
+    /**
+     * @return array{key: string, label: string, required: bool, default_enabled: bool, picker: bool, role: string, hostname_suffix: string|null, summary: string}
+     */
+    private function service(string $key, bool $required, bool $defaultEnabled, bool $picker, string $role, ?string $hostnameSuffix): array
+    {
+        return [
+            'key' => $key,
+            'label' => __('panel.services.'.$key.'.label'),
+            'required' => $required,
+            'default_enabled' => $defaultEnabled,
+            'picker' => $picker,
+            'role' => $role,
+            'hostname_suffix' => $hostnameSuffix,
+            'summary' => __('panel.services.'.$key.'.summary'),
         ];
     }
 

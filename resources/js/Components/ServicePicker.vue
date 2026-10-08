@@ -7,6 +7,10 @@
 -->
 
 <script setup>
+import { usePanelTranslations } from '../composables/usePanelTranslations';
+
+const { t } = usePanelTranslations();
+
 const props = defineProps({
     services: {
         type: Array,
@@ -93,7 +97,7 @@ const onSelect = (service) => {
                         class="rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
                         :class="service.required ? 'bg-zinc-100 text-zinc-500' : isSelected(service) ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-500'"
                     >
-                        {{ service.required ? 'Base' : isSelected(service) ? 'On' : 'Off' }}
+                        {{ service.required ? t('picker.base') : isSelected(service) ? t('picker.on') : t('picker.off') }}
                     </span>
                 </span>
                 <span class="mt-0.5 block text-xs break-words text-zinc-500 [overflow-wrap:anywhere]">{{

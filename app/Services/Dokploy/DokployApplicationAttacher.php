@@ -2,14 +2,15 @@
 
 // DokployApplicationAttacher.php — Creates Dokploy apps in the infra project/environment.
 //
-// exports: DokployApplicationAttacher | DokployApplicationAttacher::attach(Domain $domain, array $attributes = []): DokployApplication | DokployApplicationAttacher::alignBootEnv(Domain $domain): array | DokployApplicationAttacher::applyStackPreset(Domain $domain): array | DokployApplicationAttacher::applyLaravelDeployConfig(Domain $domain): array | DokployApplicationAttacher::syncPhpSettings(Domain $domain, bool $deployNow = false): array | DokployApplicationAttacher::nixpacksPreset(DomainStack $stack): array | DokployApplicationAttacher::laravelDeployPreset(): array
+// exports: DokployApplicationAttacher | DokployApplicationAttacher::attach(Domain $domain, array $attributes = []): DokployApplication | DokployApplicationAttacher::alignBootEnv(Domain $domain): array | DokployApplicationAttacher::applyStackPreset(Domain $domain): array | DokployApplicationAttacher::applyLaravelDeployConfig(Domain $domain): array | DokployApplicationAttacher::refreshNixpacksInstallCommand(Domain $domain): void | DokployApplicationAttacher::syncPhpSettings(Domain $domain, bool $deployNow = false): array | DokployApplicationAttacher::nixpacksPreset(DomainStack $stack): array | DokployApplicationAttacher::laravelDeployPreset(): array
 // used_by: app/Http/Controllers/DomainController.php
 //         app/Services/Hosting/DomainProvisioner.php
+//         app/Services/Hosting/DomainSiteEnvManager.php
 // rules:   App joins the infra Dokploy environment (Isolated OFF → dokploy-network); DB_HOST is hostname (${slug}-mariadb), never an IP.
 //          NEVER attach an extra {slug}-db network. Do NOT call InfraDataNetworks.
 //          Env wiring uses DatabaseAccount (site user@'%' with GRANT on that one database only — not *.*).
 //          NIXPACKS_START_CMD must use config:clear, not config:cache: Dokploy injects DB_* at runtime and config:cache can bake a stale DB password (1045 on sessions).
-//          Laravel NIXPACKS_INSTALL_CMD must pass composer --no-scripts --no-interaction so package:discover does not boot the app against DB_HOST during the image build. Runtime NIXPACKS_START_CMD still runs migrate on dokploy-network.
+//          Laravel and PHP NIXPACKS_INSTALL_CMD must pass composer --no-scripts --no-interaction so package:discover does not boot the app against DB_HOST during the image build. Dokploy sends the same env to build and runtime, so do not unset DB_*. Panel deploy refreshes only that install command from the preset. Runtime NIXPACKS_START_CMD still runs migrate on dokploy-network.
 //          APP_URL, ASSET_URL must be https://{fqdn} and TRUSTED_PROXIES=* behind Traefik or Inertia/Vite emit http:// URLs (mixed content).
 // agent:   grok-4.7 | cursor | 2026-09-22 | s_20260922_composer_install | Install command runs composer before npm so artisan finds vendor
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_nginx_logdir | Start mkdir /var/log/nginx so nginx does not emerg on boot
@@ -20,6 +21,7 @@
 //          composer-2.5-fast | cursor | 2026-09-24 | s_domain_php | merge PHP_* env on attach, align, save
 //          composer-2.5-fast | cursor | 2026-09-24 | s_php_ini_start | Prefix NIXPACKS_START_CMD to write dokhosts.ini from env.
 //          grok-4.7 | cursor | 2026-10-08 | s_20261008_no_scripts | Install skips composer scripts so artisan does not resolve DB_HOST during image build
+//          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Deploy refreshes composer NIXPACKS_INSTALL_CMD from the preset before the build
 // message: Site GRANT stays one-database via MysqlProvisioner; admin infra user may keep *.*.
 
 namespace App\Services\Dokploy;
@@ -251,7 +253,7 @@ class DokployApplicationAttacher
                 'NIXPACKS_START_CMD' => 'npx --yes serve -s . -l ${PORT:-80}',
             ],
             DomainStack::Php => [
-                'NIXPACKS_INSTALL_CMD' => 'composer install --no-dev --optimize-autoloader',
+                'NIXPACKS_INSTALL_CMD' => 'composer install --no-dev --optimize-autoloader --no-interaction --no-scripts',
                 'NIXPACKS_START_CMD' => 'php -S 0.0.0.0:${PORT:-80} -t public',
             ],
             DomainStack::Node => [
@@ -323,7 +325,52 @@ class DokployApplicationAttacher
     }
 
     /**
+     * Rewrite NIXPACKS_INSTALL_CMD from the current composer preset before a Nixpacks build.
+     *
+     * Dokploy passes the same application env into the image build and the container start.
+     * composer scripts (package:discover) boot artisan during the build, and DB_HOST only
+     * resolves on dokploy-network at runtime. --no-scripts skips that boot. DB_* stays set.
+     * Stacks whose preset install command does not run composer are left untouched.
+     * A matching install command is kept without a saveEnvironment call.
+     */
+    public function refreshNixpacksInstallCommand(Domain $domain): void
+    {
+        if ($this->nixpacksInstallCommand($domain->stack ?? DomainStack::None) === null) {
+            return;
+        }
+
+        $domain->loadMissing('dokployApplication');
+        $applicationId = $domain->dokployApplication?->dokploy_application_id;
+
+        if (! is_string($applicationId) || $applicationId === '') {
+            return;
+        }
+
+        try {
+            $application = $this->dokploy->getApplication($applicationId);
+            $currentEnv = is_string($application['env'] ?? null) ? $application['env'] : '';
+            $merged = $this->mergeNixpacksInstallCommand($currentEnv, $domain);
+
+            if ($merged['added'] === [] && $merged['updated'] === []) {
+                return;
+            }
+
+            $this->dokploy->saveEnvironment([
+                'applicationId' => $applicationId,
+                'env' => $merged['env'],
+            ]);
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw ValidationException::withMessages([
+                'deploy' => $this->dokploy->errorMessage($exception),
+            ]);
+        }
+    }
+
+    /**
      * Rules: replaceAssignments only — never drop unrelated env keys. Optional deploy after save.
+     * When deploying, also replace NIXPACKS_INSTALL_CMD in the same save so the build skips composer scripts.
      *
      * @return array{env_synced: bool, added: list<string>, updated: list<string>, deployed: bool}
      */
@@ -349,6 +396,13 @@ class DokployApplicationAttacher
             $merged['env'] = $withIni['env'];
             $merged['updated'] = array_values(array_unique([...$merged['updated'], ...$withIni['updated']]));
             $merged['added'] = array_values(array_unique([...$merged['added'], ...$withIni['added']]));
+
+            if ($deployNow) {
+                $install = $this->mergeNixpacksInstallCommand($merged['env'], $domain);
+                $merged['env'] = $install['env'];
+                $merged['updated'] = array_values(array_unique([...$merged['updated'], ...$install['updated']]));
+                $merged['added'] = array_values(array_unique([...$merged['added'], ...$install['added']]));
+            }
 
             $this->dokploy->saveEnvironment([
                 'applicationId' => $applicationId,
@@ -420,6 +474,8 @@ class DokployApplicationAttacher
     /**
      * Runtime env: infra wiring (same Dokploy env → dokploy-network + DB_* from Infrastructure)
      * for every app stack; Laravel boot keys only when stack=laravel.
+     * Composer stacks also get NIXPACKS_INSTALL_CMD with --no-scripts so the first build
+     * does not boot artisan against DB_HOST.
      */
     private function envFile(
         DomainStack $stack,
@@ -440,7 +496,50 @@ class DokployApplicationAttacher
 
         $lines = [...$lines, ...$this->phpSettingsEnvLines($domain)];
 
+        $installCommand = $this->nixpacksInstallCommand($stack);
+
+        if ($installCommand !== null) {
+            $lines[] = 'NIXPACKS_INSTALL_CMD='.$installCommand;
+        }
+
         return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * Install command that must not boot the app during the Nixpacks build.
+     * Null for stacks whose preset does not run composer.
+     */
+    private function nixpacksInstallCommand(DomainStack $stack): ?string
+    {
+        if ($stack->isLaravel()) {
+            return $this->laravelDeployPreset()['NIXPACKS_INSTALL_CMD'];
+        }
+
+        if ($stack !== DomainStack::Php) {
+            return null;
+        }
+
+        return $this->nixpacksPreset($stack)['NIXPACKS_INSTALL_CMD'] ?? null;
+    }
+
+    /**
+     * @return array{env: string, added: list<string>, updated: list<string>}
+     */
+    private function mergeNixpacksInstallCommand(string $env, Domain $domain): array
+    {
+        $command = $this->nixpacksInstallCommand($domain->stack ?? DomainStack::None);
+
+        if ($command === null) {
+            return [
+                'env' => $env,
+                'added' => [],
+                'updated' => [],
+            ];
+        }
+
+        return $this->replaceAssignments($env, [
+            'NIXPACKS_INSTALL_CMD' => $command,
+        ]);
     }
 
     /**

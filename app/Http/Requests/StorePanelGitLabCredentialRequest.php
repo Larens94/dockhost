@@ -36,10 +36,10 @@ class StorePanelGitLabCredentialRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'gitlab_url.required' => 'Inserisci l’URL dell’istanza GitLab.',
-            'gitlab_url.url' => 'L’URL GitLab non è valido.',
-            'token.required' => 'Inserisci un Personal Access Token GitLab.',
-            'token.min' => 'Il token sembra troppo corto.',
+            'gitlab_url.required' => __('panel.validation.gitlab_url_required'),
+            'gitlab_url.url' => __('panel.validation.gitlab_url_invalid'),
+            'token.required' => __('panel.validation.gitlab_token_required'),
+            'token.min' => __('panel.validation.gitlab_token_short'),
         ];
     }
 }

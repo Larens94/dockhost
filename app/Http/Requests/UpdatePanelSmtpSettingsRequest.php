@@ -46,14 +46,14 @@ class UpdatePanelSmtpSettingsRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'provider_preset.required' => 'Seleziona un provider SMTP.',
-            'mail_host.required' => 'Inserisci l’host SMTP.',
-            'mail_port.required' => 'Inserisci la porta SMTP.',
-            'mail_encryption.required' => 'Seleziona la crittografia (TLS, SSL o nessuna).',
-            'mail_username.required' => 'Inserisci l’username SMTP.',
-            'mail_from_address.required' => 'Inserisci l’indirizzo mittente.',
-            'mail_from_address.email' => 'L’indirizzo mittente non è valido.',
-            'mail_from_name.required' => 'Inserisci il nome mittente.',
+            'provider_preset.required' => __('panel.validation.smtp_preset'),
+            'mail_host.required' => __('panel.validation.smtp_host'),
+            'mail_port.required' => __('panel.validation.smtp_port'),
+            'mail_encryption.required' => __('panel.validation.smtp_encryption'),
+            'mail_username.required' => __('panel.validation.smtp_username'),
+            'mail_from_address.required' => __('panel.validation.smtp_from'),
+            'mail_from_address.email' => __('panel.validation.smtp_from_invalid'),
+            'mail_from_name.required' => __('panel.validation.smtp_from_name'),
         ];
     }
 }

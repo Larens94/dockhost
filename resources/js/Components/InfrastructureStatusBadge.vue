@@ -8,6 +8,9 @@
 
 <script setup>
 import { computed } from 'vue';
+import { usePanelTranslations } from '../composables/usePanelTranslations';
+
+const { t } = usePanelTranslations();
 
 const props = defineProps({
     status: {
@@ -17,16 +20,10 @@ const props = defineProps({
 });
 
 const label = computed(() => {
-    const labels = {
-        deployed: 'Attivo',
-        ready: 'Attivo',
-        deploying: 'In distribuzione',
-        degraded: 'Degradato',
-        failed: 'Fallito',
-        pending: 'In attesa',
-    };
+    const key = `status.${props.status}`;
+    const translated = t(key);
 
-    return labels[props.status] || props.status;
+    return translated === key ? props.status : translated;
 });
 
 const badgeClass = computed(() => {

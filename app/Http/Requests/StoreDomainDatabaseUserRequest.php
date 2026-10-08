@@ -40,7 +40,7 @@ class StoreDomainDatabaseUserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'privilege.required' => 'Scegli i privilegi: completi (ALL) o sola lettura (SELECT).',
+            'privilege.required' => __('panel.validation.privilege_required'),
         ];
     }
 }

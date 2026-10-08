@@ -11,7 +11,10 @@
 <script setup>
 import { computed } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import ServicePicker from '../../Components/ServicePicker.vue';
+
+const { t } = usePanelTranslations();
 import AppLayout from '../../Layouts/AppLayout.vue';
 
 const props = defineProps({
@@ -60,11 +63,11 @@ const inputClass =
 
 <template>
     <AppLayout
-        title="Nuova infrastruttura"
-        description="Crea un progetto Dokploy nuovo già popolato con lo stack base."
+        :title="t('infrastructures.create_title')"
+        :description="t('infrastructures.create_description')"
     >
         <template #actions>
-            <Link href="/infrastructures" class="text-sm text-zinc-600 hover:text-zinc-900">Indietro</Link>
+            <Link href="/infrastructures" class="text-sm text-zinc-600 hover:text-zinc-900">{{ t('common.back') }}</Link>
         </template>
 
         <form
@@ -72,14 +75,11 @@ const inputClass =
             @submit.prevent="submit"
         >
             <p class="text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                I servizi con dominio (phpMyAdmin, pgAdmin, console MinIO) usano il wildcard
-                <span class="font-medium text-zinc-700">*.cloud.silicoreautomation.com</span>.
-                Hostname interni:
-                <span class="font-medium text-zinc-700">{{ form.slug || 'slug' }}-mariadb</span>.
+                {{ t('infrastructures.wildcard_help', { host: `${form.slug || 'slug'}-mariadb` }) }}
             </p>
 
             <div>
-                <label class="block text-sm font-medium" for="slug">Slug</label>
+                <label class="block text-sm font-medium" for="slug">{{ t('common.slug') }}</label>
                 <input id="slug" v-model="form.slug" type="text" required :class="inputClass" />
                 <p v-if="form.errors.slug" class="mt-1 min-w-0 text-sm break-words text-red-600 [overflow-wrap:anywhere]">
                     {{ form.errors.slug }}
@@ -87,7 +87,7 @@ const inputClass =
             </div>
 
             <div>
-                <label class="block text-sm font-medium" for="name">Nome</label>
+                <label class="block text-sm font-medium" for="name">{{ t('common.name') }}</label>
                 <input
                     id="name"
                     v-model="form.name"
@@ -95,22 +95,21 @@ const inputClass =
                     :placeholder="form.slug || 'infra1'"
                     :class="inputClass"
                 />
-                <p class="mt-1 text-xs text-zinc-500">Opzionale. Se vuoto si usa lo slug.</p>
+                <p class="mt-1 text-xs text-zinc-500">{{ t('common.name_optional') }}</p>
                 <p v-if="form.errors.name" class="mt-1 text-sm text-red-600">{{ form.errors.name }}</p>
             </div>
 
             <div>
-                <label class="block text-sm font-medium" for="template">Template</label>
+                <label class="block text-sm font-medium" for="template">{{ t('infrastructures.template') }}</label>
                 <select id="template" v-model="form.template" :class="inputClass">
-                    <option value="base">base (MariaDB, Postgres, SFTP)</option>
+                    <option value="base">{{ t('infrastructures.template_base') }}</option>
                 </select>
             </div>
 
             <div>
-                <p class="text-sm font-medium">Servizi</p>
+                <p class="text-sm font-medium">{{ t('infrastructures.services') }}</p>
                 <p class="mt-1 mb-3 text-xs text-zinc-500">
-                    Clicca una card per attivarla. La base resta bloccata. Redis, pgAdmin e MinIO si possono aggiungere
-                    anche dopo.
+                    {{ t('infrastructures.services_help') }}
                 </p>
                 <ServicePicker
                     :services="pickerServices"
@@ -125,7 +124,7 @@ const inputClass =
                 class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                 :disabled="form.processing"
             >
-                Crea infrastruttura
+                {{ t('infrastructures.submit') }}
             </button>
         </form>
     </AppLayout>

@@ -51,11 +51,11 @@ class PanelSmtpSettingsController extends Controller
             'sync_status' => $syncResult['status'] ?? null,
         ]);
 
-        $message = 'Impostazioni SMTP salvate.';
+        $message = __('panel.smtp.saved');
         if ($syncResult['status'] === 'synced' || $syncResult['status'] === 'skipped_unchanged') {
-            $message = 'Salvato. Ridistribuisci dokhosts se le mail partono solo dopo il riavvio del container.';
+            $message = __('panel.smtp.saved_redeploy');
         } elseif ($syncResult['status'] === 'failed') {
-            $message = 'Impostazioni salvate nel pannello, ma la sincronizzazione Dokploy è fallita.';
+            $message = __('panel.smtp.saved_sync_failed');
         }
 
         return redirect()
@@ -71,7 +71,7 @@ class PanelSmtpSettingsController extends Controller
         if (! filled(config('dokploy.url')) || ! filled(config('dokploy.api_key'))) {
             return redirect()
                 ->route('panel.smtp.index')
-                ->with('success', 'Dokploy non configurato — impossibile ridistribuire dal pannello.');
+                ->with('success', __('panel.smtp.dokploy_missing'));
         }
 
         $applicationId = $panelApplication->resolveApplicationId();
@@ -79,7 +79,7 @@ class PanelSmtpSettingsController extends Controller
         if ($applicationId === null) {
             return redirect()
                 ->route('panel.smtp.index')
-                ->with('success', 'Application dokhosts non trovata su Dokploy.');
+                ->with('success', __('panel.smtp.app_missing'));
         }
 
         try {
@@ -90,12 +90,12 @@ class PanelSmtpSettingsController extends Controller
         } catch (Throwable) {
             return redirect()
                 ->route('panel.smtp.index')
-                ->with('success', 'Richiesta di ridistribuzione inviata a Dokploy non riuscita.');
+                ->with('success', __('panel.smtp.redeploy_failed'));
         }
 
         return redirect()
             ->route('panel.smtp.index')
-            ->with('success', 'Ridistribuzione dokhosts avviata su Dokploy.');
+            ->with('success', __('panel.smtp.redeploy_started'));
     }
 
     public function test(
@@ -105,12 +105,12 @@ class PanelSmtpSettingsController extends Controller
     ): RedirectResponse {
         $recipient = trim((string) $request->validated('test_email'));
 
-        $bodyLine = 'Il SMTP del pannello DokHosts funziona. '.now()->toDateTimeString();
+        $bodyLine = __('panel.smtp.test_body').' '.now()->toDateTimeString();
 
         $result = $sender->sendTestMail($recipient, $bodyLine);
 
         if ($result['ok'] !== true) {
-            $errorMessage = $result['error'] ?? 'Invio mail di prova non riuscito.';
+            $errorMessage = $result['error'] ?? __('panel.smtp.test_failed');
 
             return redirect()
                 ->route('panel.smtp.index')
@@ -127,9 +127,9 @@ class PanelSmtpSettingsController extends Controller
             'message_id' => $result['message_id'] ?? null,
         ]);
 
-        $successMessage = 'Mail accettata dal server SMTP.';
+        $successMessage = __('panel.smtp.test_accepted');
         if (filled($result['subject'] ?? null)) {
-            $successMessage .= ' Oggetto: '.$result['subject'].'.';
+            $successMessage .= ' '.__('panel.smtp.test_subject', ['subject' => $result['subject']]);
         }
 
         return redirect()

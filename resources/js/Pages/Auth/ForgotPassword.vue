@@ -4,11 +4,15 @@
   used_by: PasswordResetLinkController
   rules:   Italian copy matching Login.vue styling.
   agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_iam | Forgot password page.
+  agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Forgot-password copy uses panel translations.
 -->
 
 <script setup>
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
+
+const { t } = usePanelTranslations();
 
 defineProps({
     status: {
@@ -31,21 +35,21 @@ const submit = () => {
 
 <template>
     <div class="flex min-h-screen bg-neutral-50">
-        <Head title="Password dimenticata" />
+        <Head :title="t('auth.forgot_title')" />
         <div class="flex flex-1 items-center justify-center px-6 py-12">
             <form
                 class="w-full max-w-sm space-y-5 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
                 @submit.prevent="submit"
             >
                 <div>
-                    <h1 class="text-xl font-semibold tracking-normal">Password dimenticata</h1>
+                    <h1 class="text-xl font-semibold tracking-normal">{{ t('auth.forgot_title') }}</h1>
                     <p class="mt-1 text-sm text-zinc-500">
-                        Inserisci l’email del tuo account {{ appName }}: ti invieremo un link per impostare una nuova password.
+                        {{ t('auth.forgot_body', { app: appName }) }}
                     </p>
                 </div>
                 <p v-if="status" class="text-sm text-emerald-700">{{ status }}</p>
                 <div>
-                    <label class="block text-sm font-medium" for="email">Email</label>
+                    <label class="block text-sm font-medium" for="email">{{ t('common.email') }}</label>
                     <input
                         id="email"
                         v-model="form.email"
@@ -60,10 +64,10 @@ const submit = () => {
                     class="w-full rounded-lg bg-zinc-900 px-3.5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                     :disabled="form.processing"
                 >
-                    Invia link
+                    {{ t('auth.send_link') }}
                 </button>
                 <p class="text-center text-sm text-zinc-500">
-                    <Link href="/login" class="text-zinc-900 hover:underline">Torna al login</Link>
+                    <Link href="/login" class="text-zinc-900 hover:underline">{{ t('auth.back_to_login') }}</Link>
                 </p>
             </form>
         </div>

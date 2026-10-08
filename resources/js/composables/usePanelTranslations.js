@@ -2,8 +2,9 @@
 //
 // exports: usePanelTranslations
 // used_by: none
-// rules:   Read page.props.translations from Laravel lang files. Do not add a JS i18n package. Imported by AppLayout, Account/Locale, customers/spaces/domains indexes, and DeleteSpaceModal.
+// rules:   Read page.props.translations from Laravel lang files. Do not add a JS i18n package. Panel Vue pages and components import this helper.
 // agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Shared Inertia translations helper.
+// agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Used by the rest of the panel UI.
 
 import { computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';

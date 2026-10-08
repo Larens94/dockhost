@@ -15,7 +15,10 @@
 <script setup>
     import { computed, onMounted, ref, watch } from 'vue';
     import { useForm, usePage } from '@inertiajs/vue3';
+    import { usePanelTranslations } from '../composables/usePanelTranslations';
     import LaravelLogo from './LaravelLogo.vue';
+
+const { t } = usePanelTranslations();
 
 const props = defineProps({
     domain: {
@@ -46,16 +49,16 @@ const props = defineProps({
 
 const emit = defineEmits(['attach']);
 
-const sections = [
-    { id: 'panoramica', label: 'Panoramica' },
-    { id: 'artisan', label: 'Artisan' },
-    { id: 'composer', label: 'Composer' },
-    { id: 'node', label: 'Node' },
-    { id: 'deploy', label: 'Deploy' },
-    { id: 'schedulazioni', label: 'Schedulazioni' },
-    { id: 'code', label: 'Code' },
-    { id: 'log', label: 'Log' },
-];
+const sections = computed(() => [
+    { id: 'panoramica', label: t('toolkit.sections.overview') },
+    { id: 'artisan', label: t('toolkit.sections.artisan') },
+    { id: 'composer', label: t('toolkit.sections.composer') },
+    { id: 'node', label: t('toolkit.sections.node') },
+    { id: 'deploy', label: t('toolkit.sections.deploy') },
+    { id: 'schedulazioni', label: t('toolkit.sections.schedules') },
+    { id: 'code', label: t('toolkit.sections.queues') },
+    { id: 'log', label: t('toolkit.sections.logs') },
+]);
 
 const page = usePage();
 const deployForm = useForm({});
@@ -64,7 +67,7 @@ const sectionFromUrl = () => {
     const query = page.url.includes('?') ? page.url.slice(page.url.indexOf('?') + 1) : '';
     const section = new URLSearchParams(query).get('section');
 
-    return sections.some((item) => item.id === section) ? section : 'panoramica';
+    return sections.value.some((item) => item.id === section) ? section : 'panoramica';
 };
 
 const currentSection = ref(sectionFromUrl());
@@ -144,15 +147,14 @@ const refreshToolkitFromDokployGitLab = async () => {
         await loadOverview();
 
         if (catalogFromGit.value) {
-            gitlabConnectSuccess.value =
-                'Catalogo comandi letto dal repository GitLab collegato su Dokploy (OAuth, solo questo progetto).';
+            gitlabConnectSuccess.value = t('toolkit.catalog_read');
         } else {
             gitlabConnectError.value =
                 overview.value?.command_catalog_message ||
-                'Dokploy non ha restituito credenziali GitLab utilizzabili per l’API (controlla Git Provider e permessi).';
+                t('toolkit.gitlab_unusable');
         }
     } catch {
-        gitlabConnectError.value = 'Errore di rete durante la lettura da Dokploy.';
+        gitlabConnectError.value = t('toolkit.network_read');
     } finally {
         gitlabConnectLoading.value = false;
     }
@@ -179,12 +181,12 @@ const submitGitLabCredentials = async () => {
                 payload.message ||
                 payload.errors?.token?.[0] ||
                 payload.errors?.gitlab_url?.[0] ||
-                'Impossibile salvare le credenziali GitLab.';
+                t('gitlab.save_failed');
 
             return;
         }
 
-        gitlabConnectSuccess.value = payload.message || 'GitLab collegato.';
+        gitlabConnectSuccess.value = payload.message || t('gitlab.connected');
         if (payload.redeploy_hint) {
             gitlabConnectSuccess.value += ` ${payload.redeploy_hint}`;
         }
@@ -197,7 +199,7 @@ const submitGitLabCredentials = async () => {
             }
         }, 1200);
     } catch {
-        gitlabConnectError.value = 'Errore di rete durante il collegamento GitLab.';
+        gitlabConnectError.value = t('toolkit.network_connect');
     } finally {
         gitlabConnectLoading.value = false;
     }
@@ -244,13 +246,13 @@ const terminalUrl = computed(
 const recipeHint = computed(
     () =>
         overview.value?.exec_message ||
-        'Dokploy non esegue comandi nel container via API. Usa Applica build e avvio, poi Deploy.',
+        t('toolkit.recipe_hint'),
 );
 const disabledHint = computed(
     () =>
         overview.value?.exec_message ||
         overview.value?.message ||
-        'Prima avvia il container su Dokploy (GitLab + Deploy).',
+        t('toolkit.not_ready'),
 );
 
 const fullShellCommand = (kind, trimmed) => {
@@ -287,7 +289,7 @@ const copyAndOpenTerminal = async (kind, command, snippetId) => {
     openDokployTerminalPage();
     setStdout(
         kind,
-        `${overview.value?.exec_message || 'Comando copiato.'}\n\n${full}\n\nSu Dokploy: General → Open Terminal, incolla ed esegui.`,
+        `${overview.value?.exec_message || t('toolkit.copied_command')}\n\n${full}\n\n${t('toolkit.paste_hint')}`,
     );
 };
 
@@ -323,14 +325,14 @@ const loadOverview = async () => {
         const payload = await response.json();
 
         if (!response.ok) {
-            overviewError.value = payload.message || 'Impossibile leggere lo stato da Dokploy.';
+            overviewError.value = payload.message || t('toolkit.status_failed');
 
             return;
         }
 
         overview.value = payload;
     } catch {
-        overviewError.value = 'Impossibile leggere lo stato da Dokploy.';
+        overviewError.value = t('toolkit.status_failed');
     } finally {
         overviewLoading.value = false;
     }
@@ -408,7 +410,7 @@ const runCommand = async (kind, command) => {
 
         setStdout(kind, payload.stdout);
     } catch {
-        setError(kind, 'Impossibile eseguire il comando su Dokploy.');
+        setError(kind, t('toolkit.command_failed'));
     } finally {
         running.value = '';
     }
@@ -458,8 +460,7 @@ watch(
 
         <template v-if="!attached">
             <p class="mt-1 text-sm text-zinc-500">
-                Crea l’application su <span class="font-medium">{{ domain.infra_slug }}</span> (env DB, volume,
-                HTTPS). Repository e Deploy li imposti su Dokploy (GitLab Silicore Internal), non qui.
+                {{ t('toolkit.create_help', { infra: domain.infra_slug }) }}
             </p>
             <p v-if="attachError" class="mt-2 text-sm text-red-600">{{ attachError }}</p>
             <form class="mt-5" @submit.prevent="emit('attach')">
@@ -468,14 +469,14 @@ watch(
                     class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                     :disabled="attachProcessing || !canMutateHosting"
                 >
-                    Crea application Dokploy
+                    {{ t('toolkit.create_button') }}
                 </button>
             </form>
         </template>
 
         <template v-else>
             <p class="mt-1 text-sm text-zinc-500">
-                Application su {{ domain.infra_slug }}. GitLab, env, log e terminal restano su Dokploy.
+                {{ t('toolkit.attached_help', { infra: domain.infra_slug }) }}
             </p>
 
             <nav class="-mx-1 mt-5 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" aria-label="Laravel Toolkit">
@@ -491,7 +492,7 @@ watch(
                 </button>
             </nav>
 
-            <div v-if="overviewLoading" class="mt-5 text-sm text-zinc-500">Lettura stato da Dokploy…</div>
+            <div v-if="overviewLoading" class="mt-5 text-sm text-zinc-500">{{ t('toolkit.loading') }}</div>
             <p v-else-if="overviewError" class="mt-5 text-sm text-red-600">{{ overviewError }}</p>
 
             <div v-show="currentSection === 'panoramica'" class="mt-5 space-y-4">
@@ -510,15 +511,15 @@ watch(
                         </dd>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">Stack</dt>
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.stack') }}</dt>
                         <dd class="mt-1 text-sm font-medium">{{ domain.infra_slug }}</dd>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">Stato application</dt>
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('toolkit.app_status') }}</dt>
                         <dd class="mt-1 text-sm font-medium">{{ overview?.application_status || '—' }}</dd>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">Ultimo deploy</dt>
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('toolkit.last_deploy') }}</dt>
                         <dd class="mt-1 text-sm font-medium">
                             {{ overview?.last_deploy_title || '—' }}
                             <span v-if="overview?.last_deploy_status" class="text-zinc-500">
@@ -527,7 +528,7 @@ watch(
                         </dd>
                     </div>
                     <div class="rounded-lg bg-zinc-50 px-3 py-2 sm:col-span-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">Repository</dt>
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.repository') }}</dt>
                         <dd class="mt-1 text-sm">
                             <a
                                 v-if="canOpenDokploy && dokployUrl"
@@ -536,11 +537,11 @@ watch(
                                 rel="noopener"
                                 class="font-medium underline underline-offset-2"
                             >
-                                Configura su Dokploy
+                                {{ t('toolkit.configure_dokploy') }}
                             </a>
-                            <span v-else class="text-zinc-500">Configura su Dokploy</span>
+                            <span v-else class="text-zinc-500">{{ t('toolkit.configure_dokploy') }}</span>
                             <span v-if="overview?.git_configured" class="ml-2 text-zinc-500">
-                                (sorgente già presente su Dokploy)
+                                {{ t('toolkit.source_present') }}
                             </span>
                         </dd>
                     </div>
@@ -552,13 +553,10 @@ watch(
                 >
                     <p v-if="catalogHint" class="text-amber-900">{{ catalogHint }}</p>
                     <p v-else-if="dokployGitLabAvailable" class="text-amber-900">
-                        Su Dokploy hai già un Git Provider GitLab per questa application. Il Toolkit può riusare quell’OAuth
-                        (clone/deploy) per leggere <span class="font-mono">composer.json</span>,
-                        <span class="font-mono">package.json</span> e i comandi Artisan — senza incollare un PAT.
+                        {{ t('toolkit.gitlab_oauth') }}
                     </p>
                     <p v-else class="text-amber-900">
-                        Configura prima GitLab su Dokploy (General → Git) oppure salva un token di gruppo sul pannello
-                        dokhosts (lettura repository).
+                        {{ t('toolkit.gitlab_missing') }}
                     </p>
                     <div class="mt-3 flex flex-wrap gap-2">
                         <button
@@ -568,14 +566,14 @@ watch(
                             :disabled="gitlabConnectLoading"
                             @click="refreshToolkitFromDokployGitLab"
                         >
-                            {{ gitlabConnectLoading ? 'Lettura…' : 'Usa GitLab di Dokploy' }}
+                            {{ gitlabConnectLoading ? t('common.reading') : t('toolkit.use_dokploy_gitlab') }}
                         </button>
                         <button
                             type="button"
                             class="rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium hover:bg-zinc-50"
                             @click="openGitLabModal"
                         >
-                            Token di gruppo (opzionale)
+                            {{ t('toolkit.group_token') }}
                         </button>
                     </div>
                     <p v-if="gitlabConnectError" class="mt-2 text-sm text-red-700">{{ gitlabConnectError }}</p>
@@ -600,19 +598,14 @@ watch(
                     rel="noopener"
                     class="inline-flex rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800"
                 >
-                    Apri Dokploy (General → Terminal)
+                    {{ t('toolkit.open_terminal') }}
                 </a>
                 <p class="text-sm text-zinc-500">
                     <template v-if="catalogFromGit">
-                        Preset da GitLab (classi in <span class="font-mono">app/Console/Commands</span> e
-                        <span class="font-mono">routes/console.php</span>) più nucleo hosting. Denylist:
-                        tinker, migrate:fresh, db:wipe, make:*.
+                        {{ t('toolkit.artisan_git') }}
                     </template>
                     <template v-else>
-                        Catalogo minimo predefinito: collega GitLab su Dokploy e usa «Usa GitLab di Dokploy», oppure
-                        un token di gruppo sul pannello (CI
-                        <span class="font-mono">dokhosts:sync-panel-gitlab-env</span>). Comandi con opzioni sotto se
-                        consentiti dall’allowlist.
+                        {{ t('toolkit.artisan_fallback') }}
                     </template>
                 </p>
                 <p v-if="catalogHint" class="text-sm" :class="catalogFromGit ? 'text-emerald-800' : 'text-amber-800'">
@@ -635,7 +628,7 @@ watch(
                             >
                                 {{
                                     terminalWorkflow
-                                        ? `${preset.label} · copia e terminale`
+                                        ? `${preset.label} · ${t('common.copy_and_terminal')}`
                                         : preset.label
                                 }}
                             </button>
@@ -646,7 +639,7 @@ watch(
                                 :disabled="!ready"
                                 @click="copyArtisanCommand(preset.command)"
                             >
-                                {{ preset.label }} · copia
+                                {{ preset.label }} · {{ t('common.copy_suffix') }}
                             </button>
                         </template>
                     </div>
@@ -655,7 +648,7 @@ watch(
                     <input
                         v-model="artisanCommand"
                         type="text"
-                        placeholder="es. migrate:status"
+                        :placeholder="t('toolkit.placeholder_artisan')"
                         class="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10"
                         :disabled="!canRunCommands"
                     />
@@ -664,7 +657,7 @@ watch(
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="!canRunCommands || running === 'artisan'"
                     >
-                        {{ terminalWorkflow ? 'Copia e apri terminale' : 'Esegui' }}
+                        {{ terminalWorkflow ? t('common.copy_and_open_terminal') : t('common.run') }}
                     </button>
                 </form>
                 <p v-if="artisanError" class="text-sm text-red-600">{{ artisanError }}</p>
@@ -685,10 +678,10 @@ watch(
                     rel="noopener"
                     class="inline-flex rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800"
                 >
-                    Apri Dokploy (General → Terminal)
+                    {{ t('toolkit.open_terminal') }}
                 </a>
                 <p class="text-sm text-zinc-500">
-                    Allowlist Composer: install, dump-autoload, validate. Niente update/require/remove.
+                    {{ t('toolkit.composer_allow') }}
                 </p>
                 <div
                     v-for="category in commandCatalog.composer"
@@ -707,7 +700,7 @@ watch(
                         >
                             {{
                                 terminalWorkflow
-                                    ? `${preset.label} · copia e terminale`
+                                    ? `${preset.label} · ${t('common.copy_and_terminal')}`
                                     : preset.label
                             }}
                         </button>
@@ -717,7 +710,7 @@ watch(
                     <input
                         v-model="composerCommand"
                         type="text"
-                        placeholder="es. dump-autoload"
+                        :placeholder="t('toolkit.placeholder_composer')"
                         class="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10"
                         :disabled="!canRunCommands"
                     />
@@ -726,7 +719,7 @@ watch(
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="!canRunCommands || running === 'composer'"
                     >
-                        {{ terminalWorkflow ? 'Copia e apri terminale' : 'Esegui' }}
+                        {{ terminalWorkflow ? t('common.copy_and_open_terminal') : t('common.run') }}
                     </button>
                 </form>
                 <p v-if="composerError" class="text-sm text-red-600">{{ composerError }}</p>
@@ -742,16 +735,14 @@ watch(
                 <p v-else-if="terminalWorkflow" class="text-sm text-zinc-700">{{ overview?.exec_message }}</p>
                 <p class="text-sm text-zinc-500">
                     <template v-if="catalogFromGit">
-                        Script da <span class="font-mono">package.json</span> nel repo Git (più preset hosting).
-                        dev/serve/watch restano solo copia (long-running).
+                        {{ t('toolkit.npm_git') }}
                     </template>
                     <template v-else>
-                        Preset npm standard; con GitLab attivo importiamo gli script dal
-                        <span class="font-mono">package.json</span> del repository.
+                        {{ t('toolkit.npm_fallback') }}
                     </template>
                 </p>
                 <p v-if="overview?.build_type" class="text-sm">
-                    Build type Dokploy: <span class="font-medium">{{ overview.build_type }}</span>
+                    {{ t('toolkit.build_type') }} <span class="font-medium">{{ overview.build_type }}</span>
                 </p>
                 <div
                     v-for="category in commandCatalog.npm"
@@ -770,7 +761,7 @@ watch(
                             >
                                 {{
                                     terminalWorkflow
-                                        ? `${preset.label} · copia e terminale`
+                                        ? `${preset.label} · ${t('common.copy_and_terminal')}`
                                         : preset.label
                                 }}
                             </button>
@@ -781,7 +772,7 @@ watch(
                                 :disabled="!ready"
                                 @click="copyNpmCommand(preset.command)"
                             >
-                                {{ preset.label }} · copia
+                                {{ preset.label }} · {{ t('common.copy_suffix') }}
                             </button>
                         </template>
                     </div>
@@ -790,7 +781,7 @@ watch(
                     <input
                         v-model="npmCommand"
                         type="text"
-                        placeholder="es. run build"
+                        :placeholder="t('toolkit.placeholder_npm')"
                         class="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10"
                         :disabled="!canRunCommands"
                     />
@@ -799,7 +790,7 @@ watch(
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="!canRunCommands || running === 'npm'"
                     >
-                        {{ terminalWorkflow ? 'Copia e apri terminale' : 'Esegui' }}
+                        {{ terminalWorkflow ? t('common.copy_and_open_terminal') : t('common.run') }}
                     </button>
                 </form>
                 <p v-if="npmError" class="text-sm text-red-600">{{ npmError }}</p>
@@ -815,28 +806,23 @@ watch(
                     rel="noopener"
                     class="inline-flex rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-zinc-50"
                 >
-                    Terminale su Dokploy
+                    {{ t('toolkit.terminal_on_dokploy') }}
                 </a>
             </div>
 
             <div v-show="currentSection === 'deploy'" class="mt-5 space-y-4">
                 <p class="text-sm text-zinc-500">
-                    Deploy e GitLab restano su Dokploy (General / Environment). Non c’è lo script webhook di
-                    Plesk: si usa il build Nixpacks e il comando di avvio del container.
+                    {{ t('toolkit.deploy_help') }}
                 </p>
                 <p class="text-sm text-amber-800">
-                    Mai <span class="font-mono">config:cache</span> (né route/view/event:cache) nel
-                    <span class="font-medium">build</span> Docker/Nixpacks: in quella fase mancano DB e env
-                    runtime. Quei comandi vanno solo all’avvio, dopo migrate.
+                    {{ t('toolkit.no_config_cache') }}
                 </p>
 
                 <div class="grid gap-4 lg:grid-cols-2">
                     <div class="rounded-lg border border-neutral-200 bg-zinc-50 p-4">
-                        <h3 class="text-sm font-semibold">Build (immagine)</h3>
+                        <h3 class="text-sm font-semibold">{{ t('toolkit.build_heading') }}</h3>
                         <p class="mt-1 text-sm text-zinc-600">
-                            Tab Environment su Dokploy, build type
-                            <span class="font-mono">{{ overview?.build_type || 'nixpacks' }}</span
-                            >. Prima Composer, poi gli asset Node. Senza vendor, artisan allo start non parte.
+                            {{ t('toolkit.build_help', { type: overview?.build_type || 'nixpacks' }) }}
                         </p>
                         <pre
                             class="mt-3 overflow-x-auto rounded-lg bg-zinc-950 p-3 text-xs whitespace-pre-wrap text-zinc-100"
@@ -847,15 +833,14 @@ watch(
                             class="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-zinc-50"
                             @click="copySnippet('build', nixpacksBuildEnv)"
                         >
-                            {{ copied === 'build' ? 'Copiato' : 'Copia env Nixpacks' }}
+                            {{ copied === 'build' ? t('common.copied') : t('toolkit.copy_nixpacks') }}
                         </button>
                     </div>
 
                     <div class="rounded-lg border border-neutral-200 bg-zinc-50 p-4">
-                        <h3 class="text-sm font-semibold">Avvio (runtime)</h3>
+                        <h3 class="text-sm font-semibold">{{ t('toolkit.start_heading') }}</h3>
                         <p class="mt-1 text-sm text-zinc-600">
-                            Va in <span class="font-mono">NIXPACKS_START_CMD</span>. Artisan parte, poi resta
-                            nginx + php-fpm (lo start di Nixpacks per PHP). Senza quel processo il container esce.
+                            {{ t('toolkit.start_help') }}
                         </p>
                         <pre
                             class="mt-3 overflow-x-auto rounded-lg bg-zinc-950 p-3 text-xs whitespace-pre-wrap text-zinc-100"
@@ -866,7 +851,7 @@ watch(
                             class="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-zinc-50"
                             @click="copySnippet('oneliner', startCommandOneLiner)"
                         >
-                            {{ copied === 'oneliner' ? 'Copiato' : 'Copia avvio' }}
+                            {{ copied === 'oneliner' ? t('common.copied') : t('toolkit.copy_start') }}
                         </button>
                     </div>
                 </div>
@@ -884,7 +869,7 @@ watch(
                         :disabled="deployForm.processing || !attached || !canMutateHosting"
                         @click="applyDeployConfig"
                     >
-                        Applica build e avvio su Dokploy
+                        {{ t('toolkit.apply_build') }}
                     </button>
                     <a
                         v-if="canOpenDokploy && dokployUrl"
@@ -893,7 +878,7 @@ watch(
                         rel="noopener"
                         class="inline-flex rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-zinc-50"
                     >
-                        Apri su Dokploy
+                        {{ t('toolkit.open_on_dokploy') }}
                     </a>
                     <button
                         type="button"
@@ -901,22 +886,17 @@ watch(
                         disabled
                         :title="recipeHint"
                     >
-                        Esegui ricetta di avvio
+                        {{ t('toolkit.run_recipe') }}
                     </button>
                 </div>
                 <p class="text-sm text-zinc-500">
-                    Dokploy non esegue comandi dentro il container via API, quindi «Esegui ricetta di avvio»
-                    resta fermo e Artisan una tantum si fa dal terminale. «Applica build e avvio» scrive le
-                    variabili <span class="font-mono">NIXPACKS_*</span> sull’application: al Deploy successivo
-                    Nixpacks le usa. Riscrive solo NIXPACKS_INSTALL_CMD, NIXPACKS_BUILD_CMD e
-                    NIXPACKS_START_CMD. Le altre variabili restano.
+                    {{ t('toolkit.recipe_help') }}
                 </p>
             </div>
 
             <div v-show="currentSection === 'schedulazioni'" class="mt-5 space-y-4">
                 <p class="text-sm text-zinc-500">
-                    Il crontab si gestisce sul container / su Dokploy. Qui puoi solo elencare
-                    <span class="font-mono">schedule:list</span>.
+                    {{ t('toolkit.schedule_help') }}
                 </p>
                 <div class="flex flex-wrap gap-2">
                     <button
@@ -927,8 +907,8 @@ watch(
                     >
                         {{
                             terminalWorkflow
-                                ? 'schedule:list · copia e terminale'
-                                : 'artisan schedule:list'
+                                ? `schedule:list · ${t('common.copy_and_terminal')}`
+                                : t('toolkit.schedule_button')
                         }}
                     </button>
                     <a
@@ -938,7 +918,7 @@ watch(
                         rel="noopener"
                         class="inline-flex rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-zinc-50"
                     >
-                        Terminale / cron su Dokploy
+                        {{ t('toolkit.schedule_terminal') }}
                     </a>
                 </div>
                 <p v-if="!ready" class="text-sm text-amber-700">{{ disabledHint }}</p>
@@ -955,8 +935,7 @@ watch(
 
             <div v-show="currentSection === 'code'" class="mt-5 space-y-4">
                 <p class="text-sm text-zinc-500">
-                    I worker si gestiscono sul container / Dokploy. Qui solo
-                    <span class="font-mono">queue:restart</span>.
+                    {{ t('toolkit.queue_help') }}
                 </p>
                 <button
                     type="button"
@@ -964,7 +943,7 @@ watch(
                     :disabled="!canRunCommands || running === 'artisan'"
                     @click="runCommand('artisan', 'queue:restart')"
                 >
-                    {{ terminalWorkflow ? 'queue:restart · copia e terminale' : 'queue:restart' }}
+                    {{ terminalWorkflow ? `queue:restart · ${t('common.copy_and_terminal')}` : 'queue:restart' }}
                 </button>
                 <p v-if="!ready" class="text-sm text-amber-700">{{ disabledHint }}</p>
                 <p v-else-if="terminalWorkflow" class="text-sm text-zinc-700">{{ overview?.exec_message }}</p>
@@ -978,8 +957,7 @@ watch(
 
             <div v-show="currentSection === 'log'" class="mt-5 space-y-4">
                 <p class="text-sm text-zinc-500">
-                    I log dell’application sono già su Dokploy. DokHosts non li duplica: apri la pagina
-                    application lì per consultarli.
+                    {{ t('toolkit.logs_help') }}
                 </p>
                 <a
                     v-if="canOpenDokploy && dokployUrl"
@@ -988,10 +966,10 @@ watch(
                     rel="noopener"
                     class="inline-flex rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800"
                 >
-                    Apri i log su Dokploy
+                    {{ t('toolkit.open_logs') }}
                 </a>
                 <p v-else class="text-sm text-amber-700">
-                    URL Dokploy non disponibile: manca l’application o i riferimenti progetto/ambiente.
+                    {{ t('toolkit.logs_missing') }}
                 </p>
             </div>
         </template>
@@ -1002,16 +980,13 @@ watch(
             @click.self="closeGitLabModal"
         >
             <div class="w-full max-w-lg rounded-xl border border-neutral-200 bg-white p-6 shadow-lg">
-                <h3 class="text-base font-semibold text-zinc-900">Token di gruppo (opzionale)</h3>
+                <h3 class="text-base font-semibold text-zinc-900">{{ t('toolkit.group_token') }}</h3>
                 <p class="mt-2 text-sm text-zinc-600">
-                    Se «Usa GitLab di Dokploy» non basta (più gruppi, token di servizio), salva un Personal Access Token con
-                    scope <span class="font-mono">read_api</span> o <span class="font-mono">read_repository</span>. Viene
-                    cifrato nel pannello e sincronizzato sull’env Dokploy di dokhosts. L’OAuth su Dokploy resta per
-                    clone/deploy; questo token serve solo al Toolkit.
+                    {{ t('toolkit.token_help') }}
                 </p>
                 <form class="mt-5 space-y-4" @submit.prevent="submitGitLabCredentials">
                     <div>
-                        <label class="block text-sm font-medium" for="gitlab-connect-url">URL GitLab</label>
+                        <label class="block text-sm font-medium" for="gitlab-connect-url">{{ t('toolkit.gitlab_url') }}</label>
                         <input
                             id="gitlab-connect-url"
                             v-model="gitlabConnectUrl"
@@ -1022,7 +997,7 @@ watch(
                         />
                     </div>
                     <div>
-                        <label class="block text-sm font-medium" for="gitlab-connect-token">Personal Access Token</label>
+                        <label class="block text-sm font-medium" for="gitlab-connect-token">{{ t('toolkit.pat') }}</label>
                         <input
                             id="gitlab-connect-token"
                             v-model="gitlabConnectToken"
@@ -1041,14 +1016,14 @@ watch(
                             :disabled="gitlabConnectLoading"
                             @click="closeGitLabModal"
                         >
-                            Annulla
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             type="submit"
                             class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                             :disabled="gitlabConnectLoading"
                         >
-                            {{ gitlabConnectLoading ? 'Verifica…' : 'Sincronizza GitLab per Toolkit' }}
+                            {{ gitlabConnectLoading ? t('toolkit.verify') : t('toolkit.sync') }}
                         </button>
                     </div>
                 </form>

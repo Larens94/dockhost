@@ -1,13 +1,12 @@
 <?php
 
-
 // StoreDomainRequest.php — StoreDomainRequest module.
 //
 // exports: StoreDomainRequest | StoreDomainRequest::authorize(): bool | StoreDomainRequest::rules(): array | StoreDomainRequest::messages(): array | StoreDomainRequest::withValidator(Validator $validator): void
 // used_by: app/Http/Controllers/DomainController.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace App\Http\Requests;
 
@@ -45,9 +44,9 @@ class StoreDomainRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'infra_slug.required' => 'Scegli un’infrastruttura creata da DokHosts.',
-            'infra_slug.exists' => 'Solo gli stack creati da DokHosts si possono assegnare.',
-            'stack.required' => 'Scegli uno stack applicativo (solo hosting, HTML, PHP, Laravel, …).',
+            'infra_slug.required' => __('panel.validation.infra_required'),
+            'infra_slug.exists' => __('panel.validation.infra_panel_only'),
+            'stack.required' => __('panel.validation.stack_required'),
         ];
     }
 
@@ -65,7 +64,7 @@ class StoreDomainRequest extends FormRequest
             if (! $infrastructure->isPanelManaged() || ! $infrastructure->canHostDomains()) {
                 $validator->errors()->add(
                     'infra_slug',
-                    'Solo gli stack creati da DokHosts si possono assegnare. infra-old resta fuori.',
+                    __('panel.validation.infra_panel_only_old'),
                 );
             }
 
@@ -78,14 +77,14 @@ class StoreDomainRequest extends FormRequest
             if ($engine === DatabaseEngine::Mysql->value && ! $infrastructure->canProvisionMysql()) {
                 $validator->errors()->add(
                     'create_database',
-                    'MariaDB non è disponibile su '.$infrastructure->slug.'. Deploya lo stack o scegli un’altra infra.',
+                    __('panel.validation.mariadb_unavailable', ['slug' => $infrastructure->slug]),
                 );
             }
 
             if ($engine === DatabaseEngine::Postgres->value && ! $infrastructure->canProvisionPostgres()) {
                 $validator->errors()->add(
                     'create_database',
-                    'Postgres non è disponibile su '.$infrastructure->slug.'. Deploya lo stack o scegli un’altra infra.',
+                    __('panel.validation.postgres_unavailable', ['slug' => $infrastructure->slug]),
                 );
             }
         });

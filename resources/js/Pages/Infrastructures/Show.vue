@@ -9,8 +9,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import ServicePicker from '../../Components/ServicePicker.vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 
 const props = defineProps({
     infrastructure: {
@@ -45,28 +48,28 @@ const stackCredentialRows = computed(() => {
 
     return [
         {
-            label: 'phpMyAdmin / MariaDB app',
+            label: t('infrastructures.credentials.phpmyadmin'),
             username: fromProp.mysql?.username || infra.mysql_admin_user,
             password: fromProp.mysql?.password || infra.mysql_admin_password,
             host: fromProp.mysql?.host || infra.mysql_host,
             port: fromProp.mysql?.port || infra.mysql_port,
         },
         {
-            label: 'MariaDB root',
+            label: t('infrastructures.credentials.root'),
             username: fromProp.mysql_root?.username || 'root',
             password: fromProp.mysql_root?.password || infra.mysql_root_password,
             host: fromProp.mysql_root?.host || infra.mysql_host,
             port: fromProp.mysql_root?.port || infra.mysql_port,
         },
         {
-            label: 'pgAdmin / Postgres',
+            label: t('infrastructures.credentials.pgadmin'),
             username: fromProp.postgres?.username || infra.postgres_admin_user,
             password: fromProp.postgres?.password || infra.postgres_admin_password,
             host: fromProp.postgres?.host || infra.postgres_host,
             port: fromProp.postgres?.port || infra.postgres_port,
         },
         {
-            label: 'SFTP bootstrap',
+            label: t('infrastructures.credentials.sftp'),
             username: fromProp.sftp?.username || 'infra',
             password: fromProp.sftp?.password || infra.sftp_bootstrap_password,
             host: fromProp.sftp?.host || infra.sftp_public_host,
@@ -74,7 +77,7 @@ const stackCredentialRows = computed(() => {
         },
         fromProp.pgadmin || (infra.pgadmin_email
             ? {
-                label: 'pgAdmin login',
+                label: t('infrastructures.credentials.pgadmin_login'),
                 username: infra.pgadmin_email,
                 password: infra.pgadmin_password,
                 host: infra.pgadmin_domain,
@@ -82,7 +85,7 @@ const stackCredentialRows = computed(() => {
             : null),
         fromProp.minio || (infra.minio_root_user
             ? {
-                label: 'MinIO console',
+                label: t('infrastructures.credentials.minio'),
                 username: infra.minio_root_user,
                 password: infra.minio_root_password,
                 host: infra.minio_domain,
@@ -91,24 +94,24 @@ const stackCredentialRows = computed(() => {
     ].filter((row) => row && (row.username || row.password));
 });
 
-const tabs = [
-    { id: 'generale', label: 'Generale' },
-    { id: 'servizi', label: 'Servizi' },
-    { id: 'domini', label: 'Domini' },
-    { id: 'accessi', label: 'Accessi' },
-    { id: 'volumi', label: 'Volumi' },
-    { id: 'dokploy', label: 'Dokploy' },
-    { id: 'pericolo', label: 'Pericolo' },
-];
+const tabs = computed(() => [
+    { id: 'generale', label: t('infrastructures.tabs.general') },
+    { id: 'servizi', label: t('infrastructures.tabs.services') },
+    { id: 'domini', label: t('infrastructures.tabs.domains') },
+    { id: 'accessi', label: t('infrastructures.tabs.access') },
+    { id: 'volumi', label: t('infrastructures.tabs.volumes') },
+    { id: 'dokploy', label: t('infrastructures.tabs.dokploy') },
+    { id: 'pericolo', label: t('infrastructures.tabs.danger') },
+]);
 
 const page = usePage();
-const allowedTabs = tabs.map((tab) => tab.id);
+const allowedTabs = computed(() => tabs.value.map((tab) => tab.id));
 
 const currentTab = computed(() => {
     const query = page.url.includes('?') ? page.url.slice(page.url.indexOf('?') + 1) : '';
     const tab = new URLSearchParams(query).get('tab');
 
-    return allowedTabs.includes(tab) ? tab : 'generale';
+    return allowedTabs.value.includes(tab) ? tab : 'generale';
 });
 
 const tabHref = (tab) => {
@@ -164,7 +167,7 @@ const uniqueDatabases = computed(() => {
         return true;
     });
 });
-const privilegeLabel = (privilege) => (privilege === 'select' ? 'Solo lettura (SELECT)' : 'Completi (ALL)');
+const privilegeLabel = (privilege) => (privilege === 'select' ? t('common.privilege_select') : t('common.privilege_all'));
 const showDeleteModal = ref(false);
 const showResetMysqlModal = ref(false);
 const hasDomains = computed(() => (props.infrastructure.domains_count ?? 0) > 0);
@@ -231,7 +234,7 @@ const resetMysqlDatadir = () => {
     });
 };
 
-const letsEncryptStatus = 'HTTPS Let’s Encrypt (richiede wildcard DNS già ok)';
+const letsEncryptStatus = computed(() => t('infrastructures.lets_encrypt'));
 
 const phpmyadminEnabled = props.services.some((service) => service.key === 'phpmyadmin' && service.enabled);
 const pgadminEnabled = props.services.some((service) => service.key === 'pgadmin' && service.enabled);
@@ -274,7 +277,7 @@ const toggleOptional = (key) => {
         const label = service?.label || key;
         if (
             !window.confirm(
-                `Disattivare ${label}? Il compose viene ridistribuito. I volumi Docker (${props.infrastructure.slug}_${key}) possono restare sul server.`,
+                t('infrastructures.disable_confirm', { label, volume: `${props.infrastructure.slug}_${key}` }),
             )
         ) {
             return;
@@ -304,36 +307,20 @@ const displayedError = computed(
     () => deploySnapshot.value?.last_error ?? props.infrastructure.last_error,
 );
 
-const statusLabel = (status) => {
-    const labels = {
-        deployed: 'Attivo',
-        ready: 'Attivo',
-        deploying: 'In distribuzione',
-        degraded: 'Degradato',
-        failed: 'Fallito',
-        pending: 'In attesa',
-    };
+const translatedOrRaw = (group, value) => {
+    if (!value) {
+        return value;
+    }
 
-    return labels[status] || status;
+    const key = `${group}.${value}`;
+    const translated = t(key);
+
+    return translated === key ? value : translated;
 };
 
-const containerStateLabel = (state) => {
-    const labels = {
-        running: 'in esecuzione',
-        healthy: 'in esecuzione',
-        restarting: 'in riavvio',
-        restart: 'in riavvio',
-        exited: 'uscito',
-        dead: 'uscito',
-        missing: 'assente',
-        pending: 'in coda',
-        done: 'completato',
-        error: 'errore',
-        idle: 'inattivo',
-    };
+const statusLabel = (status) => translatedOrRaw('status', status);
 
-    return labels[state] || state;
-};
+const containerStateLabel = (state) => translatedOrRaw('container', state);
 
 const findingClass = (severity) => {
     if (severity === 'error') {
@@ -383,7 +370,7 @@ const loadDeployStatus = async () => {
         const payload = await response.json();
 
         if (!response.ok) {
-            verifyError.value = payload.last_error || payload.message || 'Impossibile leggere lo stato da Dokploy.';
+            verifyError.value = payload.last_error || payload.message || t('toolkit.status_failed');
             deploySnapshot.value = payload;
 
             return;
@@ -391,7 +378,7 @@ const loadDeployStatus = async () => {
 
         deploySnapshot.value = payload;
     } catch {
-        verifyError.value = 'Impossibile leggere lo stato da Dokploy.';
+        verifyError.value = t('toolkit.status_failed');
     } finally {
         verifyingStatus.value = false;
     }
@@ -411,7 +398,7 @@ const loadInspect = async () => {
         const payload = await response.json();
 
         if (!response.ok) {
-            inspectError.value = payload.message || 'Impossibile leggere i log da Dokploy.';
+            inspectError.value = payload.message || t('toolkit.logs_failed');
             inspectSnapshot.value = payload;
 
             return;
@@ -419,7 +406,7 @@ const loadInspect = async () => {
 
         inspectSnapshot.value = payload;
     } catch {
-        inspectError.value = 'Impossibile leggere i log da Dokploy.';
+        inspectError.value = t('toolkit.logs_failed');
     } finally {
         inspecting.value = false;
     }
@@ -450,7 +437,7 @@ const sftpPublicHost = computed(() => {
 <template>
     <AppLayout
         :title="infrastructure.slug"
-        description="Un progetto Dokploy e uno stack Compose. Usa le schede per servizi, domini, accessi e volumi."
+        :description="t('infrastructures.show_description')"
     >
         <template #actions>
             <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
@@ -461,7 +448,7 @@ const sftpPublicHost = computed(() => {
                     rel="noopener"
                     class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
                 >
-                    Apri in Dokploy
+                    {{ t('infrastructures.open_dokploy') }}
                 </a>
                 <a
                     v-if="infrastructure.dokploy_compose_url"
@@ -470,18 +457,18 @@ const sftpPublicHost = computed(() => {
                     rel="noopener"
                     class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
                 >
-                    Compose / Deploy
+                    {{ t('infrastructures.compose_deploy') }}
                 </a>
                 <Link
                     href="/infrastructures"
                     class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
                 >
-                    Crea altra
+                    {{ t('infrastructures.create_another') }}
                 </Link>
             </div>
         </template>
 
-        <nav class="-mx-1 mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" aria-label="Sezioni">
+        <nav class="-mx-1 mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" :aria-label="t('common.sections')">
             <Link
                 v-for="tab in tabs"
                 :key="tab.id"
@@ -520,7 +507,7 @@ const sftpPublicHost = computed(() => {
                     rel="noopener"
                     class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
                 >
-                    Apri in Dokploy
+                    {{ t('infrastructures.open_dokploy') }}
                 </a>
                 <a
                     v-if="infrastructure.dokploy_compose_url"
@@ -529,16 +516,16 @@ const sftpPublicHost = computed(() => {
                     rel="noopener"
                     class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
                 >
-                    Compose / Deploy
+                    {{ t('infrastructures.compose_deploy') }}
                 </a>
             </div>
 
             <section class="min-w-0 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
                     <div class="min-w-0">
-                        <h2 class="text-base font-semibold">Stato Dokploy</h2>
+                        <h2 class="text-base font-semibold">{{ t('infrastructures.dokploy_status') }}</h2>
                         <p class="mt-1 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                            Confronta Deployments e Containers del compose, non lo stato salvato in locale.
+                            {{ t('infrastructures.dokploy_status_help') }}
                         </p>
                     </div>
                     <button
@@ -547,11 +534,11 @@ const sftpPublicHost = computed(() => {
                         :disabled="verifyingStatus"
                         @click="loadDeployStatus"
                     >
-                        {{ verifyingStatus ? 'Verifica…' : 'Verifica stato' }}
+                        {{ verifyingStatus ? t('common.verifying') : t('infrastructures.verify_status') }}
                     </button>
                 </div>
                 <div class="mt-4 min-w-0 rounded-lg bg-zinc-50 px-3 py-2">
-                    <p class="text-xs uppercase tracking-wide text-zinc-500">Ultimo deploy</p>
+                    <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('infrastructures.last_deploy') }}</p>
                     <p
                         v-if="deploySnapshot?.last_deployment"
                         class="mt-1 text-sm break-words [overflow-wrap:anywhere]"
@@ -565,13 +552,13 @@ const sftpPublicHost = computed(() => {
                         </span>
                     </p>
                     <p v-else class="mt-1 text-sm text-zinc-500">
-                        {{ verifyingStatus ? 'Lettura da Dokploy…' : 'Nessun deployment restituito.' }}
+                        {{ verifyingStatus ? t('common.reading_dokploy') : t('infrastructures.no_deployment') }}
                     </p>
                     <p
                         v-if="deploySnapshot?.compose_status"
                         class="mt-1 text-xs break-words text-zinc-500 [overflow-wrap:anywhere]"
                     >
-                        Compose: {{ containerStateLabel(deploySnapshot.compose_status) }}
+                        {{ t('common.compose') }}: {{ containerStateLabel(deploySnapshot.compose_status) }}
                     </p>
                 </div>
                 <ul v-if="deploySnapshot?.containers?.length" class="mt-4 grid min-w-0 gap-2 sm:grid-cols-2">
@@ -590,13 +577,13 @@ const sftpPublicHost = computed(() => {
                     </li>
                 </ul>
                 <p v-else-if="!verifyingStatus" class="mt-4 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                    Nessun container restituito da Dokploy.
+                    {{ t('infrastructures.no_containers') }}
                 </p>
             </section>
 
             <div class="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Stato</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('infrastructures.state') }}</p>
                     <p class="mt-2">
                         <span class="rounded-full px-2.5 py-0.5 text-[11px] font-medium" :class="statusClass">
                             {{ statusLabel(displayedStatus) }}
@@ -604,34 +591,32 @@ const sftpPublicHost = computed(() => {
                     </p>
                 </div>
                 <div class="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Slug</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.slug') }}</p>
                     <p class="mt-2 truncate text-sm font-medium">{{ infrastructure.slug }}</p>
                 </div>
                 <div class="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Progetto</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.project') }}</p>
                     <p class="mt-2 break-all text-sm font-medium">{{ infrastructure.dokploy_project_id || '—' }}</p>
                 </div>
                 <div class="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Environment</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.environment') }}</p>
                     <p class="mt-2 break-all text-sm font-medium">{{ infrastructure.dokploy_environment_id || '—' }}</p>
                 </div>
                 <div class="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Compose</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.compose') }}</p>
                     <p class="mt-2 break-all text-sm font-medium">{{ infrastructure.dokploy_compose_id || '—' }}</p>
                 </div>
                 <div class="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:col-span-2">
-                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">SFTP pubblico</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('infrastructures.public_sftp') }}</p>
                     <p class="mt-2 break-all text-sm font-medium">{{ sftpPublicHost }}</p>
-                    <p class="mt-1 text-xs break-words text-zinc-500">interno {{ infrastructure.sftp_host }}</p>
+                    <p class="mt-1 text-xs break-words text-zinc-500">{{ t('common.internal') }} {{ infrastructure.sftp_host }}</p>
                 </div>
             </div>
 
             <section class="min-w-0 rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-                <h2 class="text-base font-semibold text-amber-950">Endpoint e password</h2>
+                <h2 class="text-base font-semibold text-amber-950">{{ t('infrastructures.endpoints') }}</h2>
                 <p class="mt-1 mb-5 text-sm break-words text-amber-900 [overflow-wrap:anywhere]">
-                    In chiaro solo in sviluppo. In phpMyAdmin usa
-                    <span class="font-mono">infra</span>, non root: root dalla GUI spesso è rifiutato
-                    (connessione da un altro container).
+                    {{ t('infrastructures.endpoints_help') }}
                 </p>
                 <ul class="mb-5 space-y-2 text-sm text-amber-950">
                     <li
@@ -689,9 +674,9 @@ const sftpPublicHost = computed(() => {
             <div class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h2 class="text-base font-semibold">Log Dokploy</h2>
+                        <h2 class="text-base font-semibold">{{ t('infrastructures.logs') }}</h2>
                         <p class="mt-1 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                            Stato compose, container e log live (mysql-grants, MariaDB, phpMyAdmin) via API Dokploy.
+                            {{ t('infrastructures.logs_help') }}
                         </p>
                     </div>
                     <button
@@ -700,7 +685,7 @@ const sftpPublicHost = computed(() => {
                         :disabled="inspecting"
                         @click="loadInspect"
                     >
-                        {{ inspecting ? 'Lettura…' : 'Aggiorna log' }}
+                        {{ inspecting ? t('common.reading') : t('infrastructures.refresh_logs') }}
                     </button>
                 </div>
                 <p
@@ -737,22 +722,21 @@ const sftpPublicHost = computed(() => {
                 <p v-if="log.error" class="mt-2 text-sm text-red-700">{{ log.error }}</p>
                 <pre
                     class="mt-3 max-h-80 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs whitespace-pre-wrap text-zinc-100"
-                    >{{ log.body || '(log vuoti)' }}</pre
+                    >{{ log.body || t('common.empty_logs') }}</pre
                 >
             </section>
             <p
                 v-if="!inspecting && inspectSnapshot && !(inspectSnapshot.logs || []).length"
                 class="text-sm text-zinc-500"
             >
-                Nessun log restituito per i servizi monitorati.
+                {{ t('infrastructures.no_logs') }}
             </p>
         </section>
 
         <section v-show="currentTab === 'servizi'" class="min-w-0 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-            <h2 class="text-base font-semibold">Modifica servizi</h2>
+            <h2 class="text-base font-semibold">{{ t('infrastructures.edit_services') }}</h2>
             <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                Clicca una card per aggiungere un servizio: compose, deploy e domini pubblici (phpMyAdmin, pgAdmin,
-                MinIO) partono subito. Togliere un servizio chiede conferma. I volumi restano sul server.
+                {{ t('infrastructures.edit_services_help') }}
             </p>
             <form class="space-y-4" @submit.prevent="submit">
                 <ServicePicker
@@ -769,7 +753,7 @@ const sftpPublicHost = computed(() => {
                     class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                     :disabled="form.processing || !infrastructure.dokploy_compose_id"
                 >
-                    Aggiorna stack
+                    {{ t('infrastructures.update_stack') }}
                 </button>
             </form>
         </section>
@@ -778,15 +762,14 @@ const sftpPublicHost = computed(() => {
             <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <h2 class="text-base font-semibold">phpMyAdmin</h2>
                 <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                    Serve un record DNS wildcard una tantum
-                    (<span class="font-medium text-zinc-700"
+                    {{ t('infrastructures.phpmyadmin_before') }}
+                    <span class="font-medium text-zinc-700"
                         >*.{{
                             phpmyadmin_suggested_host.split('.').slice(1).join('.') || 'cloud.silicoreautomation.com'
                         }}</span
-                    >); non usare l'URL della dashboard Dokploy. Il pannello crea da solo
+                    >{{ t('infrastructures.phpmyadmin_mid') }}
                     <span class="font-medium break-all text-zinc-700">{{ phpmyadmin_suggested_host }}</span>
-                    sul servizio phpmyadmin, porta 80, HTTPS Let’s Encrypt. Dopo il dominio il compose
-                    viene ridistribuito: senza quello Traefik risponde 404 e il certificato non parte.
+                    {{ t('infrastructures.phpmyadmin_after') }}
                 </p>
                 <div v-if="infrastructure.phpmyadmin_domain" class="space-y-1">
                     <p class="text-sm break-all">
@@ -803,7 +786,7 @@ const sftpPublicHost = computed(() => {
                 </div>
                 <form v-else-if="phpmyadminEnabled" class="space-y-3" @submit.prevent="attachPhpmyadmin">
                     <p class="text-sm break-words text-zinc-600">
-                        Hostname previsto:
+                        {{ t('common.expected_host') }}
                         <span class="font-medium break-all text-zinc-900">{{ phpmyadmin_suggested_host }}</span>
                     </p>
                     <p v-if="phpmyadminForm.errors.phpmyadmin" class="text-sm break-words text-red-600 [overflow-wrap:anywhere]">
@@ -814,22 +797,22 @@ const sftpPublicHost = computed(() => {
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="phpmyadminForm.processing || !infrastructure.dokploy_compose_id"
                     >
-                        Collega phpMyAdmin
+                        {{ t('infrastructures.link_phpmyadmin') }}
                     </button>
                 </form>
                 <p v-else class="text-sm break-words text-zinc-500">
-                    Attiva phpMyAdmin e aggiorna lo stack per collegare il dominio.
+                    {{ t('infrastructures.enable_phpmyadmin') }}
                 </p>
             </section>
 
             <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <h2 class="text-base font-semibold">pgAdmin</h2>
                 <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                    GUI Postgres. Hostname
+                    {{ t('infrastructures.pgadmin_before') }}
                     <span class="font-medium break-all text-zinc-700">{{ pgadmin_suggested_host }}</span>
-                    sul servizio pgadmin, porta 80, HTTPS Let’s Encrypt. Login:
+                    {{ t('infrastructures.pgadmin_after') }}
                     <span class="font-medium text-zinc-700">{{
-                        infrastructure.pgadmin_email || 'generato allo stack'
+                        infrastructure.pgadmin_email || t('common.generated_on_stack')
                     }}</span>.
                 </p>
                 <div v-if="infrastructure.pgadmin_domain" class="space-y-1">
@@ -847,7 +830,7 @@ const sftpPublicHost = computed(() => {
                 </div>
                 <form v-else-if="pgadminEnabled" class="space-y-3" @submit.prevent="attachPgadmin">
                     <p class="text-sm break-words text-zinc-600">
-                        Hostname previsto:
+                        {{ t('common.expected_host') }}
                         <span class="font-medium break-all text-zinc-900">{{ pgadmin_suggested_host }}</span>
                     </p>
                     <p v-if="pgadminForm.errors.pgadmin" class="text-sm break-words text-red-600 [overflow-wrap:anywhere]">
@@ -858,20 +841,20 @@ const sftpPublicHost = computed(() => {
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="pgadminForm.processing || !infrastructure.dokploy_compose_id"
                     >
-                        Collega pgAdmin
+                        {{ t('infrastructures.link_pgadmin') }}
                     </button>
                 </form>
                 <p v-else class="text-sm break-words text-zinc-500">
-                    Attiva pgAdmin e aggiorna lo stack per collegare il dominio.
+                    {{ t('infrastructures.enable_pgadmin') }}
                 </p>
             </section>
 
             <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <h2 class="text-base font-semibold">MinIO</h2>
                 <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                    Console pubblica
+                    {{ t('infrastructures.minio_before') }}
                     <span class="font-medium break-all text-zinc-700">{{ minio_suggested_host }}</span>
-                    (console 9001, HTTPS Let’s Encrypt via HTTP-01 su :80). API interna
+                    {{ t('infrastructures.minio_after') }}
                     <span class="font-medium text-zinc-700">{{ infrastructure.slug }}-minio:9000</span>.
                 </p>
                 <div v-if="infrastructure.minio_domain" class="space-y-1">
@@ -889,7 +872,7 @@ const sftpPublicHost = computed(() => {
                 </div>
                 <form v-else-if="minioEnabled" class="space-y-3" @submit.prevent="attachMinio">
                     <p class="text-sm break-words text-zinc-600">
-                        Hostname previsto:
+                        {{ t('common.expected_host') }}
                         <span class="font-medium break-all text-zinc-900">{{ minio_suggested_host }}</span>
                     </p>
                     <p v-if="minioForm.errors.minio" class="text-sm break-words text-red-600 [overflow-wrap:anywhere]">
@@ -900,22 +883,20 @@ const sftpPublicHost = computed(() => {
                         class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                         :disabled="minioForm.processing || !infrastructure.dokploy_compose_id"
                     >
-                        Collega console MinIO
+                        {{ t('infrastructures.link_minio') }}
                     </button>
                 </form>
                 <p v-else class="text-sm break-words text-zinc-500">
-                    Attiva MinIO e aggiorna lo stack per collegare il dominio.
+                    {{ t('infrastructures.enable_minio') }}
                 </p>
             </section>
         </div>
 
         <div v-show="currentTab === 'accessi'" class="min-w-0 space-y-6">
             <section class="rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-                <h2 class="text-base font-semibold text-amber-950">Credenziali stack (sviluppo)</h2>
+                <h2 class="text-base font-semibold text-amber-950">{{ t('infrastructures.stack_credentials') }}</h2>
                 <p class="mt-1 mb-4 text-sm text-amber-900">
-                    In phpMyAdmin usa
-                    <span class="font-mono">infra</span>
-                    (prima riga), non root. Root dalla GUI arriva da un altro IP e MariaDB lo rifiuta.
+                    {{ t('infrastructures.stack_credentials_help') }}
                 </p>
                 <ul class="space-y-2 text-sm text-amber-950">
                     <li
@@ -935,10 +916,9 @@ const sftpPublicHost = computed(() => {
             </section>
 
             <section class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">Utenti database</h2>
+                <h2 class="text-base font-semibold">{{ t('domains.show.db_users') }}</h2>
                 <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                    Utenti extra su un database già presente su questo MariaDB/Postgres condiviso. Privilegi: completi
-                    (ALL) o sola lettura (SELECT). Non si crea un container nuovo.
+                    {{ t('infrastructures.db_users_help') }}
                 </p>
                 <ul v-if="infrastructure.database_accounts?.length" class="mb-4 space-y-2">
                     <li
@@ -954,19 +934,16 @@ const sftpPublicHost = computed(() => {
                     </li>
                 </ul>
                 <p v-else class="mb-4 text-sm text-zinc-500">
-                    Nessun database di sito su questa infra. Le select restano vuote finché non crei un cliente,
-                    uno spazio e un dominio con «Crea database». L’utente stack
-                    <span class="font-mono">infra</span>
-                    è nel riquadro credenziali sopra (phpMyAdmin).
+                    {{ t('infrastructures.no_site_db') }}
                 </p>
                 <p v-if="!uniqueDatabases.length" class="mb-4">
                     <Link href="/customers" class="text-sm font-medium text-zinc-900 underline underline-offset-2">
-                        Vai a Clienti
+                        {{ t('common.customers_link') }}
                     </Link>
                 </p>
                 <form v-if="uniqueDatabases.length" class="grid gap-3 sm:grid-cols-2" @submit.prevent="createDatabaseUser">
                     <div>
-                        <label class="block text-xs font-medium" for="infra-db-account">Database</label>
+                        <label class="block text-xs font-medium" for="infra-db-account">{{ t('common.database') }}</label>
                         <select
                             id="infra-db-account"
                             v-model="databaseUserForm.database_account_id"
@@ -982,15 +959,15 @@ const sftpPublicHost = computed(() => {
                         </p>
                     </div>
                     <div>
-                        <label class="block text-xs font-medium" for="infra-db-priv">Privilegi</label>
+                        <label class="block text-xs font-medium" for="infra-db-priv">{{ t('common.privileges') }}</label>
                         <select
                             id="infra-db-priv"
                             v-model="databaseUserForm.privilege"
                             required
                             class="mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10"
                         >
-                            <option value="all">Completi (ALL)</option>
-                            <option value="select">Solo lettura (SELECT)</option>
+                            <option value="all">{{ t('common.privilege_all') }}</option>
+                            <option value="select">{{ t('common.privilege_select') }}</option>
                         </select>
                         <p v-if="databaseUserForm.errors.privilege" class="mt-1 text-sm text-red-600">
                             {{ databaseUserForm.errors.privilege }}
@@ -1002,17 +979,16 @@ const sftpPublicHost = computed(() => {
                             class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                             :disabled="databaseUserForm.processing || !uniqueDatabases.length"
                         >
-                            Crea utente database
+                            {{ t('domains.show.create_db_user') }}
                         </button>
                     </div>
                 </form>
             </section>
 
             <section class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">Utenti SFTP</h2>
+                <h2 class="text-base font-semibold">{{ t('infrastructures.sftp_users') }}</h2>
                 <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                    Utenti atmoz/sftp di questo stack. FTPS arriverà dopo. Home sotto lo storage del dominio; chroot è
-                    implicito.
+                    {{ t('infrastructures.sftp_help') }}
                 </p>
                 <ul v-if="infrastructure.sftp_users?.length" class="mb-4 space-y-2">
                     <li
@@ -1026,7 +1002,7 @@ const sftpPublicHost = computed(() => {
                     </li>
                 </ul>
                 <p v-if="!(infrastructure.domains || []).length" class="mb-4 text-sm text-zinc-500">
-                    Nessun dominio su questa infra: la select home SFTP è vuota. Crea prima un dominio su questo stack.
+                    {{ t('infrastructures.no_domains') }}
                 </p>
                 <form
                     v-if="(infrastructure.domains || []).length"
@@ -1034,7 +1010,7 @@ const sftpPublicHost = computed(() => {
                     @submit.prevent="createSftpUser"
                 >
                     <div>
-                        <label class="block text-xs font-medium" for="infra-sftp-domain">Dominio (home)</label>
+                        <label class="block text-xs font-medium" for="infra-sftp-domain">{{ t('infrastructures.domain_home') }}</label>
                         <select
                             id="infra-sftp-domain"
                             v-model="sftpUserForm.domain_id"
@@ -1055,7 +1031,7 @@ const sftpPublicHost = computed(() => {
                             class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                             :disabled="sftpUserForm.processing || !(infrastructure.domains || []).length"
                         >
-                            Crea utente SFTP
+                            {{ t('domains.show.create_sftp') }}
                         </button>
                     </div>
                 </form>
@@ -1063,37 +1039,33 @@ const sftpPublicHost = computed(() => {
         </div>
 
         <section v-show="currentTab === 'volumi'" class="min-w-0 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-            <h2 class="text-base font-semibold">Volumi di questa infrastruttura</h2>
+            <h2 class="text-base font-semibold">{{ t('infrastructures.volumes') }}</h2>
             <p class="mt-2 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                Vivono nello stack Compose di {{ infrastructure.slug }}, non sull'applicazione DokHosts. Il pannello
-                scrive users.conf e le cartelle via {{ infrastructure.slug }}-sftp-sync (rete storage sulle infra
-                nuove).
+                {{ t('infrastructures.volumes_help', { slug: infrastructure.slug, sync: `${infrastructure.slug}-sftp-sync` }) }}
             </p>
             <ul class="mt-4 space-y-2 text-sm text-zinc-700">
                 <li class="break-all">
                     <span class="font-medium">{{ infrastructure.slug }}_data</span>
-                    <span class="text-zinc-500"> — storage clienti e home SFTP (/data)</span>
+                    <span class="text-zinc-500"> — {{ t('infrastructures.volume_data') }}</span>
                 </li>
                 <li class="break-all">
-                    <span class="font-medium">{{ infrastructure.mariadb_volume_name || 'mariadb (default compose)' }}</span>
-                    <span class="text-zinc-500"> — datadir MariaDB. «Aggiorna stack» non lo ricrea.</span>
+                    <span class="font-medium">{{ infrastructure.mariadb_volume_name || t('common.mariadb_default_volume') }}</span>
+                    <span class="text-zinc-500"> — {{ t('infrastructures.volume_mariadb') }}</span>
                 </li>
                 <li class="break-all">
                     <span class="font-medium">postgres / sftp_config</span>
-                    <span class="text-zinc-500"> — volumi dello stack Dokploy (non riusati al ricreo dello stack)</span>
+                    <span class="text-zinc-500"> — {{ t('infrastructures.volume_other') }}</span>
                 </li>
             </ul>
         </section>
 
         <section v-show="currentTab === 'pericolo'" class="min-w-0 rounded-xl border border-red-200 bg-white p-6 shadow-sm">
-            <h2 class="text-base font-semibold text-red-800">Zona pericolosa</h2>
+            <h2 class="text-base font-semibold text-red-800">{{ t('common.danger_zone') }}</h2>
             <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
-                Ferma i container, elimina compose e progetto Dokploy, toglie i volumi dello stack
-                e i volumi Docker non usati rimasti da deploy precedenti dello stesso slug.
-                I clienti non vengono cancellati.
+                {{ t('infrastructures.danger_help') }}
             </p>
             <p v-if="hasDomains" class="mb-4 text-sm break-words text-red-600">
-                Ci sono domini collegati. Scollegali prima di eliminare l'infrastruttura.
+                {{ t('infrastructures.domains_block') }}
             </p>
             <p v-if="deleteForm.errors.slug" class="mb-4 text-sm break-words text-red-600">{{ deleteForm.errors.slug }}</p>
             <div class="flex flex-wrap gap-2">
@@ -1102,7 +1074,7 @@ const sftpPublicHost = computed(() => {
                     class="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
                     @click="openResetMysqlModal"
                 >
-                    Ricrea datadir MariaDB
+                    {{ t('infrastructures.reset_mysql') }}
                 </button>
                 <button
                     type="button"
@@ -1110,7 +1082,7 @@ const sftpPublicHost = computed(() => {
                     :disabled="hasDomains"
                     @click="openDeleteModal"
                 >
-                    Elimina
+                    {{ t('common.delete') }}
                 </button>
             </div>
         </section>
@@ -1121,15 +1093,14 @@ const sftpPublicHost = computed(() => {
             @click.self="closeResetMysqlModal"
         >
             <div class="w-full max-w-lg rounded-xl border border-neutral-200 bg-white p-6 shadow-lg">
-                <h3 class="text-base font-semibold text-amber-950">Ricreare il datadir MariaDB di {{ infrastructure.slug }}?</h3>
+                <h3 class="text-base font-semibold text-amber-950">{{ t('infrastructures.reset_title', { slug: infrastructure.slug }) }}</h3>
                 <p class="mt-2 text-sm break-words text-zinc-600 [overflow-wrap:anywhere]">
-                    Lo stack resta. MariaDB parte su un volume nuovo così MYSQL_ROOT_HOST e le password del
-                    pannello vengono applicate. I database dei siti su questo MariaDB si perdono.
+                    {{ t('infrastructures.reset_body') }}
                 </p>
                 <form class="mt-5 space-y-4" @submit.prevent="resetMysqlDatadir">
                     <div>
                         <label class="block text-sm font-medium" for="confirm-mysql-slug">
-                            Per confermare, digita
+                            {{ t('common.confirm_lead') }}
                             <span class="font-semibold">{{ infrastructure.slug }}</span>
                         </label>
                         <input
@@ -1150,14 +1121,14 @@ const sftpPublicHost = computed(() => {
                             :disabled="resetMysqlForm.processing"
                             @click="closeResetMysqlModal"
                         >
-                            Annulla
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             type="submit"
                             class="rounded-lg bg-amber-800 px-3.5 py-2 text-sm font-medium text-white hover:bg-amber-900 disabled:opacity-50"
                             :disabled="resetMysqlForm.processing || !resetMysqlSlugMatches"
                         >
-                            Ricrea datadir
+                            {{ t('infrastructures.reset_submit') }}
                         </button>
                     </div>
                 </form>
@@ -1170,15 +1141,14 @@ const sftpPublicHost = computed(() => {
             @click.self="closeDeleteModal"
         >
             <div class="w-full max-w-lg rounded-xl border border-neutral-200 bg-white p-6 shadow-lg">
-                <h3 class="text-base font-semibold text-red-800">Eliminare {{ infrastructure.slug }}?</h3>
+                <h3 class="text-base font-semibold text-red-800">{{ t('infrastructures.delete_title', { slug: infrastructure.slug }) }}</h3>
                 <p class="mt-2 text-sm break-words text-zinc-600 [overflow-wrap:anywhere]">
-                    Ferma i container, elimina compose, progetto e volumi Docker di questo slug. Non si può
-                    annullare.
+                    {{ t('infrastructures.delete_body') }}
                 </p>
                 <form class="mt-5 space-y-4" @submit.prevent="destroyInfrastructure">
                     <div>
                         <label class="block text-sm font-medium" for="confirm-slug">
-                            Per confermare, digita
+                            {{ t('common.confirm_lead') }}
                             <span class="font-semibold">{{ infrastructure.slug }}</span>
                         </label>
                         <input
@@ -1197,14 +1167,14 @@ const sftpPublicHost = computed(() => {
                             :disabled="deleteForm.processing"
                             @click="closeDeleteModal"
                         >
-                            Annulla
+                            {{ t('common.cancel') }}
                         </button>
                         <button
                             type="submit"
                             class="rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
                             :disabled="deleteForm.processing || !slugMatches"
                         >
-                            Elimina
+                            {{ t('common.delete') }}
                         </button>
                     </div>
                 </form>

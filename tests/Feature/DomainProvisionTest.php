@@ -7,6 +7,7 @@
 // rules:   Laravel attach env uses SESSION_DRIVER=database and SESSION_DOMAIN of the site fqdn. PHP stack omits SESSION_DRIVER.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_session_cookie | Laravel provision asserts database session cookie
+//          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Attach writes composer install --no-scripts
 // message:
 
 namespace Tests\Feature;
@@ -233,6 +234,7 @@ class DomainProvisionTest extends TestCase
             && str_contains((string) $request['env'], 'DOKHOSTS_STORAGE_PATH=')
             && str_contains((string) $request['env'], 'DOKHOSTS_INFRA_SLUG=infra1')
             && str_contains((string) $request['env'], 'DB_HOST=infra1-mariadb')
+            && str_contains((string) $request['env'], 'NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci')
             && preg_match('/^APP_KEY=base64:[A-Za-z0-9+\/=]+$/m', (string) $request['env']) === 1
             && ! str_contains((string) $request['env'], 'B2_')
             && ! str_contains((string) $request['env'], 'STRIPE_')
@@ -295,6 +297,7 @@ class DomainProvisionTest extends TestCase
             && str_contains((string) $request['env'], 'DOKHOSTS_INFRA_SLUG=infra1')
             && str_contains((string) $request['env'], 'DB_HOST=infra1-mariadb')
             && str_contains((string) $request['env'], 'DB_DATABASE=')
+            && str_contains((string) $request['env'], 'NIXPACKS_INSTALL_CMD=composer install --no-dev --optimize-autoloader --no-interaction --no-scripts')
             && ! str_contains((string) $request['env'], 'APP_KEY=')
             && ! str_contains((string) $request['env'], 'SESSION_DRIVER=')
             && ! str_contains((string) $request['env'], 'CACHE_STORE=')
@@ -329,7 +332,8 @@ class DomainProvisionTest extends TestCase
             && str_contains((string) $request['env'], 'DOKHOSTS_STORAGE_PATH=')
             && str_contains((string) $request['env'], 'DOKHOSTS_INFRA_SLUG=infra1')
             && ! str_contains((string) $request['env'], 'APP_KEY=')
-            && ! str_contains((string) $request['env'], 'DB_HOST='));
+            && ! str_contains((string) $request['env'], 'DB_HOST=')
+            && ! str_contains((string) $request['env'], 'NIXPACKS_INSTALL_CMD='));
     }
 
     public function test_laravel_env_includes_redis_and_minio_when_infra_has_them(): void

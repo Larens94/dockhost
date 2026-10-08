@@ -30,7 +30,7 @@ class PanelGitLabCredentialController extends Controller
 
         if (! $validator->validate($url, $token)) {
             throw ValidationException::withMessages([
-                'token' => 'GitLab ha rifiutato il token (controlla URL, scope read_api/read_repository e scadenza).',
+                'token' => __('panel.validation.gitlab_rejected'),
             ]);
         }
 
@@ -39,10 +39,10 @@ class PanelGitLabCredentialController extends Controller
 
         return response()->json([
             'ok' => true,
-            'message' => 'Credenziali GitLab salvate per il pannello.',
+            'message' => __('panel.gitlab.saved'),
             'sync' => $syncResult,
             'redeploy_hint' => $syncResult['status'] === 'synced'
-                ? 'Env aggiornato su Dokploy: ridistribuisci dokhosts se il container non ha ancora GITLAB_TOKEN.'
+                ? __('panel.gitlab.redeploy_hint')
                 : null,
         ]);
     }

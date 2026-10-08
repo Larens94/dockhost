@@ -41,7 +41,7 @@ class TwoFactorAuthenticationController extends Controller
         $user = $request->user();
 
         if ($user->hasTwoFactorEnabled()) {
-            return back()->withErrors(['two_factor' => 'L’autenticazione a due fattori è già attiva.']);
+            return back()->withErrors(['two_factor' => __('panel.account_2fa.already_enabled')]);
         }
 
         $secret = Totp::generateSecret();
@@ -68,13 +68,13 @@ class TwoFactorAuthenticationController extends Controller
         $encrypted = $request->session()->get('two_factor.pending_secret');
 
         if (! is_string($encrypted) || $encrypted === '') {
-            return back()->withErrors(['code' => 'Avvia prima la configurazione 2FA.']);
+            return back()->withErrors(['code' => __('panel.account_2fa.start_first')]);
         }
 
         $secret = Crypt::decryptString($encrypted);
 
         if (! Totp::verify($secret, $validated['code'])) {
-            return back()->withErrors(['code' => 'Codice non valido. Riprova con l’app autenticatore.']);
+            return back()->withErrors(['code' => __('panel.account_2fa.invalid_confirm')]);
         }
 
         $plainRecovery = TwoFactorRecoveryCodes::generatePlain();
@@ -95,7 +95,7 @@ class TwoFactorAuthenticationController extends Controller
 
         return redirect()
             ->route('account.two-factor.show')
-            ->with('success', 'Autenticazione a due fattori attivata. Conserva i codici di recupero.');
+            ->with('success', __('panel.account_2fa.enabled'));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -109,14 +109,14 @@ class TwoFactorAuthenticationController extends Controller
         ]);
 
         if (! Hash::check($validated['password'], $user->password)) {
-            return back()->withErrors(['password' => 'Password non corretta.']);
+            return back()->withErrors(['password' => __('panel.account_2fa.bad_password')]);
         }
 
         if ($user->hasTwoFactorEnabled()) {
             $code = $validated['code'] ?? '';
 
             if ($code === '' || ! Totp::verify($user->twoFactorSecretPlain(), $code)) {
-                return back()->withErrors(['code' => 'Inserisci un codice TOTP valido per disattivare.']);
+                return back()->withErrors(['code' => __('panel.account_2fa.invalid_disable')]);
             }
         }
 
@@ -130,6 +130,6 @@ class TwoFactorAuthenticationController extends Controller
 
         return redirect()
             ->route('account.two-factor.show')
-            ->with('success', 'Autenticazione a due fattori disattivata.');
+            ->with('success', __('panel.account_2fa.disabled'));
     }
 }

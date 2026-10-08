@@ -64,13 +64,13 @@ class DomainMemberController extends Controller
 
         if ($member->isAdmin()) {
             return back()->withErrors([
-                'email' => 'Gli amministratori vedono già tutti gli hosting.',
+                'email' => __('panel.members.admins_see_all'),
             ]);
         }
 
         if ($domain->members()->whereKey($member->id)->exists()) {
             return back()->withErrors([
-                'email' => 'Questo utente ha già accesso a questo hosting.',
+                'email' => __('panel.members.already'),
             ]);
         }
 
@@ -89,13 +89,15 @@ class DomainMemberController extends Controller
         }
 
         $roleLabel = $role->label();
-        $message = "Accesso concesso a {$member->email} ({$roleLabel}) per {$domain->fqdn}.";
+        $message = __('panel.members.granted', [
+            'email' => $member->email,
+            'role' => $roleLabel,
+            'fqdn' => $domain->fqdn,
+        ]);
 
-        if ($created) {
-            $message .= ' Email di invito inviata (link per impostare la password).';
-        } else {
-            $message .= ' Email di notifica accesso inviata.';
-        }
+        $message .= ' '.($created
+            ? __('panel.members.invite_sent')
+            : __('panel.members.notice_sent'));
 
         return back()->with('success', $message);
     }
@@ -116,7 +118,7 @@ class DomainMemberController extends Controller
         if ($currentRole === DomainMemberRole::Owner && $newRole !== DomainMemberRole::Owner) {
             if ($this->isLastOwner($domain, $user)) {
                 return back()->withErrors([
-                    'role' => 'Deve restare almeno un proprietario su questo hosting.',
+                    'role' => __('panel.members.last_owner'),
                 ]);
             }
         }
@@ -130,7 +132,10 @@ class DomainMemberController extends Controller
             'to_role' => $newRole->value,
         ]);
 
-        return back()->with('success', "Ruolo aggiornato per {$user->email}: {$newRole->label()}.");
+        return back()->with('success', __('panel.members.role_updated', [
+            'email' => $user->email,
+            'role' => $newRole->label(),
+        ]));
     }
 
     public function destroy(Domain $domain, User $user, AuditLogger $audit): RedirectResponse
@@ -152,7 +157,7 @@ class DomainMemberController extends Controller
 
         if ($user->domainMemberRole($domain) === DomainMemberRole::Owner && $this->isLastOwner($domain, $user)) {
             return back()->withErrors([
-                'role' => 'Deve restare almeno un proprietario su questo hosting.',
+                'role' => __('panel.members.last_owner'),
             ]);
         }
 
@@ -163,7 +168,7 @@ class DomainMemberController extends Controller
             'member_email' => $user->email,
         ]);
 
-        return back()->with('success', "Accesso rimosso per {$user->email}.");
+        return back()->with('success', __('panel.members.access_removed', ['email' => $user->email]));
     }
 
     private function isLastOwner(Domain $domain, User $user): bool

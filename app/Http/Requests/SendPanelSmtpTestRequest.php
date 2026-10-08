@@ -34,8 +34,8 @@ class SendPanelSmtpTestRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'test_email.required' => 'Inserisci l’email di prova.',
-            'test_email.email' => 'L’email di prova non è valida.',
+            'test_email.required' => __('panel.validation.test_email_required'),
+            'test_email.email' => __('panel.validation.test_email_invalid'),
         ];
     }
 }

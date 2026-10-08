@@ -12,7 +12,10 @@
 <script setup>
 import { computed, watch } from 'vue';
 import { useForm, usePage } from '@inertiajs/vue3';
+import { usePanelTranslations } from '../../../composables/usePanelTranslations';
 import AppLayout from '../../../Layouts/AppLayout.vue';
+
+const { t } = usePanelTranslations();
 
 const props = defineProps({
     settings: {
@@ -83,8 +86,8 @@ const sendTestMail = () => {
 
 <template>
     <AppLayout
-        title="SMTP principale"
-        description="Configura l’invio email del pannello DokHosts. I valori vengono salvati nel database e sincronizzati sull’environment Dokploy dell’application dokhosts (solo variabili MAIL_*)."
+        :title="t('smtp.title')"
+        :description="t('smtp.description')"
     >
         <div
             v-if="flashSuccess"
@@ -100,17 +103,17 @@ const sendTestMail = () => {
         </div>
 
         <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-            <h2 class="text-base font-semibold">Server SMTP</h2>
+            <h2 class="text-base font-semibold">{{ t('smtp.server') }}</h2>
             <p class="mt-1 text-sm text-neutral-500">
-                La password già presente su Dokploy resta invariata finché non salvi questo modulo con una nuova password.
+                {{ t('smtp.password_help') }}
             </p>
 
             <form class="mt-6 space-y-5" @submit.prevent="submit">
                 <div>
-                    <label class="block text-sm font-medium" for="smtp-preset">Provider</label>
+                    <label class="block text-sm font-medium" for="smtp-preset">{{ t('smtp.provider') }}</label>
                     <select id="smtp-preset" v-model="form.provider_preset" :class="inputClass">
-                        <option value="ovh">OVH (ssl0.ovh.net:465, SSL)</option>
-                        <option value="generic">SMTP generico</option>
+                        <option value="ovh">{{ t('smtp.ovh') }}</option>
+                        <option value="generic">{{ t('smtp.generic') }}</option>
                     </select>
                     <p v-if="form.errors.provider_preset" class="mt-1 text-sm text-red-600">
                         {{ form.errors.provider_preset }}
@@ -154,9 +157,9 @@ const sendTestMail = () => {
                         :disabled="genericFieldsLocked"
                         :class="[inputClass, genericFieldsLocked ? 'bg-neutral-50 text-neutral-600' : '']"
                     >
-                        <option value="tls">TLS (STARTTLS)</option>
-                        <option value="ssl">SSL</option>
-                        <option value="null">Nessuna</option>
+                        <option value="tls">{{ t('smtp.tls') }}</option>
+                        <option value="ssl">{{ t('smtp.ssl') }}</option>
+                        <option value="null">{{ t('common.none') }}</option>
                     </select>
                     <p v-if="form.errors.mail_encryption" class="mt-1 text-sm text-red-600">
                         {{ form.errors.mail_encryption }}
@@ -176,7 +179,7 @@ const sendTestMail = () => {
                         v-model="form.mail_password"
                         type="password"
                         autocomplete="new-password"
-                        :placeholder="settings.password_configured ? 'Lascia vuoto per mantenere la password attuale' : 'Password SMTP'"
+                        :placeholder="settings.password_configured ? t('smtp.password_keep') : t('smtp.password_new')"
                         :class="inputClass"
                     />
                     <p v-if="form.errors.mail_password" class="mt-1 text-sm text-red-600">{{ form.errors.mail_password }}</p>
@@ -209,7 +212,7 @@ const sendTestMail = () => {
                         class="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
                         :disabled="form.processing"
                     >
-                        {{ form.processing ? 'Salvataggio…' : 'Salva SMTP' }}
+                        {{ form.processing ? t('common.saving') : t('smtp.save') }}
                     </button>
                     <button
                         v-if="settings.can_redeploy"
@@ -218,16 +221,16 @@ const sendTestMail = () => {
                         :disabled="redeployForm.processing"
                         @click="redeploy"
                     >
-                        {{ redeployForm.processing ? 'Avvio…' : 'Ridistribuisci pannello' }}
+                        {{ redeployForm.processing ? t('common.starting') : t('smtp.redeploy') }}
                     </button>
                 </div>
             </form>
         </section>
 
         <section class="mt-6 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-            <h2 class="text-base font-semibold">Prova invio</h2>
+            <h2 class="text-base font-semibold">{{ t('smtp.test_heading') }}</h2>
             <p class="mt-1 text-sm text-neutral-500">
-                Invia una mail di test usando la configurazione SMTP attualmente caricata nel pannello (database + merge runtime).
+                {{ t('smtp.test_help') }}
             </p>
 
             <div
@@ -247,7 +250,7 @@ const sendTestMail = () => {
 
             <form class="mt-6 flex flex-wrap items-end gap-4" @submit.prevent="sendTestMail">
                 <div class="min-w-[16rem] flex-1">
-                    <label class="block text-sm font-medium" for="smtp-test-email">Email di prova</label>
+                    <label class="block text-sm font-medium" for="smtp-test-email">{{ t('smtp.test_email') }}</label>
                     <input
                         id="smtp-test-email"
                         v-model="testForm.test_email"
@@ -265,7 +268,7 @@ const sendTestMail = () => {
                     class="rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
                     :disabled="testForm.processing"
                 >
-                    {{ testForm.processing ? 'Invio…' : 'Invia mail di test' }}
+                    {{ testForm.processing ? t('common.sending') : t('smtp.send_test') }}
                 </button>
             </form>
         </section>

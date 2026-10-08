@@ -6,6 +6,7 @@
 // used_by: none
 // rules:   saveEnvironment must keep unrelated secrets; PHP keys replaced from panel values.
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_php | Http::fake saveEnvironment coverage.
+//          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Deploy-now rewrites composer install in the same save
 
 namespace Tests\Feature;
 
@@ -67,6 +68,7 @@ class DomainPhpSettingsTest extends TestCase
         $this->assertStringContainsString('ARTISAN_MEMORY_LIMIT=768M', $saved);
         $this->assertStringContainsString('dokhosts.ini', $saved);
         $this->assertSame(1, substr_count($saved, '__DOKHOSTS_INI__&&__'));
+        $this->assertStringNotContainsString('NIXPACKS_INSTALL_CMD=', $saved);
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.saveEnvironment'
             && $request['applicationId'] === 'app-php');
@@ -79,7 +81,7 @@ class DomainPhpSettingsTest extends TestCase
         Http::fake([
             'https://dokploy.test/api/application.one*' => Http::response([
                 'applicationId' => 'app-php',
-                'env' => '',
+                'env' => "DB_HOST=infra1-mariadb\nDB_PASSWORD=secret-db\nNIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs && npm ci\n",
             ]),
             'https://dokploy.test/api/application.saveEnvironment' => Http::response(['ok' => true]),
             'https://dokploy.test/api/application.deploy' => Http::response(['ok' => true]),
@@ -99,6 +101,15 @@ class DomainPhpSettingsTest extends TestCase
                 'deploy_now' => true,
             ])
             ->assertSessionHas('success', 'Env aggiornato e deploy avviato.');
+
+        $saved = $this->savedEnvironment();
+        $this->assertStringContainsString(
+            'NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci',
+            $saved,
+        );
+        $this->assertStringContainsString('DB_HOST=infra1-mariadb', $saved);
+        $this->assertStringContainsString('DB_PASSWORD=secret-db', $saved);
+        $this->assertStringContainsString('PHP_MEMORY_LIMIT=256M', $saved);
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.deploy'
             && $request['applicationId'] === 'app-php');
