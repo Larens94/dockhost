@@ -33,6 +33,8 @@
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="APP_KEY" value="base64:2fl+KTV4HMiLGk4YV4GfL0UyYoXnfI/O5LZoxjYEU7w="/>
+        <env name="APP_LOCALE" value="it" force="true"/>
+        <env name="APP_FALLBACK_LOCALE" value="en" force="true"/>
         <env name="DOKPLOY_URL" value="https://dokploy.test"/>
         <env name="DOKPLOY_API_KEY" value="testing"/>
         <env name="DOKPLOY_PUBLIC_HOST" value="cloud.silicoreautomation.com"/>

@@ -2,14 +2,18 @@
 
   exports: defineProps
   used_by: DomainController::index
-  rules:   Etichette in italiano.
+  rules:   Labels come from shared panel translations. Italian is the default locale.
   agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_acl | Member landing page.
+  agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Index chrome uses panel translations.
 -->
 
 <script setup>
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import { Link } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import ResponsiveTable from '../../Components/ResponsiveTable.vue';
+
+const { t } = usePanelTranslations();
 
 defineProps({
     domains: {
@@ -25,20 +29,16 @@ defineProps({
 
 <template>
     <AppLayout
-        :title="isAdmin ? 'Domini' : 'I miei hosting'"
-        :description="
-            isAdmin
-                ? 'Tutti gli hosting del pannello.'
-                : 'Hosting a cui hai accesso. Database, SFTP e toolkit restano qui nel pannello.'
-        "
+        :title="isAdmin ? t('domains.title') : t('domains.my_hosting_title')"
+        :description="isAdmin ? t('domains.description_admin') : t('domains.description_member')"
     >
         <div
             v-if="domains.length === 0"
             class="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center"
         >
-            <p class="text-sm font-medium">Nessun hosting</p>
+            <p class="text-sm font-medium">{{ t('domains.empty_title') }}</p>
             <p v-if="!isAdmin" class="mt-1 text-sm text-zinc-500">
-                Chiedi a un amministratore di aggiungerti dalla scheda «Accessi» del dominio.
+                {{ t('domains.empty_member') }}
             </p>
         </div>
 
@@ -46,9 +46,9 @@ defineProps({
             <template #table>
                 <thead class="border-b border-neutral-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                     <tr>
-                        <th class="px-4 py-3 font-medium">Dominio</th>
-                        <th class="px-4 py-3 font-medium">Cliente</th>
-                        <th class="px-4 py-3 font-medium">Stack</th>
+                        <th class="px-4 py-3 font-medium">{{ t('domains.domain') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ t('domains.customer') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ t('domains.stack') }}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-100">

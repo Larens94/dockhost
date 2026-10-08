@@ -1,11 +1,11 @@
 <?php
 
-
 // Subscription.php — Subscription module.
 //
-// exports: Subscription | attr:Fillable | Subscription::customer(): BelongsTo | Subscription::servicePlan(): BelongsTo | Subscription::domains(): HasMany | Subscription::canAddDomain(): bool
+// exports: Subscription | attr:Fillable | Subscription::customer(): BelongsTo | Subscription::servicePlan(): BelongsTo | Subscription::domains(): HasMany | Subscription::canAddDomain(): bool | Subscription::deletionConfirmation(): string | Subscription::deletionTargets(): array
 // used_by: app/Http/Controllers/DomainController.php
 //         app/Http/Controllers/SubscriptionController.php
+//         app/Http/Requests/DestroySubscriptionRequest.php
 //         app/Services/Hosting/DomainProvisioner.php
 //         database/factories/DomainFactory.php
 //         database/factories/SubscriptionFactory.php
@@ -15,9 +15,10 @@
 //         tests/Feature/HostingFlowTest.php
 //         tests/Feature/InfrastructureAssignmentTest.php
 //         tests/Feature/SubscriptionTest.php
-// rules:   none
+// rules:   Deleting a space decommissions every linked domain (Dokploy application included) before the subscription row goes away.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// agent:   grok-4.7 | cursor | 2026-10-08 | s_delete_space | Confirmation phrase and Dokploy targets for space delete.
+// message:
 
 namespace App\Models;
 
@@ -62,6 +63,45 @@ class Subscription extends Model
         $maxDomains = $this->servicePlan?->max_domains;
 
         return $maxDomains === null || $this->domains()->count() < $maxDomains;
+    }
+
+    /**
+     * GitHub-style delete check: the only domain FQDN, or the space name when there isn't exactly one.
+     */
+    public function deletionConfirmation(): string
+    {
+        $this->loadMissing('domains');
+
+        if ($this->domains->count() === 1) {
+            return (string) $this->domains->first()->fqdn;
+        }
+
+        return (string) $this->name;
+    }
+
+    /**
+     * Domains and Dokploy applications removed with this space.
+     *
+     * @return list<array{fqdn: string, stack_label: string, infra_slug: ?string, dokploy_service: ?string}>
+     */
+    public function deletionTargets(): array
+    {
+        $this->loadMissing('domains.dokployApplication');
+
+        return $this->domains
+            ->sortBy(fn (Domain $domain): string => $domain->fqdn.'-'.$domain->id)
+            ->map(function (Domain $domain): array {
+                $applicationId = $domain->dokployApplication?->dokploy_application_id;
+
+                return [
+                    'fqdn' => $domain->fqdn,
+                    'stack_label' => $domain->stack_label,
+                    'infra_slug' => $domain->infra_slug,
+                    'dokploy_service' => is_string($applicationId) && $applicationId !== '' ? $domain->fqdn : null,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

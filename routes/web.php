@@ -4,7 +4,7 @@
 //
 // exports: route:login | route:logout | route:domains | route:domains/{domain} | (+ admin resources)
 // used_by: none
-// rules:   Admin-only: infrastructures, anagrafica, domain destroy, GitLab PAT, SMTP principale.
+// rules:   Admin-only: infrastructures, anagrafica, domain destroy, subscription destroy, GitLab PAT, SMTP principale.
 //          Domain owners manage Accessi on their domain; members mutate per pivot role (readonly = view only).
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_acl | Split admin vs domain-member routes.
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_iam | Member routes + password reset guest routes.
@@ -13,7 +13,10 @@
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_panel_2fa_audit | 2FA account routes + admin audit log.
 // agent:   composer-2.5-fast | cursor | 2026-09-25 | s_domain_site_env | POST site-env + deploy for domain members.
 // agent:   composer-2.5-fast | cursor | 2026-09-25 | s_smtp_test | POST panel/smtp/test admin SMTP test mail.
+// agent:   grok-4.7 | cursor | 2026-10-08 | s_delete_space | DELETE subscriptions/{subscription}.
+// agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Authenticated account/locale session language.
 
+use App\Http\Controllers\Account\LocaleController;
 use App\Http\Controllers\Account\TwoFactorAuthenticationController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\LoginController;
@@ -67,6 +70,11 @@ Route::middleware('auth')->group(function () {
         ->name('account.two-factor.confirm');
     Route::delete('account/two-factor', [TwoFactorAuthenticationController::class, 'destroy'])
         ->name('account.two-factor.destroy');
+
+    Route::get('account/locale', [LocaleController::class, 'show'])
+        ->name('account.locale.show');
+    Route::put('account/locale', [LocaleController::class, 'update'])
+        ->name('account.locale.update');
 
     Route::get('domains', [DomainController::class, 'index'])->name('domains.index');
     Route::get('domains/{domain}', [DomainController::class, 'show'])->name('domains.show');
@@ -154,6 +162,7 @@ Route::middleware('auth')->group(function () {
             'create',
             'store',
             'show',
+            'destroy',
         ]);
 
         Route::post('customers/{customer}/subscriptions', [SubscriptionController::class, 'store'])

@@ -2,12 +2,14 @@
 
   exports: defineProps
   used_by: none
-  rules:   SMTP nav link visible only when is_admin (admin navItems block).
+  rules:   SMTP nav link visible only when is_admin (admin navItems block). Nav labels come from shared panel translations.
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
   agent:   composer-2.5-fast | cursor | 2026-09-24 | s_panel_smtp | Nav link SMTP for admins.
+  agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Locale-aware nav and account language link.
 -->
 
 <script setup>
+import { usePanelTranslations } from '../composables/usePanelTranslations';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
@@ -25,6 +27,7 @@ defineProps({
 const STORAGE_KEY = 'dokhosts.sidebar.collapsed';
 
 const page = usePage();
+const { t } = usePanelTranslations();
 const appName = computed(() => page.props.appName || 'DokHosts');
 const appVersion = computed(() => page.props.appVersion || 'DokHosts');
 const user = computed(() => page.props.auth?.user);
@@ -72,18 +75,18 @@ const isAdmin = computed(() => Boolean(user.value?.is_admin));
 
 const navItems = computed(() => {
     if (!isAdmin.value) {
-        return [{ href: '/domains', label: 'I miei hosting', icon: 'globe' }];
+        return [{ href: '/domains', label: t('layout.nav.my_hosting'), icon: 'globe' }];
     }
 
     return [
-        { href: '/customers', label: 'Clienti', icon: 'users' },
-        { href: '/subscriptions', label: 'Spazi', icon: 'squares' },
-        { href: '/domains', label: 'Domini', icon: 'globe' },
-        { href: '/service-plans', label: 'Piani', icon: 'stack' },
-        { href: '/infrastructures', label: 'Infrastrutture', icon: 'server' },
-        { href: '/laravel-toolkit', label: 'Laravel Toolkit', icon: 'code' },
-        { href: '/panel/smtp', label: 'SMTP', icon: 'mail' },
-        { href: '/panel/audit', label: 'Audit', icon: 'code' },
+        { href: '/customers', label: t('layout.nav.customers'), icon: 'users' },
+        { href: '/subscriptions', label: t('layout.nav.spaces'), icon: 'squares' },
+        { href: '/domains', label: t('layout.nav.domains'), icon: 'globe' },
+        { href: '/service-plans', label: t('layout.nav.plans'), icon: 'stack' },
+        { href: '/infrastructures', label: t('layout.nav.infrastructures'), icon: 'server' },
+        { href: '/laravel-toolkit', label: t('layout.nav.toolkit'), icon: 'code' },
+        { href: '/panel/smtp', label: t('layout.nav.smtp'), icon: 'mail' },
+        { href: '/panel/audit', label: t('layout.nav.audit'), icon: 'code' },
     ];
 });
 </script>
@@ -99,8 +102,8 @@ const navItems = computed(() => {
             <button
                 type="button"
                 class="absolute top-3.5 -right-3 z-30 inline-flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-800 shadow-sm hover:bg-neutral-50"
-                :title="collapsed ? 'Apri menu' : 'Chiudi menu'"
-                :aria-label="collapsed ? 'Apri menu' : 'Chiudi menu'"
+                :title="collapsed ? t('layout.open_menu') : t('layout.close_menu')"
+                :aria-label="collapsed ? t('layout.open_menu') : t('layout.close_menu')"
                 @click="toggleCollapsed"
             >
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
@@ -245,7 +248,7 @@ const navItems = computed(() => {
                         type="button"
                         class="flex w-full items-center rounded-lg py-1.5 text-left"
                         :class="collapsed ? 'justify-center' : 'gap-3'"
-                        :title="user?.email || 'Account'"
+                        :title="user?.email || t('layout.account')"
                         aria-haspopup="menu"
                         :aria-expanded="accountOpen"
                         @click.stop="accountOpen = !accountOpen"
@@ -256,7 +259,7 @@ const navItems = computed(() => {
                             {{ initials }}
                         </span>
                         <span v-if="!collapsed" class="min-w-0 flex-1">
-                            <span class="block truncate text-sm font-medium text-neutral-900">Account</span>
+                            <span class="block truncate text-sm font-medium text-neutral-900">{{ t('layout.account') }}</span>
                             <span class="block truncate text-xs text-neutral-500">{{ user?.email }}</span>
                         </span>
                         <svg
@@ -287,7 +290,18 @@ const navItems = computed(() => {
                             <svg class="h-4 w-4 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                             </svg>
-                            Sicurezza (2FA)
+                            {{ t('layout.security') }}
+                        </Link>
+                        <Link
+                            href="/account/locale"
+                            role="menuitem"
+                            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50"
+                            @click="accountOpen = false"
+                        >
+                            <svg class="h-4 w-4 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5a17.9 17.9 0 0 1-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+                            </svg>
+                            {{ t('layout.language') }}
                         </Link>
                         <Link
                             href="/logout"
@@ -304,12 +318,12 @@ const navItems = computed(() => {
                                     d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25"
                                 />
                             </svg>
-                            Esci
+                            {{ t('layout.logout') }}
                         </Link>
                     </div>
                 </div>
 
-                <p v-if="!collapsed" class="mt-3 text-center text-xs text-neutral-400">Version {{ appVersion }}</p>
+                <p v-if="!collapsed" class="mt-3 text-center text-xs text-neutral-400">{{ t('layout.version') }} {{ appVersion }}</p>
             </div>
         </aside>
 
@@ -319,13 +333,14 @@ const navItems = computed(() => {
             >
                 <p class="text-sm font-semibold tracking-normal">{{ appName }}</p>
                 <div class="flex flex-wrap items-center gap-3 text-sm">
-                    <Link href="/customers">Clienti</Link>
-                    <Link href="/subscriptions">Spazi</Link>
-                    <Link href="/service-plans">Piani</Link>
-                    <Link href="/infrastructures">Infra</Link>
-                    <Link href="/laravel-toolkit">Toolkit</Link>
-                    <Link v-if="isAdmin" href="/panel/smtp">SMTP</Link>
-                    <Link href="/logout" method="post" as="button">Esci</Link>
+                    <Link href="/customers">{{ t('layout.mobile.customers') }}</Link>
+                    <Link href="/subscriptions">{{ t('layout.mobile.spaces') }}</Link>
+                    <Link href="/service-plans">{{ t('layout.mobile.plans') }}</Link>
+                    <Link href="/infrastructures">{{ t('layout.mobile.infra') }}</Link>
+                    <Link href="/laravel-toolkit">{{ t('layout.mobile.toolkit') }}</Link>
+                    <Link v-if="isAdmin" href="/panel/smtp">{{ t('layout.nav.smtp') }}</Link>
+                    <Link href="/account/locale">{{ t('layout.language') }}</Link>
+                    <Link href="/logout" method="post" as="button">{{ t('layout.logout') }}</Link>
                 </div>
             </header>
 
@@ -333,13 +348,13 @@ const navItems = computed(() => {
                 class="sticky top-0 z-10 hidden items-center justify-between border-b border-neutral-200 bg-white/90 px-6 py-3 backdrop-blur lg:flex"
             >
                 <div class="min-w-0">
-                    <p class="text-[11px] text-neutral-500">Pannello hosting</p>
+                    <p class="text-[11px] text-neutral-500">{{ t('layout.panel_eyebrow') }}</p>
                     <p class="truncate text-sm font-medium tracking-normal">{{ title || appName }}</p>
                 </div>
                 <span
                     class="rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-medium text-neutral-600"
                 >
-                    Hosting
+                    {{ t('layout.hosting_badge') }}
                 </span>
             </header>
 

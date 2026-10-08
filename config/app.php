@@ -1,13 +1,13 @@
 <?php
 
-
 // app.php — app module.
 //
 // exports: none
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Default locale is Italian; fallback stays English for framework strings.
+// message:
 
 return [
 
@@ -87,7 +87,7 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'it'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 

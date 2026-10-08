@@ -4,13 +4,17 @@
   used_by: none
   rules:   none
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
+  agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Index chrome uses panel translations.
 -->
 
 <script setup>
+import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import ResponsiveTable from '../../Components/ResponsiveTable.vue';
+
+const { t } = usePanelTranslations();
 
 const props = defineProps({
     customers: {
@@ -28,27 +32,27 @@ const spazioCount = computed(() =>
 </script>
 
 <template>
-    <AppLayout title="Clienti" description="Account che possiedono spazi, domini, database e SFTP.">
+    <AppLayout :title="t('customers.title')" :description="t('customers.description')">
         <template #actions>
             <Link
                 href="/customers/create"
                 class="inline-flex items-center rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800"
             >
-                Nuovo cliente
+                {{ t('customers.new') }}
             </Link>
         </template>
 
         <div class="mb-6 grid gap-4 sm:grid-cols-3">
             <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Clienti</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('customers.title') }}</p>
                 <p class="mt-2 text-2xl font-semibold">{{ customers.length }}</p>
             </div>
             <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Spazi</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('customers.spaces') }}</p>
                 <p class="mt-2 text-2xl font-semibold">{{ spazioCount }}</p>
             </div>
             <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Domini</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('customers.domains') }}</p>
                 <p class="mt-2 text-2xl font-semibold">{{ domainCount }}</p>
             </div>
         </div>
@@ -57,13 +61,13 @@ const spazioCount = computed(() =>
             v-if="customers.length === 0"
             class="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center"
         >
-            <p class="text-sm font-medium">Nessun cliente</p>
-            <p class="mt-1 text-sm text-zinc-500">Crea un cliente, poi uno spazio e infine un dominio.</p>
+            <p class="text-sm font-medium">{{ t('customers.empty_title') }}</p>
+            <p class="mt-1 text-sm text-zinc-500">{{ t('customers.empty_body') }}</p>
             <Link
                 href="/customers/create"
                 class="mt-4 inline-flex rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white"
             >
-                Nuovo cliente
+                {{ t('customers.new') }}
             </Link>
         </div>
 
@@ -71,10 +75,10 @@ const spazioCount = computed(() =>
             <template #table>
                 <thead class="border-b border-neutral-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                     <tr>
-                        <th class="px-4 py-3 font-medium">Nome</th>
-                        <th class="px-4 py-3 font-medium">Email</th>
-                        <th class="px-4 py-3 font-medium">Spazi</th>
-                        <th class="px-4 py-3 font-medium">Domini</th>
+                        <th class="px-4 py-3 font-medium">{{ t('customers.name') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ t('customers.email') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ t('customers.spaces') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ t('customers.domains') }}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-100">
@@ -103,11 +107,11 @@ const spazioCount = computed(() =>
                     <p v-if="customer.email" class="mt-1 text-sm text-zinc-500">{{ customer.email }}</p>
                     <dl class="mt-3 grid grid-cols-2 gap-2 text-sm">
                         <div>
-                            <dt class="text-zinc-500">Spazi</dt>
+                            <dt class="text-zinc-500">{{ t('customers.spaces') }}</dt>
                             <dd class="font-medium">{{ customer.subscriptions_count }}</dd>
                         </div>
                         <div>
-                            <dt class="text-zinc-500">Domini</dt>
+                            <dt class="text-zinc-500">{{ t('customers.domains') }}</dt>
                             <dd class="font-medium">{{ customer.domains_count }}</dd>
                         </div>
                     </dl>

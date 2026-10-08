@@ -9,6 +9,7 @@
 //          NEVER attach an extra {slug}-db network. Do NOT call InfraDataNetworks.
 //          Env wiring uses DatabaseAccount (site user@'%' with GRANT on that one database only — not *.*).
 //          NIXPACKS_START_CMD must use config:clear, not config:cache: Dokploy injects DB_* at runtime and config:cache can bake a stale DB password (1045 on sessions).
+//          Laravel NIXPACKS_INSTALL_CMD must pass composer --no-scripts --no-interaction so package:discover does not boot the app against DB_HOST during the image build. Runtime NIXPACKS_START_CMD still runs migrate on dokploy-network.
 //          APP_URL, ASSET_URL must be https://{fqdn} and TRUSTED_PROXIES=* behind Traefik or Inertia/Vite emit http:// URLs (mixed content).
 // agent:   grok-4.7 | cursor | 2026-09-22 | s_20260922_composer_install | Install command runs composer before npm so artisan finds vendor
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_nginx_logdir | Start mkdir /var/log/nginx so nginx does not emerg on boot
@@ -18,6 +19,7 @@
 //          composer-2.5-fast | cursor | 2026-09-23 | s_20260923_app_url | alignBootEnv replace APP_URL to https fqdn
 //          composer-2.5-fast | cursor | 2026-09-24 | s_domain_php | merge PHP_* env on attach, align, save
 //          composer-2.5-fast | cursor | 2026-09-24 | s_php_ini_start | Prefix NIXPACKS_START_CMD to write dokhosts.ini from env.
+//          grok-4.7 | cursor | 2026-10-08 | s_20261008_no_scripts | Install skips composer scripts so artisan does not resolve DB_HOST during image build
 // message: Site GRANT stays one-database via MysqlProvisioner; admin infra user may keep *.*.
 
 namespace App\Services\Dokploy;
@@ -321,13 +323,6 @@ class DokployApplicationAttacher
     }
 
     /**
-     * Nixpacks PHP provider starts nginx + php-fpm from /assets.
-     *
-     * Rules: NIXPACKS_INSTALL_CMD replaces the whole Nixpacks install phase, so it must mkdir /var/log/nginx and /var/cache/nginx, then composer install, then npm ci. npm ci alone drops vendor/autoload.php. NIXPACKS_START_CMD must mkdir those nginx dirs again plus storage/framework/sessions (views, cache, logs, bootstrap/cache) and chmod a+rwx storage bootstrap/cache, because php-fpm runs as nobody and nginx emergs without /var/log/nginx/error.log. After migrate use config:clear, not config:cache, so DB_* from Dokploy runtime env is not frozen to a wrong password. End with the nginx + php-fpm start. Never artisan serve. Never a placeholder command.
-     *
-     * @return array<string, string>
-     */
-    /**
      * Rules: replaceAssignments only — never drop unrelated env keys. Optional deploy after save.
      *
      * @return array{env_synced: bool, added: list<string>, updated: list<string>, deployed: bool}
@@ -382,13 +377,20 @@ class DokployApplicationAttacher
         }
     }
 
+    /**
+     * Nixpacks PHP provider starts nginx + php-fpm from /assets.
+     *
+     * Rules: NIXPACKS_INSTALL_CMD replaces the whole Nixpacks install phase, so it must mkdir /var/log/nginx and /var/cache/nginx, then composer install --ignore-platform-reqs --no-interaction --no-scripts, then npm ci. --no-scripts skips package:discover so the build does not boot the app against DB_HOST. npm ci alone drops vendor/autoload.php. Do not pass --no-dev. NIXPACKS_START_CMD must mkdir those nginx dirs again plus storage/framework/sessions (views, cache, logs, bootstrap/cache) and chmod a+rwx storage bootstrap/cache, because php-fpm runs as nobody and nginx emergs without /var/log/nginx/error.log. After migrate use config:clear, not config:cache, so DB_* from Dokploy runtime env is not frozen to a wrong password. End with the nginx + php-fpm start. Never artisan serve. Never a placeholder command.
+     *
+     * @return array<string, string>
+     */
     public function laravelDeployPreset(): array
     {
         $prepare = 'mkdir -p /var/log/nginx /var/cache/nginx storage/framework/sessions storage/framework/views storage/framework/cache/data storage/logs bootstrap/cache && chmod -R a+rwx storage bootstrap/cache';
         $http = 'node /assets/scripts/prestart.mjs /assets/nginx.template.conf /nginx.conf && (php-fpm -y /assets/php-fpm.conf & nginx -c /nginx.conf)';
 
         return [
-            'NIXPACKS_INSTALL_CMD' => 'mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs && npm ci',
+            'NIXPACKS_INSTALL_CMD' => 'mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci',
             'NIXPACKS_BUILD_CMD' => 'npm run build',
             'NIXPACKS_START_CMD' => $prepare.' && php artisan migrate --force && php artisan optimize:clear && php artisan config:clear && php artisan route:cache && php artisan view:cache && php artisan event:cache && php artisan queue:restart && '.$http,
         ];

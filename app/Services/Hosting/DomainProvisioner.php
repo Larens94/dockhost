@@ -4,6 +4,7 @@
 //
 // exports: DomainProvisioner | DomainProvisioner::provision(Subscription $subscription, array $attributes): Domain | DomainProvisioner::provisionDatabase(Domain $domain, DatabaseEngine $engine, ?string $infraSlug = null): DatabaseAccount | DomainProvisioner::attachLaravel(Domain $domain, array $attributes = []): DokployApplication | DomainProvisioner::attachApplication(Domain $domain, array $attributes = []): DokployApplication | DomainProvisioner::decommission(Domain $domain): void
 // used_by: app/Http/Controllers/DomainController.php
+//         app/Http/Controllers/SubscriptionController.php
 // rules:   Orchestrates Domain + DB + storage + DokployApplication attach — not raw Compose edits.
 //          DB CREATE goes to shared infra engines (Mysql/PostgresProvisioner), never mariadb.create per site.
 //          Site DB users: user@'%' GRANT on that one database only (never *.*). Attach uses dokploy-network hostnames.
@@ -12,6 +13,7 @@
 //          composer | cursor | 2026-09-21 | s_20260921_codedna | hosting orchestration rules
 //          composer | cursor | 2026-09-21 | s_20260921_shared_net | GRANT + shared-network attach rules
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_db_pass | Site DB passwords are alphanumeric so env injection keeps them intact
+// agent:   grok-4.7 | cursor | 2026-10-08 | s_delete_space | Space destroy decommissions each domain.
 
 namespace App\Services\Hosting;
 

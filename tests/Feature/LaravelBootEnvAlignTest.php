@@ -8,6 +8,7 @@
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_session_cookie | Expect database session and host-only cookie
 //          composer-2.5-fast | cursor | 2026-09-23 | s_20260923_app_url | Assert APP_URL https rewrite on align
+//          grok-4.7 | cursor | 2026-10-08 | s_20261008_no_scripts | Expect composer --no-scripts on the Laravel install command
 // message:
 
 namespace Tests\Feature;
@@ -159,7 +160,7 @@ class LaravelBootEnvAlignTest extends TestCase
 
         $this->assertStringContainsString("APP_KEY=base64:already\n", $saved);
         $this->assertStringContainsString('DB_PASSWORD=keep-this', $saved);
-        $this->assertStringContainsString('NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs && npm ci', $saved);
+        $this->assertStringContainsString('NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci', $saved);
         $this->assertStringContainsString('mkdir -p /var/log/nginx /var/cache/nginx storage/framework/sessions', $saved);
         $this->assertStringContainsString('chmod -R a+rwx storage bootstrap/cache', $saved);
         $this->assertStringContainsString('php artisan migrate --force', $saved);
@@ -185,7 +186,7 @@ class LaravelBootEnvAlignTest extends TestCase
         $saved = $this->savedEnvironment();
 
         $this->assertStringContainsString('DB_PASSWORD=keep-this', $saved);
-        $this->assertStringContainsString('NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs && npm ci', $saved);
+        $this->assertStringContainsString('NIXPACKS_INSTALL_CMD=mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci', $saved);
         $this->assertStringNotContainsString('yarn install', $saved);
         $this->assertStringNotContainsString('php artisan serve', $saved);
         $this->assertStringContainsString('storage/framework/sessions', $saved);

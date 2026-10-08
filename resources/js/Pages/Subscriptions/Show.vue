@@ -2,13 +2,16 @@
 
   exports: defineProps
   used_by: none
-  rules:   none
+  rules:   Delete opens DeleteSpaceModal; the typed confirmation must match deletion_confirmation.
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
+  agent:   grok-4.7 | cursor | 2026-10-08 | s_delete_space | Danger zone deletes the space and its Dokploy apps.
 -->
 
 <script setup>
+import { ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
+import DeleteSpaceModal from '../../Components/DeleteSpaceModal.vue';
 import ResponsiveTable from '../../Components/ResponsiveTable.vue';
 
 defineProps({
@@ -17,6 +20,8 @@ defineProps({
         required: true,
     },
 });
+
+const showDeleteModal = ref(false);
 
 const databaseLabel = (domain) => {
     const name = domain.database_accounts?.[0]?.database_name;
@@ -147,5 +152,25 @@ const stackLabel = (domain) => domain.stack_label || domain.stack || 'Solo hosti
                 </article>
             </template>
         </ResponsiveTable>
+
+        <section class="mt-8 rounded-xl border border-red-200 bg-white p-6 shadow-sm">
+            <h2 class="text-base font-semibold text-red-800">Zona pericolosa</h2>
+            <p class="mt-1 mb-5 text-sm text-zinc-500">
+                Elimina lo spazio e, su Dokploy, i servizi e i domini collegati. L’operazione non si può annullare.
+            </p>
+            <button
+                type="button"
+                class="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
+                @click="showDeleteModal = true"
+            >
+                Elimina spazio
+            </button>
+        </section>
+
+        <DeleteSpaceModal
+            v-if="showDeleteModal"
+            :space="subscription"
+            @close="showDeleteModal = false"
+        />
     </AppLayout>
 </template>
