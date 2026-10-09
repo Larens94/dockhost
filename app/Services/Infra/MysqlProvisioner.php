@@ -16,12 +16,13 @@
 //          Connect via Infrastructure mysql_host hostname on dokploy-network (not an IP).
 //          Admin compose user `infra` may keep broader grants from the stack; site accounts must stay scoped.
 //          CREATE USER IF NOT EXISTS does not change an existing password. Always ALTER USER afterwards, or a retry keeps the old password and the app gets 1045.
-//          Site passwords: SELECT PASSWORD(plain) then IDENTIFIED BY PASSWORD 'hash' (mysql_native_password). Verify login as site user before returning success.
+//          Site passwords: IDENTIFIED BY 'plain' after SET old_passwords=0, so MariaDB stores a mysql_native_password hash that mysqli/phpMyAdmin accepts. IDENTIFIED BY PASSWORD(hash) is rejected by phpMyAdmin even when the panel PDO check passes. Verify login as the site user before returning success.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Codify one-DB GRANT for site users
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_db_pass | ALTER USER after CREATE so a retry replaces the password
 //          composer-2.5-fast | cursor | 2026-10-09 | s_pma_native_pass | mysql_native_password for phpMyAdmin + resyncDatabaseAccount
 //          composer-2.5-fast | cursor | 2026-10-09 | s_pma_identified_by | IDENTIFIED BY for mysqli/phpMyAdmin (not USING PASSWORD hook)
 //          composer-2.5-fast | cursor | 2026-10-09 | s_pma_hash_verify | IDENTIFIED BY PASSWORD(hash) + post-grant login verify
+//          grok-4.7 | cursor | 2026-10-09 | s_pma_plain_by | IDENTIFIED BY plain text so phpMyAdmin mysqli matches the stored hash
 // message:
 
 namespace App\Services\Infra;
@@ -208,23 +209,8 @@ class MysqlProvisioner
     private function nativePasswordIdentifiedClause(PDO $pdo, string $password): string
     {
         $pdo->exec('SET old_passwords=0');
-        $quotedPassword = $pdo->quote($password);
-        $statement = $pdo->query("SELECT PASSWORD({$quotedPassword}) AS password_hash");
 
-        if ($statement === false) {
-            throw new InvalidArgumentException('MariaDB PASSWORD() query failed.');
-        }
-
-        $row = $statement->fetch(PDO::FETCH_ASSOC);
-        $hash = is_array($row) ? ($row['password_hash'] ?? null) : null;
-
-        if (! is_string($hash) || $hash === '') {
-            throw new InvalidArgumentException('MariaDB PASSWORD() returned an empty hash.');
-        }
-
-        $quotedHash = $pdo->quote($hash);
-
-        return "IDENTIFIED BY PASSWORD {$quotedHash}";
+        return 'IDENTIFIED BY '.$pdo->quote($password);
     }
 
     private function dropAllUserHosts(PDO $pdo, string $username): void
@@ -292,5 +278,4 @@ class MysqlProvisioner
 
         return '`'.$name.'`';
     }
-
 }
