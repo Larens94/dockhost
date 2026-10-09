@@ -16,12 +16,12 @@
 //          Connect via Infrastructure mysql_host hostname on dokploy-network (not an IP).
 //          Admin compose user `infra` may keep broader grants from the stack; site accounts must stay scoped.
 //          CREATE USER IF NOT EXISTS does not change an existing password. Always ALTER USER afterwards, or a retry keeps the old password and the app gets 1045.
-//          Site users use IDENTIFIED BY (mysql_native_password) so mysqli/phpMyAdmin plain-text login matches the stored hash.
-//          Do not use IDENTIFIED VIA mysql_native_password USING PASSWORD(...) for site users — PASSWORD() hook is not for that plugin on MariaDB 11.
+//          Site passwords: SELECT PASSWORD(plain) then IDENTIFIED BY PASSWORD 'hash' (mysql_native_password). Verify login as site user before returning success.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Codify one-DB GRANT for site users
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_db_pass | ALTER USER after CREATE so a retry replaces the password
 //          composer-2.5-fast | cursor | 2026-10-09 | s_pma_native_pass | mysql_native_password for phpMyAdmin + resyncDatabaseAccount
 //          composer-2.5-fast | cursor | 2026-10-09 | s_pma_identified_by | IDENTIFIED BY for mysqli/phpMyAdmin (not USING PASSWORD hook)
+//          composer-2.5-fast | cursor | 2026-10-09 | s_pma_hash_verify | IDENTIFIED BY PASSWORD(hash) + post-grant login verify
 // message:
 
 namespace App\Services\Infra;
@@ -42,10 +42,14 @@ class MysqlProvisioner
      * @param  Closure(): PDO  $connector
      * @param  (Closure(string, string, string): PDO)|null  $adminConnector
      */
+    /**
+     * @param  (Closure(string, string, string): PDO)|null  $siteUserLoginConnector
+     */
     public function __construct(
         private Closure $connector,
         private ?ComposeMysqlCredentialAligner $aligner = null,
         private ?Closure $adminConnector = null,
+        private ?Closure $siteUserLoginConnector = null,
     ) {}
 
     public function provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void
@@ -88,17 +92,16 @@ class MysqlProvisioner
         $pdo = $this->connect($infrastructure);
         $databaseIdentifier = $this->quoteIdentifier($database);
         $usernameIdentifier = $this->quoteIdentifier($username);
-        $quotedPassword = $pdo->quote($password);
         $grant = $privilege->mysqlGrant();
+        $identified = $this->nativePasswordIdentifiedClause($pdo, $password);
 
-        $identified = "IDENTIFIED BY {$quotedPassword}";
-
-        $pdo->exec('SET old_passwords=0');
-        $pdo->exec("DROP USER IF EXISTS {$usernameIdentifier}@'%'");
+        $this->dropAllUserHosts($pdo, $username);
         $pdo->exec("CREATE USER {$usernameIdentifier}@'%' {$identified}");
         $pdo->exec("ALTER USER {$usernameIdentifier}@'%' {$identified}");
         $pdo->exec("GRANT {$grant} ON {$databaseIdentifier}.* TO {$usernameIdentifier}@'%'");
         $pdo->exec('FLUSH PRIVILEGES');
+
+        $this->assertSiteUserCanLogin($infrastructure, $username, $password);
     }
 
     public function dropSiteUser(string $username, Infrastructure $infrastructure): void
@@ -106,7 +109,7 @@ class MysqlProvisioner
         $pdo = $this->connect($infrastructure);
         $usernameIdentifier = $this->quoteIdentifier($username);
 
-        $pdo->exec("DROP USER IF EXISTS {$usernameIdentifier}@'%'");
+        $this->dropAllUserHosts($pdo, $username);
         $pdo->exec('FLUSH PRIVILEGES');
     }
 
@@ -197,6 +200,85 @@ class MysqlProvisioner
         }
 
         return ValidationException::withMessages([
+            'create_database' => $message,
+            'engine' => $message,
+        ]);
+    }
+
+    private function nativePasswordIdentifiedClause(PDO $pdo, string $password): string
+    {
+        $pdo->exec('SET old_passwords=0');
+        $quotedPassword = $pdo->quote($password);
+        $statement = $pdo->query("SELECT PASSWORD({$quotedPassword}) AS password_hash");
+
+        if ($statement === false) {
+            throw new InvalidArgumentException('MariaDB PASSWORD() query failed.');
+        }
+
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        $hash = is_array($row) ? ($row['password_hash'] ?? null) : null;
+
+        if (! is_string($hash) || $hash === '') {
+            throw new InvalidArgumentException('MariaDB PASSWORD() returned an empty hash.');
+        }
+
+        $quotedHash = $pdo->quote($hash);
+
+        return "IDENTIFIED BY PASSWORD {$quotedHash}";
+    }
+
+    private function dropAllUserHosts(PDO $pdo, string $username): void
+    {
+        $usernameIdentifier = $this->quoteIdentifier($username);
+        $statement = $pdo->prepare('SELECT Host FROM mysql.global_priv WHERE User = ?');
+        $statement->execute([$username]);
+
+        while (($host = $statement->fetchColumn()) !== false) {
+            $quotedHost = $pdo->quote((string) $host);
+            $pdo->exec("DROP USER IF EXISTS {$usernameIdentifier}@{$quotedHost}");
+        }
+    }
+
+    private function assertSiteUserCanLogin(Infrastructure $infrastructure, string $username, string $password): void
+    {
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;charset=utf8mb4',
+            $infrastructure->mysql_host,
+            $infrastructure->mysql_port,
+        );
+
+        try {
+            if ($this->siteUserLoginConnector instanceof Closure) {
+                ($this->siteUserLoginConnector)($dsn, $username, $password);
+
+                return;
+            }
+
+            new PDO(
+                $dsn,
+                $username,
+                $password,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            );
+        } catch (PDOException $exception) {
+            throw $this->siteUserLoginValidationException($infrastructure, $exception);
+        }
+    }
+
+    private function siteUserLoginValidationException(Infrastructure $infrastructure, PDOException $exception): ValidationException
+    {
+        $message = 'MariaDB ha salvato l’utente ma il login con la password generata è fallito su '
+            .$infrastructure->slug.' ('.$infrastructure->mysql_host.'). '
+            .'Aggiorna il pannello e lo stack infra, poi usa «Reimposta password» o «Risincronizza utenti MySQL».';
+
+        if (! $this->isAccessDenied($exception)) {
+            $message = 'Impossibile verificare il login MySQL dell’utente su '
+                .$infrastructure->slug.' ('.$infrastructure->mysql_host.'). Riprova.';
+        }
+
+        return ValidationException::withMessages([
+            'privilege' => $message,
+            'database_account' => $message,
             'create_database' => $message,
             'engine' => $message,
         ]);
