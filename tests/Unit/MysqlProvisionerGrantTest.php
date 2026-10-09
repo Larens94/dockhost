@@ -42,7 +42,11 @@ class MysqlProvisionerGrantTest extends TestCase
 
         $this->assertContains("DROP USER IF EXISTS `u_reader`@'%'", $statements);
         $this->assertContains(
-            "CREATE USER `u_reader`@'%' IDENTIFIED VIA mysql_native_password BY 'secretpass'",
+            "CREATE USER `u_reader`@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD('secretpass')",
+            $statements,
+        );
+        $this->assertContains(
+            "ALTER USER `u_reader`@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD('secretpass')",
             $statements,
         );
         $this->assertContains("GRANT SELECT ON `d_shop`.* TO `u_reader`@'%'", $statements);
