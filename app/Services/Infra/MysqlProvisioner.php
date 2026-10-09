@@ -89,8 +89,10 @@ class MysqlProvisioner
         $quotedPassword = $pdo->quote($password);
         $grant = $privilege->mysqlGrant();
 
+        $identified = "IDENTIFIED VIA mysql_native_password BY {$quotedPassword}";
+
         $pdo->exec("DROP USER IF EXISTS {$usernameIdentifier}@'%'");
-        $pdo->exec("CREATE USER {$usernameIdentifier}@'%' IDENTIFIED BY {$quotedPassword}");
+        $pdo->exec("CREATE USER {$usernameIdentifier}@'%' {$identified}");
         $pdo->exec("GRANT {$grant} ON {$databaseIdentifier}.* TO {$usernameIdentifier}@'%'");
         $pdo->exec('FLUSH PRIVILEGES');
     }
