@@ -6,6 +6,7 @@
 // used_by: none
 // rules:   apply() must not double-prefix; empty command unchanged.
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_php_ini_start | Prefix builder coverage.
+//          grok-4.7 | cursor | 2026-10-09 | s_ini_sep | Legacy &&__ separator must strip back to mkdir.
 
 namespace Tests\Unit;
 
@@ -40,5 +41,23 @@ class NixpacksStartCmdPhpIniPrefixTest extends TestCase
         $prefixed = NixpacksStartCmdPhpIniPrefix::apply($core);
 
         $this->assertSame($core, NixpacksStartCmdPhpIniPrefix::stripPrefix($prefixed));
+    }
+
+    public function test_separator_keeps_mkdir_as_its_own_command(): void
+    {
+        $prefixed = NixpacksStartCmdPhpIniPrefix::apply('mkdir -p /var/log/nginx');
+
+        $this->assertStringContainsString('; : __DOKHOSTS_INI__; mkdir -p /var/log/nginx', $prefixed);
+        $this->assertStringNotContainsString('__mkdir', $prefixed);
+    }
+
+    public function test_strip_legacy_separator_restores_mkdir(): void
+    {
+        $legacy = 'printf > "$_dokhosts_ini"__DOKHOSTS_INI__&&__mkdir -p /var/log/nginx';
+
+        $this->assertSame(
+            'mkdir -p /var/log/nginx',
+            NixpacksStartCmdPhpIniPrefix::stripPrefix($legacy),
+        );
     }
 }

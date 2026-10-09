@@ -67,7 +67,8 @@ class DomainPhpSettingsTest extends TestCase
         $this->assertStringContainsString('RUNTS_SYNC_MEMORY_LIMIT=768M', $saved);
         $this->assertStringContainsString('ARTISAN_MEMORY_LIMIT=768M', $saved);
         $this->assertStringContainsString('dokhosts.ini', $saved);
-        $this->assertSame(1, substr_count($saved, '__DOKHOSTS_INI__&&__'));
+        $this->assertSame(1, substr_count($saved, '; : __DOKHOSTS_INI__; '));
+        $this->assertStringNotContainsString('__mkdir', $saved);
         $this->assertStringNotContainsString('NIXPACKS_INSTALL_CMD=', $saved);
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.saveEnvironment'

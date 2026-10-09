@@ -6,12 +6,19 @@
 // used_by: app/Services/Dokploy/DokployApplicationAttacher.php
 // rules:   Empty start command stays empty — never invent nginx/php-fpm stack. Idempotent: strip old prefix before re-applying. Uses PHP_* env vars already on Dokploy.
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_php_ini_start | Shell prefix for Nixpacks PHP/Laravel containers.
+//          grok-4.7 | cursor | 2026-10-09 | s_ini_sep | Separator is a shell no-op so &&__ does not rename mkdir to __mkdir.
 
 namespace App\Support;
 
 final class NixpacksStartCmdPhpIniPrefix
 {
-    public const SEPARATOR = '__DOKHOSTS_INI__&&__';
+    /**
+     * Shell no-op between the ini writer and the real start command.
+     * A bare `__DOKHOSTS_INI__&&__` is parsed as `&& __mkdir` and the container exits immediately.
+     */
+    public const SEPARATOR = '; : __DOKHOSTS_INI__; ';
+
+    private const LEGACY_SEPARATOR = '__DOKHOSTS_INI__&&__';
 
     /**
      * Rules: null/blank in → null/blank out. Never double-prefix.
@@ -34,13 +41,15 @@ final class NixpacksStartCmdPhpIniPrefix
 
     public static function stripPrefix(string $startCmd): string
     {
-        $position = strpos($startCmd, self::SEPARATOR);
+        foreach ([self::SEPARATOR, self::LEGACY_SEPARATOR] as $separator) {
+            $position = strpos($startCmd, $separator);
 
-        if ($position === false) {
-            return $startCmd;
+            if ($position !== false) {
+                return substr($startCmd, $position + strlen($separator));
+            }
         }
 
-        return substr($startCmd, $position + strlen(self::SEPARATOR));
+        return $startCmd;
     }
 
     /**
