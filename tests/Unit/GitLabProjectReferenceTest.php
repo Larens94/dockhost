@@ -6,6 +6,7 @@
 // used_by: none
 // rules:   none
 // agent:   composer-2.5-fast | cursor | 2026-09-23 | s_git_toolkit_disc | gitlabRepository and customGitUrl cases.
+// agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | GitHub owner/repository/branch.
 // message:
 
 namespace Tests\Unit;
@@ -37,5 +38,20 @@ class GitLabProjectReferenceTest extends TestCase
         $this->assertNotNull($reference);
         $this->assertSame('acme/shop', $reference->projectPath);
         $this->assertSame('production', $reference->ref);
+    }
+
+    public function test_from_github_owner_and_repository(): void
+    {
+        $reference = GitLabProjectReference::fromDokployApplication([
+            'sourceType' => 'github',
+            'owner' => 'Larens94',
+            'repository' => 'vibebridge',
+            'branch' => 'main',
+            'githubId' => 'gh-1',
+        ]);
+
+        $this->assertNotNull($reference);
+        $this->assertSame('Larens94/vibebridge', $reference->projectPath);
+        $this->assertSame('main', $reference->ref);
     }
 }

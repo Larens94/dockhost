@@ -15,6 +15,7 @@
 //         tests/Feature/LaravelToolkitTest.php
 // rules:   none
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_toolkit_terminal | Messaggi workflow terminale; hook futuro httpExecIsAvailable().
+// agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | Name-match containers when the label list has none running.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 // message:
 
@@ -346,25 +347,29 @@ class DokployClient
      */
     public function applicationContainers(string $appName): array
     {
+        $labeled = [];
+
         try {
             $labeled = $this->containerList($this->get('docker.getContainersByAppLabel', [
                 'appName' => $appName,
                 'type' => 'standalone',
             ]));
-
-            if ($labeled !== []) {
-                return $labeled;
-            }
         } catch (Throwable) {
+        }
+
+        if ($this->containsRunningContainer($labeled)) {
+            return $labeled;
         }
 
         try {
-            return $this->containerList($this->get('docker.getContainersByAppNameMatch', [
+            $matched = $this->containerList($this->get('docker.getContainersByAppNameMatch', [
                 'appName' => $appName,
             ]));
         } catch (Throwable) {
-            return [];
+            return $labeled;
         }
+
+        return $this->mergeContainerLists($labeled, $matched);
     }
 
     /**
@@ -640,6 +645,100 @@ class DokployClient
         $encoded = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         return is_string($encoded) ? $encoded : '';
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $containers
+     */
+    private function containsRunningContainer(array $containers): bool
+    {
+        foreach ($containers as $container) {
+            if ($this->containerLooksRunning($container)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $container
+     */
+    private function containerLooksRunning(array $container): bool
+    {
+        $stateValue = $container['State'] ?? $container['state'] ?? null;
+        $state = is_array($stateValue)
+            ? strtolower((string) ($stateValue['Status'] ?? $stateValue['status'] ?? ''))
+            : strtolower(trim((string) $stateValue));
+
+        if ($state === 'running' || $state === 'healthy' || str_starts_with($state, 'running')) {
+            return true;
+        }
+
+        $status = strtolower((string) ($container['Status'] ?? $container['status'] ?? ''));
+
+        return str_starts_with($status, 'up') || str_contains($status, 'running');
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $primary
+     * @param  list<array<string, mixed>>  $extra
+     * @return list<array<string, mixed>>
+     */
+    private function mergeContainerLists(array $primary, array $extra): array
+    {
+        $merged = $primary;
+        $seen = [];
+
+        foreach ($primary as $container) {
+            $identity = $this->containerIdentity($container);
+
+            if ($identity !== null) {
+                $seen[$identity] = true;
+            }
+        }
+
+        foreach ($extra as $container) {
+            $identity = $this->containerIdentity($container);
+
+            if ($identity !== null && isset($seen[$identity])) {
+                continue;
+            }
+
+            if ($identity !== null) {
+                $seen[$identity] = true;
+            }
+
+            $merged[] = $container;
+        }
+
+        return $merged;
+    }
+
+    /**
+     * @param  array<string, mixed>  $container
+     */
+    private function containerIdentity(array $container): ?string
+    {
+        foreach (['Id', 'id', 'containerId', 'Name', 'name'] as $key) {
+            $value = $container[$key] ?? null;
+
+            if (is_string($value) && $value !== '') {
+                return ltrim($value, '/');
+            }
+        }
+
+        $names = $container['Names'] ?? $container['names'] ?? null;
+
+        if (is_array($names)) {
+            $first = $names[0] ?? null;
+
+            if (is_string($first) && $first !== '') {
+                return ltrim($first, '/');
+            }
+        }
+
+        return null;
     }
 
     /**

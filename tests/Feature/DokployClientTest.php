@@ -1,13 +1,12 @@
 <?php
 
-
 // DokployClientTest.php — DokployClientTest module.
 //
 // exports: DokployClientTest | DokployClientTest::test_requests_use_x_api_key_and_documented_endpoints(): void | DokployClientTest::test_read_compose_logs_accepts_string_payload_and_query_params(): void | DokployClientTest::test_boolean_success_json_is_normalized_to_empty_array(): void | DokployClientTest::test_application_containers_and_deployments_use_dokploy_http(): void | DokployClientTest::test_missing_dokploy_procedure_is_mapped_to_italian(): void | DokployClientTest::test_remove_mount_posts_mount_id_and_normalizes_boolean_success(): void | DokployClientTest::test_project_helpers_unwrap_nested_payloads_and_collect_compose_ids(): void
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace Tests\Feature;
 
@@ -229,6 +228,25 @@ class DokployClientTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/docker.getContainersByAppLabel?appName=shop&type=standalone');
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/deployment.all?applicationId=app-1');
         Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'docker.executeCommand'));
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'docker.getContainersByAppNameMatch'));
+    }
+
+    public function test_application_containers_include_name_match_when_labeled_are_stopped(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/docker.getContainersByAppLabel*' => Http::response([
+                ['containerId' => 'oldstopped01', 'name' => 'shop-old', 'state' => 'exited'],
+            ]),
+            'https://dokploy.test/api/docker.getContainersByAppNameMatch*' => Http::response([
+                ['containerId' => 'e0987fdacbf8', 'name' => 'shop.1.live', 'state' => 'running'],
+            ]),
+        ]);
+
+        $containers = (new DokployClient)->applicationContainers('shop');
+
+        $this->assertSame('oldstopped01', $containers[0]['containerId']);
+        $this->assertSame('e0987fdacbf8', $containers[1]['containerId']);
     }
 
     public function test_missing_dokploy_procedure_is_mapped_to_italian(): void

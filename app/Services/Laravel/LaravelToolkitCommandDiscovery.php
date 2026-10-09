@@ -10,6 +10,7 @@
 // agent:   composer-2.5-fast | cursor | 2026-09-23 | s_git_toolkit_disc | Composer script merge + git source key; safe script filter.
 // agent:   composer-2.5-fast | cursor | 2026-09-23 | s_gitlab_auto_sync | Fallback message points to CI sync; no Dokploy OAuth token reuse.
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_dokploy_gitlab_link | Dokploy gitlab.one OAuth for Toolkit when PAT absent.
+// agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | GitHub/Git sources stay configured; GitLab API is not the gate.
 
 namespace App\Services\Laravel;
 
@@ -51,13 +52,21 @@ class LaravelToolkitCommandDiscovery
             ? GitLabProjectReference::fromDokployApplication($dokployApplication)
             : null;
 
+        if ($reference !== null && is_array($dokployApplication) && ! $this->readsCatalogFromGitLab($dokployApplication)) {
+            return $this->fallbackPayload(__('panel.toolkit.catalog_source_configured', [
+                'provider' => $this->providerLabel($dokployApplication),
+                'repository' => $reference->projectPath,
+                'branch' => $reference->ref,
+            ]));
+        }
+
         $credentials = $this->resolveCredentials($dokployApplication);
 
         if ($reference === null || $credentials === null) {
             return $this->fallbackPayload(
                 $reference === null
-                    ? 'Repository Git non configurato su Dokploy: catalogo minimo predefinito.'
-                    : 'Toolkit GitLab: collega GitLab su Dokploy (General → Git) oppure usa «Usa GitLab di Dokploy» / un token di gruppo opzionale sotto.',
+                    ? __('panel.toolkit.catalog_git_missing')
+                    : __('panel.toolkit.catalog_gitlab_token'),
             );
         }
 
@@ -76,6 +85,64 @@ class LaravelToolkitCommandDiscovery
         });
 
         return $payload;
+    }
+
+    /**
+     * Command discovery calls the GitLab API. GitHub, Bitbucket, Gitea, and generic Git
+     * already stored on Dokploy stay configured and keep the default catalog.
+     *
+     * @param  array<string, mixed>  $application
+     */
+    private function readsCatalogFromGitLab(array $application): bool
+    {
+        $source = strtolower(trim((string) ($application['sourceType'] ?? '')));
+
+        if (in_array($source, ['github', 'bitbucket', 'gitea'], true)) {
+            return false;
+        }
+
+        if ($source === 'git') {
+            foreach (['customGitUrl', 'repository', 'gitlabRepositoryURL'] as $key) {
+                $url = $application[$key] ?? null;
+
+                if (is_string($url) && (str_contains($url, '://') || str_starts_with($url, 'git@'))) {
+                    return $this->urlLooksLikeGitLab($url);
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private function urlLooksLikeGitLab(string $url): bool
+    {
+        if (preg_match('#^git@([^:]+):#', $url, $matches) === 1) {
+            $host = strtolower($matches[1]);
+        } else {
+            $host = parse_url($url, PHP_URL_HOST);
+            $host = is_string($host) ? strtolower($host) : '';
+        }
+
+        if ($host === '') {
+            return false;
+        }
+
+        return str_contains($host, 'gitlab') || $host === 'git.silicoreautomation.com';
+    }
+
+    /**
+     * @param  array<string, mixed>  $application
+     */
+    private function providerLabel(array $application): string
+    {
+        return match (strtolower(trim((string) ($application['sourceType'] ?? '')))) {
+            'github' => 'GitHub',
+            'gitlab' => 'GitLab',
+            'bitbucket' => 'Bitbucket',
+            'gitea' => 'Gitea',
+            'git' => 'Git',
+            default => 'Git',
+        };
     }
 
     /**

@@ -6,6 +6,7 @@
 // used_by: app/Services/Laravel/LaravelToolkitCommandDiscovery.php
 // rules:   Never log or expose GITLAB_TOKEN. projectPath is namespace/project without .git suffix.
 // agent:   composer-2.5-fast | cursor | 2026-09-23 | s_git_toolkit_disc | Dokploy gitlabRepository and customGitUrl parsing.
+// agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | owner/repository for GitHub, GitLab, Bitbucket, and Gitea.
 // message:
 
 namespace App\Services\GitLab;
@@ -38,17 +39,18 @@ readonly class GitLabProjectReference
      */
     private static function resolveProjectPath(array $application): ?string
     {
-        $repository = $application['gitlabRepository'] ?? null;
+        foreach ([
+            ['gitlabRepository', ['gitlabOwner', 'gitlabProjectOwner', 'owner']],
+            ['githubRepository', ['githubOwner', 'owner']],
+            ['bitbucketRepository', ['bitbucketOwner', 'owner']],
+            ['bitbucketRepositorySlug', ['bitbucketOwner', 'owner']],
+            ['giteaRepository', ['giteaOwner', 'owner']],
+            ['repository', ['owner', 'githubOwner', 'gitlabOwner', 'bitbucketOwner', 'giteaOwner']],
+        ] as [$repositoryKey, $ownerKeys]) {
+            $path = self::ownerRepositoryPath($application, $repositoryKey, $ownerKeys);
 
-        if (is_string($repository) && $repository !== '') {
-            $owner = $application['gitlabOwner'] ?? $application['gitlabProjectOwner'] ?? null;
-
-            if (is_string($owner) && $owner !== '' && ! str_contains($repository, '/')) {
-                return self::normalizeProjectPath($owner.'/'.$repository);
-            }
-
-            if (str_contains($repository, '/')) {
-                return self::normalizeProjectPath($repository);
+            if ($path !== null) {
+                return $path;
             }
         }
 
@@ -63,6 +65,39 @@ readonly class GitLabProjectReference
 
             if ($fromUrl !== null) {
                 return $fromUrl;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $application
+     * @param  list<string>  $ownerKeys
+     */
+    private static function ownerRepositoryPath(array $application, string $repositoryKey, array $ownerKeys): ?string
+    {
+        $repository = $application[$repositoryKey] ?? null;
+
+        if (! is_string($repository) || trim($repository) === '') {
+            return null;
+        }
+
+        $repository = trim($repository);
+
+        if (str_contains($repository, '://') || str_starts_with($repository, 'git@')) {
+            return self::projectPathFromGitUrl($repository);
+        }
+
+        if (str_contains($repository, '/')) {
+            return self::normalizeProjectPath($repository);
+        }
+
+        foreach ($ownerKeys as $ownerKey) {
+            $owner = $application[$ownerKey] ?? null;
+
+            if (is_string($owner) && trim($owner) !== '') {
+                return self::normalizeProjectPath(trim($owner).'/'.$repository);
             }
         }
 
@@ -101,7 +136,7 @@ readonly class GitLabProjectReference
      */
     private static function resolveRef(array $application): string
     {
-        foreach (['gitlabBranch', 'gitBranch', 'branch', 'customGitBranch'] as $key) {
+        foreach (['gitlabBranch', 'githubBranch', 'bitbucketBranch', 'giteaBranch', 'gitBranch', 'branch', 'customGitBranch'] as $key) {
             $value = $application[$key] ?? null;
 
             if (is_string($value) && $value !== '') {

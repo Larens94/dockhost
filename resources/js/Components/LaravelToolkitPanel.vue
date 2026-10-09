@@ -10,6 +10,7 @@
   agent:   composer-2.5-fast | cursor | 2026-09-24 | s_gitlab_url_default | Modal URL from status gitlab_url_default / panel_gitlab
   agent:   composer-2.5-fast | cursor | 2026-09-24 | s_dokploy_gitlab_link | Usa GitLab di Dokploy + PAT opzionale nel banner Toolkit
   agent:   composer-2.5-fast | cursor | 2026-09-24 | s_toolkit_terminal | Preset copiano comando e aprono Dokploy General/Terminal quando exec API assente
+  agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | GitHub source is shown as configured; GitLab token is not the gate
 -->
 
 <script setup>
@@ -98,11 +99,26 @@ const dokployGitLabAvailable = computed(() =>
     Boolean(overview.value?.panel_gitlab?.dokploy_gitlab_available),
 );
 
+const gitProviderLabel = (provider) => {
+    const labels = {
+        github: 'GitHub',
+        gitlab: 'GitLab',
+        bitbucket: 'Bitbucket',
+        gitea: 'Gitea',
+        git: 'Git',
+    };
+
+    const key = String(provider || '').toLowerCase();
+
+    return labels[key] || provider || '';
+};
+
 const showGitLabConnectBanner = computed(
     () =>
         props.canOpenDokploy
         && attached.value
         && !catalogFromGit.value
+        && !overview.value?.git_configured
         && !overview.value?.panel_gitlab?.token_configured,
 );
 
@@ -537,10 +553,12 @@ watch(
                                 rel="noopener"
                                 class="font-medium underline underline-offset-2"
                             >
-                                {{ t('toolkit.configure_dokploy') }}
+                                {{ overview?.git_repository || t('toolkit.configure_dokploy') }}
                             </a>
-                            <span v-else class="text-zinc-500">{{ t('toolkit.configure_dokploy') }}</span>
+                            <span v-else class="text-zinc-500">{{ overview?.git_repository || t('toolkit.configure_dokploy') }}</span>
                             <span v-if="overview?.git_configured" class="ml-2 text-zinc-500">
+                                {{ gitProviderLabel(overview.git_provider) }}
+                                <template v-if="overview.git_branch">@ {{ overview.git_branch }}</template>
                                 {{ t('toolkit.source_present') }}
                             </span>
                         </dd>
@@ -582,7 +600,7 @@ watch(
                 <p
                     v-else-if="catalogHint"
                     class="text-sm"
-                    :class="catalogFromGit ? 'text-emerald-800' : 'text-zinc-600'"
+                    :class="catalogFromGit || overview?.git_configured ? 'text-emerald-800' : 'text-zinc-600'"
                 >
                     {{ catalogHint }}
                 </p>
@@ -608,7 +626,7 @@ watch(
                         {{ t('toolkit.artisan_fallback') }}
                     </template>
                 </p>
-                <p v-if="catalogHint" class="text-sm" :class="catalogFromGit ? 'text-emerald-800' : 'text-amber-800'">
+                <p v-if="catalogHint" class="text-sm" :class="catalogFromGit || overview?.git_configured ? 'text-emerald-800' : 'text-amber-800'">
                     {{ catalogHint }}
                 </p>
                 <div

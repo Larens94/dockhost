@@ -11,6 +11,7 @@
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_toolkit_terminal | terminal_workflow + mode=terminal quando exec API assente.
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_gitlab_url_default | overview status exposes gitlab_url_default for Toolkit modal.
 // agent:   grok-4.7 | cursor | 2026-09-21 | s_20260921_toolkit_parse | Moved the CodeDNA block out of the class so overview() parses
+// agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | GitHub counts as configured; Done deploy is not blocked on a missed container list.
 // message:
 
 namespace App\Services\Laravel;
@@ -18,6 +19,7 @@ namespace App\Services\Laravel;
 use App\Models\Domain;
 use App\Services\Dokploy\DokployClient;
 use App\Services\Dokploy\DokployDashboardUrl;
+use App\Services\GitLab\GitLabProjectReference;
 use App\Services\GitLab\GitLabRepositoryClient;
 use App\Services\Panel\PanelGitLabCredentialStore;
 use Illuminate\Validation\ValidationException;
@@ -50,6 +52,9 @@ class LaravelToolkitExecutor
             'dokploy_application_url' => $domain->dokploy_application_url,
             'build_type' => null,
             'source_type' => null,
+            'git_provider' => null,
+            'git_repository' => null,
+            'git_branch' => null,
             'git_configured' => false,
             'ready' => false,
             'exec_available' => false,
@@ -81,17 +86,22 @@ class LaravelToolkitExecutor
 
         try {
             $application = $this->dokploy->getApplication($applicationId);
-            $appName = $this->stringValue($application, ['appName', 'name']);
-            $container = $this->runningContainer($appName);
+            $containers = $this->inspectContainers($application);
             $deployment = $this->latestDeployment($applicationId);
 
             $status = $this->stringValue($application, ['applicationStatus', 'status']);
             $sourceType = $this->stringValue($application, ['sourceType']);
-            $gitConfigured = $this->gitLooksConfigured($application);
+            $git = $this->gitSummary($application);
+            $gitConfigured = $git['configured'];
             $discovered = $this->commandDiscovery->forDomain($domain, $application);
 
-            $ready = $container !== null;
-            $containerMessage = 'Prima configura GitLab e Deploy su Dokploy: il container applicazione non è in esecuzione.';
+            $ready = $this->applicationIsReady(
+                $containers['id'],
+                $containers['saw_containers'],
+                $status,
+                $deployment['status'],
+            );
+            $containerMessage = __('panel.toolkit.container_not_running');
 
             return [
                 ...$base,
@@ -110,6 +120,9 @@ class LaravelToolkitExecutor
                 'container_running' => $ready,
                 'build_type' => $this->stringValue($application, ['buildType']),
                 'source_type' => $sourceType,
+                'git_provider' => $git['provider'],
+                'git_repository' => $git['repository'],
+                'git_branch' => $git['branch'],
                 'git_configured' => $gitConfigured,
                 'ready' => $ready,
                 'exec_available' => $ready && $this->dokploy->httpExecIsAvailable(),
@@ -184,12 +197,13 @@ class LaravelToolkitExecutor
 
         try {
             $application = $this->dokploy->getApplication($applicationId);
-            $appName = $this->stringValue($application, ['appName', 'name']);
-            $containerId = $this->runningContainer($appName);
+            $containers = $this->inspectContainers($application);
+            $deployment = $this->latestDeployment($applicationId);
+            $status = $this->stringValue($application, ['applicationStatus', 'status']);
 
-            if ($containerId === null) {
+            if (! $this->applicationIsReady($containers['id'], $containers['saw_containers'], $status, $deployment['status'])) {
                 throw ValidationException::withMessages([
-                    'command' => 'Prima configura GitLab e Deploy su Dokploy: il container applicazione non è in esecuzione.',
+                    'command' => __('panel.toolkit.container_not_running'),
                 ]);
             }
 
@@ -237,8 +251,26 @@ class LaravelToolkitExecutor
 
     /**
      * @param  array<string, mixed>  $application
+     * @return array{configured: bool, provider: string|null, repository: string|null, branch: string|null}
      */
-    private function gitLooksConfigured(array $application): bool
+    private function gitSummary(array $application): array
+    {
+        $reference = GitLabProjectReference::fromDokployApplication($application);
+        $provider = $this->stringValue($application, ['sourceType']);
+        $configured = $reference !== null || $this->gitFieldPresent($application);
+
+        return [
+            'configured' => $configured,
+            'provider' => $provider,
+            'repository' => $reference?->projectPath,
+            'branch' => $reference?->ref,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $application
+     */
+    private function gitFieldPresent(array $application): bool
     {
         foreach ([
             'customGitUrl',
@@ -256,7 +288,10 @@ class LaravelToolkitExecutor
             }
         }
 
-        return false;
+        $source = strtolower((string) ($application['sourceType'] ?? ''));
+
+        return in_array($source, ['github', 'gitlab', 'bitbucket', 'gitea', 'git'], true)
+            && $this->stringValue($application, ['owner']) !== null;
     }
 
     /**
@@ -301,39 +336,124 @@ class LaravelToolkitExecutor
         return ['title' => null, 'status' => null];
     }
 
-    private function runningContainer(?string $appName): ?string
+    /**
+     * A running container wins. If Dokploy lists nothing, a Done application and a Done
+     * deploy still count: the container list can miss the live container while the deploy succeeded.
+     * A listed container that is not running stays blocked.
+     */
+    private function applicationIsReady(?string $containerId, bool $sawContainers, ?string $applicationStatus, ?string $deployStatus): bool
     {
-        if (! is_string($appName) || $appName === '') {
-            return null;
+        if (is_string($containerId) && $containerId !== '') {
+            return true;
         }
 
-        foreach ($this->dokploy->applicationContainers($appName) as $container) {
-            if (! is_array($container)) {
-                continue;
+        if ($sawContainers) {
+            return false;
+        }
+
+        return $this->statusMeansDeployed($applicationStatus) && $this->statusMeansDeployed($deployStatus);
+    }
+
+    private function statusMeansDeployed(?string $status): bool
+    {
+        return in_array(strtolower(trim((string) $status)), ['done', 'success', 'successful', 'running'], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $application
+     * @return array{id: string|null, saw_containers: bool}
+     */
+    private function inspectContainers(array $application): array
+    {
+        $names = [];
+
+        foreach (['appName', 'name'] as $key) {
+            $value = $this->stringValue($application, [$key]);
+
+            if ($value !== null) {
+                $names[$value] = true;
             }
+        }
 
-            $state = strtolower((string) ($container['State'] ?? $container['state'] ?? ''));
+        $sawContainers = false;
 
-            if ($state !== 'running' && ! str_starts_with($state, 'running')) {
-                continue;
-            }
+        foreach (array_keys($names) as $appName) {
+            foreach ($this->dokploy->applicationContainers($appName) as $container) {
+                if (! is_array($container)) {
+                    continue;
+                }
 
-            foreach (['Id', 'id', 'containerId'] as $key) {
-                $id = $container[$key] ?? null;
+                $sawContainers = true;
 
-                if (is_string($id) && preg_match('/^[a-zA-Z0-9.\-_]+$/', $id) === 1) {
-                    return $id;
+                if (! $this->containerIsRunning($container)) {
+                    continue;
+                }
+
+                $identity = $this->containerIdentity($container);
+
+                if ($identity !== null) {
+                    return [
+                        'id' => $identity,
+                        'saw_containers' => true,
+                    ];
                 }
             }
+        }
 
-            $name = $container['Name'] ?? $container['name'] ?? null;
+        return [
+            'id' => null,
+            'saw_containers' => $sawContainers,
+        ];
+    }
 
-            if (is_string($name) && $name !== '') {
-                $trimmed = ltrim($name, '/');
+    /**
+     * @param  array<string, mixed>  $container
+     */
+    private function containerIsRunning(array $container): bool
+    {
+        $stateValue = $container['State'] ?? $container['state'] ?? null;
+        $state = is_array($stateValue)
+            ? strtolower((string) ($stateValue['Status'] ?? $stateValue['status'] ?? ''))
+            : strtolower(trim((string) $stateValue));
 
-                if (preg_match('/^[a-zA-Z0-9.\-_]+$/', $trimmed) === 1) {
-                    return $trimmed;
-                }
+        if ($state === 'running' || $state === 'healthy' || str_starts_with($state, 'running') || str_starts_with($state, 'up')) {
+            return true;
+        }
+
+        if ($state === '') {
+            $status = strtolower((string) ($container['Status'] ?? $container['status'] ?? ''));
+
+            return str_starts_with($status, 'up') || str_contains($status, 'running');
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $container
+     */
+    private function containerIdentity(array $container): ?string
+    {
+        foreach (['Id', 'id', 'containerId'] as $key) {
+            $id = $container[$key] ?? null;
+
+            if (is_string($id) && preg_match('/^[a-zA-Z0-9.\-_]+$/', $id) === 1) {
+                return $id;
+            }
+        }
+
+        $name = $container['Name'] ?? $container['name'] ?? null;
+
+        if (! is_string($name) || $name === '') {
+            $names = $container['Names'] ?? $container['names'] ?? null;
+            $name = is_array($names) ? ($names[0] ?? null) : null;
+        }
+
+        if (is_string($name) && $name !== '') {
+            $trimmed = ltrim($name, '/');
+
+            if (preg_match('/^[a-zA-Z0-9.\-_]+$/', $trimmed) === 1) {
+                return $trimmed;
             }
         }
 

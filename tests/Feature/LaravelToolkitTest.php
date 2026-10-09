@@ -8,6 +8,7 @@
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_toolkit_terminal | Terminal workflow: mode=terminal 200, terminal_workflow on status.
 // agent:   composer-2.5-fast | cursor | 2026-09-23 | s_toolkit_catalog | Assert command_catalog on status; npm exec blocked.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+// agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | GitHub source and Done deploy are not a GitLab gate.
 // message:
 
 namespace Tests\Feature;
@@ -85,7 +86,8 @@ class LaravelToolkitTest extends TestCase
             ->assertJsonPath('ready', false)
             ->assertJsonPath('container_running', false)
             ->assertJsonPath('exec_available', false)
-            ->assertJsonFragment(['message' => 'Prima configura GitLab e Deploy su Dokploy: il container applicazione non è in esecuzione.']);
+            ->assertJsonFragment(['message' => 'Il container dell’applicazione non è in esecuzione su Dokploy.'])
+            ->assertJsonMissing(['message' => 'Prima configura GitLab e Deploy su Dokploy: il container applicazione non è in esecuzione.']);
     }
 
     public function test_artisan_does_not_call_missing_docker_execute_command(): void
@@ -178,9 +180,93 @@ class LaravelToolkitTest extends TestCase
                 'command' => 'optimize:clear',
             ])
             ->assertUnprocessable()
-            ->assertJsonPath('errors.command.0', 'Prima configura GitLab e Deploy su Dokploy: il container applicazione non è in esecuzione.');
+            ->assertJsonPath('errors.command.0', 'Il container dell’applicazione non è in esecuzione su Dokploy.');
 
         $this->assertDokployExecWasNotCalled();
+    }
+
+    public function test_github_source_with_done_deploy_is_ready_without_gitlab_prompt(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake($this->toolkitFakes(application: [
+            'sourceType' => 'github',
+            'owner' => 'Larens94',
+            'repository' => 'vibebridge',
+            'branch' => 'main',
+            'githubId' => 'gh-1',
+            'gitlabRepository' => null,
+            'customGitUrl' => null,
+        ], labeled: [
+            [
+                'containerId' => 'e0987fdacbf8',
+                'name' => 'vibesbridge-com-ivevh2.1.qs1yt4qiqcm41btr3olyixyzc',
+                'state' => 'running',
+            ],
+        ]));
+
+        $user = User::factory()->create();
+        $domain = $this->laravelDomain();
+
+        $this->actingAs($user)
+            ->getJson(route('domains.laravel.status', $domain))
+            ->assertOk()
+            ->assertJsonPath('source_type', 'github')
+            ->assertJsonPath('git_configured', true)
+            ->assertJsonPath('git_provider', 'github')
+            ->assertJsonPath('git_repository', 'Larens94/vibebridge')
+            ->assertJsonPath('git_branch', 'main')
+            ->assertJsonPath('container_running', true)
+            ->assertJsonPath('ready', true)
+            ->assertJsonPath('last_deploy_status', 'done')
+            ->assertJsonPath('message', null)
+            ->assertJsonPath(
+                'command_catalog_message',
+                'Sorgente GitHub già configurata su Dokploy (Larens94/vibebridge @ main). Catalogo minimo predefinito.',
+            );
+    }
+
+    public function test_done_deploy_stays_ready_when_container_list_is_empty(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake($this->toolkitFakes(labeled: [], matched: []));
+
+        $user = User::factory()->create();
+        $domain = $this->laravelDomain();
+
+        $this->actingAs($user)
+            ->getJson(route('domains.laravel.status', $domain))
+            ->assertOk()
+            ->assertJsonPath('container_running', true)
+            ->assertJsonPath('ready', true)
+            ->assertJsonPath('message', null);
+    }
+
+    public function test_stopped_labeled_container_uses_running_name_match(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake($this->toolkitFakes(labeled: [
+            [
+                'containerId' => 'oldstopped01',
+                'name' => 'test-vibesbridge-com-old',
+                'state' => 'exited',
+            ],
+        ], matched: [
+            [
+                'containerId' => 'e0987fdacbf8',
+                'name' => 'vibesbridge-com-ivevh2.1.qs1yt4qiqcm41btr3olyixyzc',
+                'state' => 'running',
+            ],
+        ]));
+
+        $user = User::factory()->create();
+        $domain = $this->laravelDomain();
+
+        $this->actingAs($user)
+            ->getJson(route('domains.laravel.status', $domain))
+            ->assertOk()
+            ->assertJsonPath('container_running', true)
+            ->assertJsonPath('ready', true)
+            ->assertJsonPath('message', null);
     }
 
     public function test_guests_cannot_use_toolkit_endpoints(): void
@@ -199,19 +285,24 @@ class LaravelToolkitTest extends TestCase
     }
 
     /**
+     * @param  array<string, mixed>  $application
+     * @param  list<array<string, mixed>>|null  $labeled
+     * @param  list<array<string, mixed>>|null  $matched
      * @return array<string, PromiseInterface>
      */
-    private function toolkitFakes(bool $running = true): array
+    private function toolkitFakes(bool $running = true, array $application = [], ?array $labeled = null, ?array $matched = null): array
     {
         return [
             'https://dokploy.test/api/application.one*' => Http::response([
                 'applicationId' => 'app-laravel',
                 'appName' => 'test-vibesbridge-com',
+                'name' => 'test.vibesbridge.com',
                 'applicationStatus' => 'done',
                 'buildType' => 'nixpacks',
                 'sourceType' => 'gitlab',
                 'gitlabRepository' => 'silicore/vibesbridge',
                 'env' => "APP_KEY=base64:secret\nDB_PASSWORD=never-show",
+                ...$application,
             ]),
             'https://dokploy.test/api/deployment.all*' => Http::response([
                 [
@@ -220,14 +311,14 @@ class LaravelToolkitTest extends TestCase
                     'title' => 'Manual deployment',
                 ],
             ]),
-            'https://dokploy.test/api/docker.getContainersByAppLabel*' => Http::response([
+            'https://dokploy.test/api/docker.getContainersByAppLabel*' => Http::response($labeled ?? [
                 [
                     'Name' => '/test-vibesbridge-com',
                     'Id' => 'appcontainerid',
                     'State' => $running ? 'running' : 'exited',
                 ],
             ]),
-            'https://dokploy.test/api/docker.getContainersByAppNameMatch*' => Http::response([]),
+            'https://dokploy.test/api/docker.getContainersByAppNameMatch*' => Http::response($matched ?? []),
         ];
     }
 

@@ -45,12 +45,39 @@ class DomainSiteHostingTest extends TestCase
                 ->where('siteHosting.available', true)
                 ->where('siteHosting.git.repository', 'acme/shop')
                 ->where('siteHosting.git.branch', 'main')
+                ->where('siteHosting.git.source_type', 'gitlab')
                 ->has('siteHosting.variables', 3)
                 ->where('siteHosting.variables.0.key', 'APP_NAME')
                 ->where('siteHosting.variables.0.value', 'Shop')
                 ->where('siteHosting.variables.1.key', 'DB_PASSWORD')
                 ->where('siteHosting.variables.1.redacted', true)
                 ->missing('siteHosting.variables.1.value'));
+    }
+
+    public function test_show_reads_github_owner_and_repository(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/application.one*' => Http::response([
+                'applicationId' => 'app-site',
+                'env' => "APP_NAME=Shop\n",
+                'sourceType' => 'github',
+                'owner' => 'Larens94',
+                'repository' => 'vibebridge',
+                'branch' => 'main',
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+        $domain = $this->domainWithApplication('app-site');
+
+        $this->actingAs($user)
+            ->get(route('domains.show', $domain))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('siteHosting.git.source_type', 'github')
+                ->where('siteHosting.git.repository', 'Larens94/vibebridge')
+                ->where('siteHosting.git.branch', 'main'));
     }
 
     public function test_merge_env_updates_key_and_keeps_secret_when_value_blank(): void
