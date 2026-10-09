@@ -85,6 +85,10 @@ Route::middleware('auth')->group(function () {
         ->name('domains.database-users.store');
     Route::post('domains/{domain}/database-users/resync', [DomainController::class, 'resyncDatabaseUsers'])
         ->name('domains.database-users.resync');
+    Route::post('domains/{domain}/database-users/{databaseAccount}/reset-password', [DomainController::class, 'resetDatabaseAccountPassword'])
+        ->name('domains.database-users.reset-password');
+    Route::delete('domains/{domain}/database-users/{databaseAccount}', [DomainController::class, 'destroyDatabaseAccount'])
+        ->name('domains.database-users.destroy');
     Route::post('domains/{domain}/sftp-users', [DomainController::class, 'storeSftpUser'])
         ->name('domains.sftp-users.store');
     Route::post('domains/{domain}/laravel', [DomainController::class, 'attachLaravel'])

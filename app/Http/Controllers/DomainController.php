@@ -25,6 +25,7 @@ use App\Http\Requests\ApplyDomainStackPresetRequest;
 use App\Http\Requests\AttachLaravelRequest;
 use App\Http\Requests\DeployDomainSiteRequest;
 use App\Http\Requests\DestroyDomainRequest;
+use App\Http\Requests\MutateDomainDatabaseAccountRequest;
 use App\Http\Requests\ResyncDomainDatabaseUsersRequest;
 use App\Http\Requests\StoreDomainDatabaseRequest;
 use App\Http\Requests\StoreDomainDatabaseUserRequest;
@@ -33,6 +34,7 @@ use App\Http\Requests\StoreDomainSftpUserRequest;
 use App\Http\Requests\UpdateDomainPhpSettingsRequest;
 use App\Http\Requests\UpdateDomainRequest;
 use App\Http\Requests\UpdateDomainSiteEnvRequest;
+use App\Models\DatabaseAccount;
 use App\Models\Domain;
 use App\Models\Infrastructure;
 use App\Models\Subscription;
@@ -303,6 +305,37 @@ class DomainController extends Controller
 
         return $this->redirectToDomain($domain, 'database')
             ->with('success', __('panel.domains.show.resync_mysql_users_done', ['count' => $synced]));
+    }
+
+    public function resetDatabaseAccountPassword(
+        MutateDomainDatabaseAccountRequest $request,
+        Domain $domain,
+        DatabaseAccount $databaseAccount,
+        AccessAccountManager $accounts,
+        DomainAccessMailer $accessMailer,
+    ): RedirectResponse {
+        $request->accountBelongsToDomain($domain, $databaseAccount);
+
+        $account = $accounts->resetDatabaseAccountPassword($databaseAccount);
+        $revealed = $accounts->revealDatabase($account, $account->password_encrypted);
+        $this->emailSiteCredentialIfPossible($request, $domain, $accessMailer, $revealed);
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('revealed_credential', $revealed);
+    }
+
+    public function destroyDatabaseAccount(
+        MutateDomainDatabaseAccountRequest $request,
+        Domain $domain,
+        DatabaseAccount $databaseAccount,
+        AccessAccountManager $accounts,
+    ): RedirectResponse {
+        $request->accountBelongsToDomain($domain, $databaseAccount);
+
+        $accounts->deleteDatabaseAccount($databaseAccount);
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.delete_db_user_done'));
     }
 
     public function storeSftpUser(

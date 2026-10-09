@@ -53,6 +53,64 @@ class AccessAccountManager
         return $this->createDatabaseUser($source, $privilege);
     }
 
+    public function resetDatabaseAccountPassword(DatabaseAccount $account): DatabaseAccount
+    {
+        $infrastructure = $account->infrastructure
+            ?? Infrastructure::query()->where('slug', $account->infra_slug)->first();
+
+        if (! $infrastructure instanceof Infrastructure) {
+            throw ValidationException::withMessages([
+                'database_account' => 'Infrastruttura del database non trovata.',
+            ]);
+        }
+
+        $password = self::generatedPassword();
+
+        if ($account->engine === DatabaseEngine::Mysql) {
+            $this->mysqlProvisioner->replaceSiteUser(
+                $account->database_name,
+                $account->username,
+                $password,
+                $account->privilege,
+                $infrastructure,
+            );
+        } elseif ($account->engine === DatabaseEngine::Postgres) {
+            $this->postgresProvisioner->grantUser(
+                $account->database_name,
+                $account->username,
+                $password,
+                $account->privilege,
+                $infrastructure,
+            );
+        }
+
+        $account->update(['password_encrypted' => $password]);
+
+        return $account->refresh();
+    }
+
+    public function deleteDatabaseAccount(DatabaseAccount $account): void
+    {
+        if ($account->domain_id !== null) {
+            $count = DatabaseAccount::query()->where('domain_id', $account->domain_id)->count();
+
+            if ($count < 2) {
+                throw ValidationException::withMessages([
+                    'database_account' => __('panel.domains.show.delete_db_user_last'),
+                ]);
+            }
+        }
+
+        $infrastructure = $account->infrastructure
+            ?? Infrastructure::query()->where('slug', $account->infra_slug)->first();
+
+        if ($account->engine === DatabaseEngine::Mysql && $infrastructure instanceof Infrastructure) {
+            $this->mysqlProvisioner->dropSiteUser($account->username, $infrastructure);
+        }
+
+        $account->delete();
+    }
+
     public function createDatabaseUserForInfrastructure(
         Infrastructure $infrastructure,
         DatabaseAccount $source,

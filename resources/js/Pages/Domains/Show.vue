@@ -200,6 +200,20 @@ const resyncMysqlUsers = () => {
     resyncMysqlForm.post(actionUrl(`/domains/${props.domain.id}/database-users/resync`), { preserveScroll: true });
 };
 
+const resetDbUserPassword = (accountId) => {
+    useForm({}).post(actionUrl(`/domains/${props.domain.id}/database-users/${accountId}/reset-password`), {
+        preserveScroll: true,
+    });
+};
+
+const deleteDbUser = (accountId) => {
+    if (!window.confirm(t('domains.show.delete_db_user_confirm'))) {
+        return;
+    }
+
+    useForm({}).delete(actionUrl(`/domains/${props.domain.id}/database-users/${accountId}`), { preserveScroll: true });
+};
+
 const sftpUserForm = useForm({});
 
 const laravelForm = useForm({});
@@ -866,10 +880,31 @@ const updateMemberRole = (memberId, role) => {
                         :key="`db-user-${account.id}`"
                         class="rounded-lg bg-zinc-50 px-3 py-2 text-sm"
                     >
-                        <span class="font-medium">{{ account.username }}</span>
-                        <span class="text-zinc-500">
-                            · {{ account.database_name }} · {{ privilegeLabel(account.privilege) }}
-                        </span>
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <span class="font-medium">{{ account.username }}</span>
+                                <span class="text-zinc-500">
+                                    · {{ account.database_name }} · {{ privilegeLabel(account.privilege) }}
+                                </span>
+                            </div>
+                            <div v-if="canMutateHosting && account.engine === 'mysql'" class="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-100"
+                                    @click="resetDbUserPassword(account.id)"
+                                >
+                                    {{ t('domains.show.reset_db_user_password') }}
+                                </button>
+                                <button
+                                    v-if="domain.database_accounts.length > 1"
+                                    type="button"
+                                    class="rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                                    @click="deleteDbUser(account.id)"
+                                >
+                                    {{ t('domains.show.delete_db_user') }}
+                                </button>
+                            </div>
+                        </div>
                     </li>
                 </ul>
                 <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_database') }}</p>

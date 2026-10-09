@@ -2,7 +2,7 @@
 
 // MysqlProvisioner.php — Creates site DB + user on shared infra MariaDB.
 //
-// exports: MysqlProvisioner | MysqlProvisioner::provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void | MysqlProvisioner::grantUser( string $database, string $username, string $password, DatabasePrivilege $privilege, ?Infrastructure $infrastructure = null, ): void | MysqlProvisioner::resyncDatabaseAccount(DatabaseAccount $account): void
+// exports: MysqlProvisioner | MysqlProvisioner::provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void | MysqlProvisioner::grantUser( string $database, string $username, string $password, DatabasePrivilege $privilege, ?Infrastructure $infrastructure = null, ): void | MysqlProvisioner::replaceSiteUser( string $database, string $username, string $password, DatabasePrivilege $privilege, Infrastructure $infrastructure, ): void | MysqlProvisioner::dropSiteUser(string $username, Infrastructure $infrastructure): void | MysqlProvisioner::resyncDatabaseAccount(DatabaseAccount $account): void
 // used_by: app/Providers/AppServiceProvider.php
 //         app/Services/Hosting/AccessAccountManager.php
 //         app/Services/Hosting/DomainProvisioner.php
@@ -52,11 +52,14 @@ class MysqlProvisioner
             ? $this->connect($infrastructure)
             : ($this->connector)();
         $databaseIdentifier = $this->quoteIdentifier($database);
-        $usernameIdentifier = $this->quoteIdentifier($username);
 
         $pdo->exec("CREATE DATABASE IF NOT EXISTS {$databaseIdentifier}");
-        $this->applyUserPassword($pdo, $usernameIdentifier, $password);
-        $pdo->exec("GRANT ALL PRIVILEGES ON {$databaseIdentifier}.* TO {$usernameIdentifier}@'%'");
+
+        if (! $infrastructure instanceof Infrastructure) {
+            throw new InvalidArgumentException('Infrastructure is required to provision a site database user.');
+        }
+
+        $this->replaceSiteUser($database, $username, $password, DatabasePrivilege::All, $infrastructure);
     }
 
     public function grantUser(
@@ -66,15 +69,39 @@ class MysqlProvisioner
         DatabasePrivilege $privilege,
         ?Infrastructure $infrastructure = null,
     ): void {
-        $pdo = $infrastructure instanceof Infrastructure
-            ? $this->connect($infrastructure)
-            : ($this->connector)();
+        if (! $infrastructure instanceof Infrastructure) {
+            throw new InvalidArgumentException('Infrastructure is required to grant a site database user.');
+        }
+
+        $this->replaceSiteUser($database, $username, $password, $privilege, $infrastructure);
+    }
+
+    public function replaceSiteUser(
+        string $database,
+        string $username,
+        string $password,
+        DatabasePrivilege $privilege,
+        Infrastructure $infrastructure,
+    ): void {
+        $pdo = $this->connect($infrastructure);
         $databaseIdentifier = $this->quoteIdentifier($database);
         $usernameIdentifier = $this->quoteIdentifier($username);
+        $quotedPassword = $pdo->quote($password);
         $grant = $privilege->mysqlGrant();
 
-        $this->applyUserPassword($pdo, $usernameIdentifier, $password);
+        $pdo->exec("DROP USER IF EXISTS {$usernameIdentifier}@'%'");
+        $pdo->exec("CREATE USER {$usernameIdentifier}@'%' IDENTIFIED BY {$quotedPassword}");
         $pdo->exec("GRANT {$grant} ON {$databaseIdentifier}.* TO {$usernameIdentifier}@'%'");
+        $pdo->exec('FLUSH PRIVILEGES');
+    }
+
+    public function dropSiteUser(string $username, Infrastructure $infrastructure): void
+    {
+        $pdo = $this->connect($infrastructure);
+        $usernameIdentifier = $this->quoteIdentifier($username);
+
+        $pdo->exec("DROP USER IF EXISTS {$usernameIdentifier}@'%'");
+        $pdo->exec('FLUSH PRIVILEGES');
     }
 
     public function resyncDatabaseAccount(DatabaseAccount $account): void
@@ -96,7 +123,7 @@ class MysqlProvisioner
             throw new InvalidArgumentException('Database account has no stored password.');
         }
 
-        $this->grantUser(
+        $this->replaceSiteUser(
             $account->database_name,
             $account->username,
             $password,
@@ -178,13 +205,4 @@ class MysqlProvisioner
         return '`'.$name.'`';
     }
 
-    private function applyUserPassword(PDO $pdo, string $usernameIdentifier, string $password): void
-    {
-        $quotedPassword = $pdo->quote($password);
-        $identified = "IDENTIFIED VIA mysql_native_password BY {$quotedPassword}";
-
-        $pdo->exec("CREATE USER IF NOT EXISTS {$usernameIdentifier}@'%' {$identified}");
-        // Rules: IF NOT EXISTS leaves a previous password in place. ALTER makes the panel password the one MariaDB accepts.
-        $pdo->exec("ALTER USER {$usernameIdentifier}@'%' {$identified}");
-    }
 }
