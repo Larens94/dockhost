@@ -150,6 +150,7 @@ class ComposeTemplate
             '${INFRA_SLUG}' => $slug,
             '${SFTP_HOST_PORT:-2222}' => (string) $sftpHostPort,
             '${SFTP_HOST_PORT}' => (string) $sftpHostPort,
+            '${PMA_ABSOLUTE_URI}' => 'https://'.$this->phpmyadminHostname($slug),
         ];
 
         if (filled($secrets['mysql_root_password'] ?? null)) {
@@ -436,6 +437,7 @@ services:
     environment:
       PMA_HOST: ${INFRA_SLUG}-mariadb
       PMA_PORT: 3306
+      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI}
       UPLOAD_LIMIT: 64M
     depends_on:
       mariadb:

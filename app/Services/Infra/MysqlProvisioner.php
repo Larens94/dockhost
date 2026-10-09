@@ -181,7 +181,7 @@ class MysqlProvisioner
     private function applyUserPassword(PDO $pdo, string $usernameIdentifier, string $password): void
     {
         $quotedPassword = $pdo->quote($password);
-        $identified = "IDENTIFIED VIA mysql_native_password USING PASSWORD({$quotedPassword})";
+        $identified = "IDENTIFIED VIA mysql_native_password BY {$quotedPassword}";
 
         $pdo->exec("CREATE USER IF NOT EXISTS {$usernameIdentifier}@'%' {$identified}");
         // Rules: IF NOT EXISTS leaves a previous password in place. ALTER makes the panel password the one MariaDB accepts.

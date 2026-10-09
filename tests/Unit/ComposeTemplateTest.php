@@ -40,6 +40,7 @@ class ComposeTemplateTest extends TestCase
         $this->assertStringNotContainsString("\n  redis:\n", $yaml);
         $this->assertStringNotContainsString("\n  minio:\n", $yaml);
         $this->assertStringNotContainsString("\n  pgadmin:\n", $yaml);
+        $this->assertStringContainsString('PMA_ABSOLUTE_URI: https://pma-infra2.', $yaml);
     }
 
     public function test_isolated_networks_keep_databases_off_the_shared_network(): void
