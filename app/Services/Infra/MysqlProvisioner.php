@@ -2,7 +2,7 @@
 
 // MysqlProvisioner.php — Creates site DB + user on shared infra MariaDB.
 //
-// exports: MysqlProvisioner | MysqlProvisioner::provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void | MysqlProvisioner::grantUser( string $database, string $username, string $password, DatabasePrivilege $privilege, ?Infrastructure $infrastructure = null, ): void
+// exports: MysqlProvisioner | MysqlProvisioner::provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void | MysqlProvisioner::grantUser( string $database, string $username, string $password, DatabasePrivilege $privilege, ?Infrastructure $infrastructure = null, ): void | MysqlProvisioner::resyncDatabaseAccount(DatabaseAccount $account): void
 // used_by: app/Providers/AppServiceProvider.php
 //         app/Services/Hosting/AccessAccountManager.php
 //         app/Services/Hosting/DomainProvisioner.php
@@ -16,13 +16,17 @@
 //          Connect via Infrastructure mysql_host hostname on dokploy-network (not an IP).
 //          Admin compose user `infra` may keep broader grants from the stack; site accounts must stay scoped.
 //          CREATE USER IF NOT EXISTS does not change an existing password. Always ALTER USER afterwards, or a retry keeps the old password and the app gets 1045.
+//          Site users use mysql_native_password (same as infra in compose) so phpMyAdmin mysqli can authenticate on MariaDB 11.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Codify one-DB GRANT for site users
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_db_pass | ALTER USER after CREATE so a retry replaces the password
+//          composer-2.5-fast | cursor | 2026-10-09 | s_pma_native_pass | mysql_native_password for phpMyAdmin + resyncDatabaseAccount
 // message:
 
 namespace App\Services\Infra;
 
+use App\Enums\DatabaseEngine;
 use App\Enums\DatabasePrivilege;
+use App\Models\DatabaseAccount;
 use App\Models\Infrastructure;
 use Closure;
 use Illuminate\Validation\ValidationException;
@@ -49,12 +53,9 @@ class MysqlProvisioner
             : ($this->connector)();
         $databaseIdentifier = $this->quoteIdentifier($database);
         $usernameIdentifier = $this->quoteIdentifier($username);
-        $quotedPassword = $pdo->quote($password);
 
         $pdo->exec("CREATE DATABASE IF NOT EXISTS {$databaseIdentifier}");
-        $pdo->exec("CREATE USER IF NOT EXISTS {$usernameIdentifier}@'%' IDENTIFIED BY {$quotedPassword}");
-        // Rules: IF NOT EXISTS leaves a previous password in place. ALTER makes the panel password the one MariaDB accepts.
-        $pdo->exec("ALTER USER {$usernameIdentifier}@'%' IDENTIFIED BY {$quotedPassword}");
+        $this->applyUserPassword($pdo, $usernameIdentifier, $password);
         $pdo->exec("GRANT ALL PRIVILEGES ON {$databaseIdentifier}.* TO {$usernameIdentifier}@'%'");
     }
 
@@ -70,12 +71,38 @@ class MysqlProvisioner
             : ($this->connector)();
         $databaseIdentifier = $this->quoteIdentifier($database);
         $usernameIdentifier = $this->quoteIdentifier($username);
-        $quotedPassword = $pdo->quote($password);
         $grant = $privilege->mysqlGrant();
 
-        $pdo->exec("CREATE USER IF NOT EXISTS {$usernameIdentifier}@'%' IDENTIFIED BY {$quotedPassword}");
-        $pdo->exec("ALTER USER {$usernameIdentifier}@'%' IDENTIFIED BY {$quotedPassword}");
+        $this->applyUserPassword($pdo, $usernameIdentifier, $password);
         $pdo->exec("GRANT {$grant} ON {$databaseIdentifier}.* TO {$usernameIdentifier}@'%'");
+    }
+
+    public function resyncDatabaseAccount(DatabaseAccount $account): void
+    {
+        if ($account->engine !== DatabaseEngine::Mysql) {
+            throw new InvalidArgumentException('Not a MySQL database account.');
+        }
+
+        $infrastructure = $account->infrastructure
+            ?? Infrastructure::query()->where('slug', $account->infra_slug)->first();
+
+        if (! $infrastructure instanceof Infrastructure) {
+            throw new InvalidArgumentException('Infrastructure not found for database account.');
+        }
+
+        $password = (string) $account->password_encrypted;
+
+        if ($password === '') {
+            throw new InvalidArgumentException('Database account has no stored password.');
+        }
+
+        $this->grantUser(
+            $account->database_name,
+            $account->username,
+            $password,
+            $account->privilege,
+            $infrastructure,
+        );
     }
 
     private function connect(Infrastructure $infrastructure): PDO
@@ -149,5 +176,15 @@ class MysqlProvisioner
         }
 
         return '`'.$name.'`';
+    }
+
+    private function applyUserPassword(PDO $pdo, string $usernameIdentifier, string $password): void
+    {
+        $quotedPassword = $pdo->quote($password);
+        $identified = "IDENTIFIED VIA mysql_native_password USING PASSWORD({$quotedPassword})";
+
+        $pdo->exec("CREATE USER IF NOT EXISTS {$usernameIdentifier}@'%' {$identified}");
+        // Rules: IF NOT EXISTS leaves a previous password in place. ALTER makes the panel password the one MariaDB accepts.
+        $pdo->exec("ALTER USER {$usernameIdentifier}@'%' {$identified}");
     }
 }

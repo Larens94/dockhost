@@ -25,6 +25,7 @@ use App\Http\Requests\ApplyDomainStackPresetRequest;
 use App\Http\Requests\AttachLaravelRequest;
 use App\Http\Requests\DeployDomainSiteRequest;
 use App\Http\Requests\DestroyDomainRequest;
+use App\Http\Requests\ResyncDomainDatabaseUsersRequest;
 use App\Http\Requests\StoreDomainDatabaseRequest;
 use App\Http\Requests\StoreDomainDatabaseUserRequest;
 use App\Http\Requests\StoreDomainRequest;
@@ -41,6 +42,7 @@ use App\Services\Dokploy\DokployApplicationAttacher;
 use App\Services\Hosting\AccessAccountManager;
 use App\Services\Hosting\DomainProvisioner;
 use App\Services\Hosting\DomainSiteEnvManager;
+use App\Services\Infra\MysqlProvisioner;
 use App\Services\Panel\DomainAccessMailer;
 use App\Support\DomainPhpSettings;
 use Illuminate\Http\RedirectResponse;
@@ -273,6 +275,34 @@ class DomainController extends Controller
 
         return $this->redirectToDomain($domain, 'database')
             ->with('revealed_credential', $revealed);
+    }
+
+    public function resyncDatabaseUsers(
+        ResyncDomainDatabaseUsersRequest $request,
+        Domain $domain,
+        MysqlProvisioner $mysql,
+    ): RedirectResponse {
+        $domain->load('databaseAccounts.infrastructure');
+
+        $synced = 0;
+
+        foreach ($domain->databaseAccounts as $account) {
+            if ($account->engine !== DatabaseEngine::Mysql) {
+                continue;
+            }
+
+            $mysql->resyncDatabaseAccount($account);
+            $synced++;
+        }
+
+        if ($synced === 0) {
+            throw ValidationException::withMessages([
+                'database' => __('panel.domains.show.resync_mysql_users_none'),
+            ]);
+        }
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.resync_mysql_users_done', ['count' => $synced]));
     }
 
     public function storeSftpUser(

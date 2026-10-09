@@ -194,6 +194,12 @@ const databaseUserForm = useForm({
     privilege: 'all',
 });
 
+const resyncMysqlForm = useForm({});
+
+const resyncMysqlUsers = () => {
+    resyncMysqlForm.post(actionUrl(`/domains/${props.domain.id}/database-users/resync`), { preserveScroll: true });
+};
+
 const sftpUserForm = useForm({});
 
 const laravelForm = useForm({});
@@ -756,6 +762,9 @@ const updateMemberRole = (memberId, role) => {
         </div>
 
         <div v-show="currentTab === 'database'" class="min-w-0 space-y-6">
+            <p v-if="page.props.flash?.success && currentTab === 'database'" class="text-sm text-emerald-700">
+                {{ page.props.flash.success }}
+            </p>
             <section
                 v-if="canMutateHosting && !domain.database_accounts?.length"
                 class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
@@ -835,6 +844,22 @@ const updateMemberRole = (memberId, role) => {
                 <p class="mt-1 text-sm text-zinc-500">
                     {{ t('domains.show.db_users_help') }}
                 </p>
+                <p v-if="canMutateHosting && domain.database_accounts?.length" class="mt-3 text-sm text-zinc-500">
+                    {{ t('domains.show.resync_mysql_users_help') }}
+                </p>
+                <form
+                    v-if="canMutateHosting && domain.database_accounts?.length"
+                    class="mt-3"
+                    @submit.prevent="resyncMysqlUsers"
+                >
+                    <button
+                        type="submit"
+                        class="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+                        :disabled="resyncMysqlForm.processing"
+                    >
+                        {{ t('domains.show.resync_mysql_users') }}
+                    </button>
+                </form>
                 <ul v-if="domain.database_accounts?.length" class="mt-4 space-y-2">
                     <li
                         v-for="account in domain.database_accounts"

@@ -33,8 +33,14 @@ class MysqlProvisionerGrantTest extends TestCase
         $provisioner = new MysqlProvisioner(fn (): PDO => $pdo);
         $provisioner->grantUser('d_shop', 'u_reader', 'secretpass', DatabasePrivilege::Select);
 
-        $this->assertContains("CREATE USER IF NOT EXISTS `u_reader`@'%' IDENTIFIED BY 'secretpass'", $statements);
-        $this->assertContains("ALTER USER `u_reader`@'%' IDENTIFIED BY 'secretpass'", $statements);
+        $this->assertContains(
+            "CREATE USER IF NOT EXISTS `u_reader`@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD('secretpass')",
+            $statements,
+        );
+        $this->assertContains(
+            "ALTER USER `u_reader`@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD('secretpass')",
+            $statements,
+        );
         $this->assertContains("GRANT SELECT ON `d_shop`.* TO `u_reader`@'%'", $statements);
         $this->assertFalse(
             collect($statements)->contains(fn (string $sql): bool => str_contains($sql, 'CREATE DATABASE')),
