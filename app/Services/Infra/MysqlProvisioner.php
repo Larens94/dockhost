@@ -16,10 +16,12 @@
 //          Connect via Infrastructure mysql_host hostname on dokploy-network (not an IP).
 //          Admin compose user `infra` may keep broader grants from the stack; site accounts must stay scoped.
 //          CREATE USER IF NOT EXISTS does not change an existing password. Always ALTER USER afterwards, or a retry keeps the old password and the app gets 1045.
-//          Site users use IDENTIFIED VIA mysql_native_password USING PASSWORD(...) — same syntax as mysql-grants for infra on MariaDB 11.
+//          Site users use IDENTIFIED BY (mysql_native_password) so mysqli/phpMyAdmin plain-text login matches the stored hash.
+//          Do not use IDENTIFIED VIA mysql_native_password USING PASSWORD(...) for site users — PASSWORD() hook is not for that plugin on MariaDB 11.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Codify one-DB GRANT for site users
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_db_pass | ALTER USER after CREATE so a retry replaces the password
 //          composer-2.5-fast | cursor | 2026-10-09 | s_pma_native_pass | mysql_native_password for phpMyAdmin + resyncDatabaseAccount
+//          composer-2.5-fast | cursor | 2026-10-09 | s_pma_identified_by | IDENTIFIED BY for mysqli/phpMyAdmin (not USING PASSWORD hook)
 // message:
 
 namespace App\Services\Infra;
@@ -89,8 +91,9 @@ class MysqlProvisioner
         $quotedPassword = $pdo->quote($password);
         $grant = $privilege->mysqlGrant();
 
-        $identified = "IDENTIFIED VIA mysql_native_password USING PASSWORD({$quotedPassword})";
+        $identified = "IDENTIFIED BY {$quotedPassword}";
 
+        $pdo->exec('SET old_passwords=0');
         $pdo->exec("DROP USER IF EXISTS {$usernameIdentifier}@'%'");
         $pdo->exec("CREATE USER {$usernameIdentifier}@'%' {$identified}");
         $pdo->exec("ALTER USER {$usernameIdentifier}@'%' {$identified}");

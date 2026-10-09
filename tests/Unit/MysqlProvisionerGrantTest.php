@@ -41,12 +41,13 @@ class MysqlProvisionerGrantTest extends TestCase
         $provisioner->grantUser('d_shop', 'u_reader', 'secretpass', DatabasePrivilege::Select, $infrastructure);
 
         $this->assertContains("DROP USER IF EXISTS `u_reader`@'%'", $statements);
+        $this->assertContains('SET old_passwords=0', $statements);
         $this->assertContains(
-            "CREATE USER `u_reader`@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD('secretpass')",
+            "CREATE USER `u_reader`@'%' IDENTIFIED BY 'secretpass'",
             $statements,
         );
         $this->assertContains(
-            "ALTER USER `u_reader`@'%' IDENTIFIED VIA mysql_native_password USING PASSWORD('secretpass')",
+            "ALTER USER `u_reader`@'%' IDENTIFIED BY 'secretpass'",
             $statements,
         );
         $this->assertContains("GRANT SELECT ON `d_shop`.* TO `u_reader`@'%'", $statements);
