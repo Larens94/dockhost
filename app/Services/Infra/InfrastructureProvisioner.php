@@ -11,6 +11,7 @@
 //          generateSecret() is [A-Za-z0-9] only so Compose and the shell cannot expand $ in a password.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Revert create/updateStack to shared dokploy-network only
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_mysql_grants | Compose secrets stay alphanumeric so grants cannot rewrite them
+//          composer-2.5-fast | cursor | 2026-10-10 | s_pma_uri_slash | Bake phpMyAdmin Absolute URI from phpmyadmin_domain
 // message: Isolated-network split was a misunderstanding; Fabrizio recreates stacks on Dokploy after deploy.
 
 namespace App\Services\Infra;
@@ -346,8 +347,9 @@ class InfrastructureProvisioner
             'phpmyadmin_domain' => $hostname,
         ]);
 
+        // Re-bake compose so PMA_ABSOLUTE_URI matches the public host (trailing slash for Traefik cookies).
         if ($redeploy) {
-            $this->redeployCompose($infrastructure);
+            return $this->updateStack($infrastructure->refresh());
         }
 
         return $infrastructure->refresh();
@@ -571,6 +573,7 @@ class InfrastructureProvisioner
         $persist['minio_host'] = $infrastructure->slug.'-minio';
 
         $mariadbVolumeName = (string) ($infrastructure->mariadb_volume_name ?? '');
+        $phpmyadminDomain = (string) ($infrastructure->phpmyadmin_domain ?? '');
 
         return [[
             'mysql_root_password' => $mysqlRoot,
@@ -584,6 +587,12 @@ class InfrastructureProvisioner
             'minio_root_user' => $minioUser,
             'minio_root_password' => $minioPassword,
             ...($mariadbVolumeName !== '' ? ['mariadb_volume_name' => $mariadbVolumeName] : []),
+            ...($phpmyadminDomain !== ''
+                ? ['phpmyadmin_absolute_uri' => $this->composeTemplate->phpmyadminAbsoluteUri(
+                    $infrastructure->slug,
+                    $phpmyadminDomain,
+                )]
+                : []),
         ], $persist];
     }
 
