@@ -1,13 +1,12 @@
 <?php
 
-
 // AttachPhpmyadminDomainTest.php — AttachPhpmyadminDomainTest module.
 //
 // exports: AttachPhpmyadminDomainTest | AttachPhpmyadminDomainTest::test_existing_infrastructure_attaches_wildcard_phpmyadmin_domain(): void | AttachPhpmyadminDomainTest::test_guests_cannot_attach_phpmyadmin_domain(): void
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace Tests\Feature;
 
@@ -27,6 +26,8 @@ class AttachPhpmyadminDomainTest extends TestCase
         Http::preventStrayRequests();
         Http::fake([
             'https://dokploy.test/api/domain.create' => Http::response(['domainId' => 'pma-1']),
+            'https://dokploy.test/api/compose.update' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/compose.saveEnvironment' => Http::response(['ok' => true]),
             'https://dokploy.test/api/compose.deploy' => Http::response(['ok' => true]),
             ...$this->dokployComposeStatusFakes(),
         ]);
@@ -56,6 +57,17 @@ class AttachPhpmyadminDomainTest extends TestCase
             && $request['port'] === 80
             && $request['https'] === true
             && $request['certificateType'] === 'letsencrypt');
+
+        Http::assertSent(function (Request $request): bool {
+            if ($request->url() !== 'https://dokploy.test/api/compose.update') {
+                return false;
+            }
+
+            $composeFile = (string) ($request['composeFile'] ?? '');
+
+            return $request['composeId'] === 'compose-1'
+                && str_contains($composeFile, 'PMA_ABSOLUTE_URI: https://pma-infra1.cloud.silicoreautomation.com/');
+        });
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/compose.deploy'
             && $request['composeId'] === 'compose-1');
