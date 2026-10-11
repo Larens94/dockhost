@@ -8,6 +8,7 @@
            composer-2.5-fast | cursor | 2026-09-24 | s_domain_php | Card PHP on Generale tab
            composer-2.5-fast | cursor | 2026-09-25 | s_domain_site_env | Env sito, deploy, git read-only on Generale
            composer-2.5-fast | cursor | 2026-09-25 | s_access_mail | Invita button + copy for email invite flow
+           composer-2.5-fast | cursor | 2026-10-11 | s_prod_foundations | Backup DB + align-from-prod on Database tab
 -->
 
 <script setup>
@@ -92,6 +93,10 @@ const props = defineProps({
             git: null,
             error: null,
         }),
+    },
+    alignTargets: {
+        type: Array,
+        default: () => [],
     },
 });
 
@@ -193,6 +198,25 @@ const databaseForm = useForm({
 const databaseUserForm = useForm({
     privilege: 'all',
 });
+const backupForm = useForm({});
+const alignForm = useForm({
+    source_domain_id: '',
+    allow_overwrite_production: false,
+});
+
+const createDatabaseBackup = () => {
+    backupForm.post(actionUrl(`/domains/${props.domain.id}/backups/database`), { preserveScroll: true });
+};
+
+const restoreDatabaseBackup = (backupId) => {
+    useForm({}).post(actionUrl(`/domains/${props.domain.id}/backups/${backupId}/restore`), {
+        preserveScroll: true,
+    });
+};
+
+const alignFromDomain = () => {
+    alignForm.post(actionUrl(`/domains/${props.domain.id}/align-from`), { preserveScroll: true });
+};
 
 const resyncMysqlForm = useForm({});
 
@@ -938,6 +962,85 @@ const updateMemberRole = (memberId, role) => {
                         </button>
                     </div>
                 </form>
+            </section>
+
+            <section
+                v-if="canMutateHosting && domain.database_accounts?.length"
+                class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
+            >
+                <h2 class="text-base font-semibold">{{ t('domains.show.backups') }}</h2>
+                <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.backups_help') }}</p>
+                <form class="mt-4" @submit.prevent="createDatabaseBackup">
+                    <button
+                        type="submit"
+                        class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                        :disabled="backupForm.processing"
+                    >
+                        {{ t('domains.show.create_db_backup') }}
+                    </button>
+                    <p v-if="backupForm.errors.backup" class="mt-2 text-sm text-red-600">{{ backupForm.errors.backup }}</p>
+                </form>
+                <ul v-if="domain.backups?.length" class="mt-4 space-y-2">
+                    <li
+                        v-for="backup in domain.backups"
+                        :key="backup.id"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm"
+                    >
+                        <span>
+                            #{{ backup.id }} · {{ backup.kind }} · {{ backup.status }}
+                            <span v-if="backup.bytes" class="text-zinc-500"> · {{ backup.bytes }} B</span>
+                        </span>
+                        <button
+                            v-if="backup.status === 'completed' && backup.kind === 'database'"
+                            type="button"
+                            class="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-100"
+                            @click="restoreDatabaseBackup(backup.id)"
+                        >
+                            {{ t('domains.show.restore_db_backup') }}
+                        </button>
+                    </li>
+                </ul>
+                <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_backups') }}</p>
+
+                <div v-if="alignTargets.length" class="mt-6 border-t border-neutral-100 pt-4">
+                    <h3 class="text-sm font-semibold">{{ t('domains.show.align_from') }}</h3>
+                    <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.align_from_help') }}</p>
+                    <form class="mt-3 grid gap-3 sm:grid-cols-2" @submit.prevent="alignFromDomain">
+                        <div>
+                            <label class="block text-sm font-medium" :for="`align-source-${domain.id}`">
+                                {{ t('domains.show.align_source') }}
+                            </label>
+                            <select
+                                :id="`align-source-${domain.id}`"
+                                v-model="alignForm.source_domain_id"
+                                required
+                                :class="inputClass"
+                            >
+                                <option value="" disabled>{{ t('common.select') }}</option>
+                                <option v-for="target in alignTargets" :key="target.id" :value="target.id">
+                                    {{ target.fqdn }}
+                                </option>
+                            </select>
+                            <p v-if="alignForm.errors.source_domain_id" class="mt-1 text-sm text-red-600">
+                                {{ alignForm.errors.source_domain_id }}
+                            </p>
+                            <p v-if="alignForm.errors.align" class="mt-1 text-sm text-red-600">{{ alignForm.errors.align }}</p>
+                        </div>
+                        <div class="flex flex-col justify-end gap-2">
+                            <label class="flex items-center gap-2 text-sm text-zinc-700">
+                                <input v-model="alignForm.allow_overwrite_production" type="checkbox" class="rounded border-zinc-300" />
+                                {{ t('domains.show.allow_overwrite_production') }}
+                            </label>
+                            <button
+                                type="submit"
+                                class="rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-sm font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+                                :disabled="alignForm.processing || !alignForm.source_domain_id"
+                            >
+                                {{ t('domains.show.align_submit') }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </section>
         </div>
 

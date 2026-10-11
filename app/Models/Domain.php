@@ -2,7 +2,7 @@
 
 // Domain.php — Domain module.
 //
-// exports: Domain | attr:Fillable | Domain::customer(): BelongsTo | Domain::infrastructure(): BelongsTo | Domain::subscription(): BelongsTo | Domain::databaseAccounts(): HasMany | Domain::storageShares(): HasMany | Domain::sftpUsers(): HasMany | Domain::dokployApplication(): HasOne
+// exports: Domain | attr:Fillable | Domain::customer(): BelongsTo | Domain::infrastructure(): BelongsTo | Domain::infrastructureEnvironment(): BelongsTo | Domain::subscription(): BelongsTo | Domain::databaseAccounts(): HasMany | Domain::storageShares(): HasMany | Domain::sftpUsers(): HasMany | Domain::backups(): HasMany | Domain::dokployApplication(): HasOne
 // used_by: app/Console/Commands/AlignMysqlFromComposeCommand.php
 //         app/Http/Controllers/DomainController.php
 //         app/Http/Controllers/LaravelToolkitController.php
@@ -10,15 +10,19 @@
 //         app/Http/Requests/StoreInfrastructureSftpUserRequest.php
 //         app/Http/Requests/UpdateDomainRequest.php
 //         app/Services/Hosting/AccessAccountManager.php
+//         app/Services/Hosting/DomainBackupManager.php
 //         app/Services/Hosting/DomainProvisioner.php
+//         app/Services/Hosting/EnvironmentAligner.php
 //         app/Services/Laravel/LaravelToolkitExecutor.php
 //         database/factories/DatabaseAccountFactory.php
 //         database/factories/DokployApplicationFactory.php
+//         database/factories/DomainBackupFactory.php
 //         database/factories/DomainFactory.php
 //         database/factories/SftpUserFactory.php
 //         database/factories/StorageShareFactory.php
 //         tests/Feature/AccessAccountTest.php
 //         tests/Feature/DestroyInfrastructureTest.php
+//         tests/Feature/DomainBackupTest.php
 //         tests/Feature/DomainLifecycleTest.php
 //         tests/Feature/DomainProvisionTest.php
 //         tests/Feature/DomainUiTest.php
@@ -30,6 +34,7 @@
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_iam | pivot role + ownerCount().
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_php | php_settings JSON for Dokploy env.
+// agent:   composer-2.5-fast | cursor | 2026-10-11 | s_prod_foundations | env + backups relations for production P0.
 
 namespace App\Models;
 
@@ -45,7 +50,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['customer_id', 'subscription_id', 'infrastructure_id', 'fqdn', 'infra_slug', 'stack', 'php_settings'])]
+#[Fillable(['customer_id', 'subscription_id', 'infrastructure_id', 'infrastructure_environment_id', 'fqdn', 'infra_slug', 'stack', 'php_settings'])]
 class Domain extends Model
 {
     /** @use HasFactory<DomainFactory> */
@@ -78,6 +83,16 @@ class Domain extends Model
     public function infrastructure(): BelongsTo
     {
         return $this->belongsTo(Infrastructure::class);
+    }
+
+    public function infrastructureEnvironment(): BelongsTo
+    {
+        return $this->belongsTo(InfrastructureEnvironment::class);
+    }
+
+    public function backups(): HasMany
+    {
+        return $this->hasMany(DomainBackup::class);
     }
 
     public function subscription(): BelongsTo

@@ -12,6 +12,7 @@
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Revert create/updateStack to shared dokploy-network only
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_mysql_grants | Compose secrets stay alphanumeric so grants cannot rewrite them
 //          composer-2.5-fast | cursor | 2026-10-10 | s_pma_uri_slash | Bake phpMyAdmin Absolute URI from phpmyadmin_domain
+//          composer-2.5-fast | cursor | 2026-10-11 | s_no_secret_regen | Never invent MySQL passwords on updateStack for existing compose
 // message: Isolated-network split was a misunderstanding; Fabrizio recreates stacks on Dokploy after deploy.
 
 namespace App\Services\Infra;
@@ -29,6 +30,7 @@ class InfrastructureProvisioner
         private DokployClient $dokploy,
         private ComposeTemplate $composeTemplate,
         private ComposeDeployStatus $composeDeployStatus,
+        private ?ComposeMysqlCredentialAligner $mysqlCredentialAligner = null,
     ) {}
 
     /**
@@ -137,6 +139,9 @@ class InfrastructureProvisioner
         }
 
         $this->attachMissingPublicDomains($infrastructure);
+
+        $infrastructure = $infrastructure->refresh();
+        app(InfrastructureEnvironmentProvisioner::class)->ensureDefaultProduction($infrastructure);
 
         return $infrastructure->refresh();
     }
@@ -514,21 +519,51 @@ class InfrastructureProvisioner
     private function secretsFor(Infrastructure $infrastructure, int $sftpHostPort): array
     {
         $persist = [];
+        $stackAlreadyDeployed = filled($infrastructure->dokploy_compose_id);
+
+        // Rules: if compose already exists, never invent MySQL passwords — align from Dokploy env or fail.
+        if ($stackAlreadyDeployed && (
+            (string) ($infrastructure->mysql_root_password ?? '') === ''
+            || (string) ($infrastructure->mysql_admin_password ?? '') === ''
+        )) {
+            $this->mysqlCredentialAligner?->align($infrastructure);
+            $infrastructure->refresh();
+        }
 
         $mysqlRoot = (string) ($infrastructure->mysql_root_password ?? '');
         if ($mysqlRoot === '') {
+            if ($stackAlreadyDeployed) {
+                throw ValidationException::withMessages([
+                    'stack' => 'Password MariaDB root assente nel pannello e non recuperabile dal compose. '
+                        .'Allinea le credenziali da Dokploy prima di aggiornare lo stack — non rigenero segreti su un volume esistente.',
+                ]);
+            }
+
             $mysqlRoot = $this->generateSecret(32);
             $persist['mysql_root_password'] = $mysqlRoot;
         }
 
         $mysqlApp = (string) ($infrastructure->mysql_admin_password ?? '');
         if ($mysqlApp === '') {
+            if ($stackAlreadyDeployed) {
+                throw ValidationException::withMessages([
+                    'stack' => 'Password MariaDB admin (infra) assente nel pannello e non recuperabile dal compose. '
+                        .'Allinea le credenziali da Dokploy prima di aggiornare lo stack — non rigenero segreti su un volume esistente.',
+                ]);
+            }
+
             $mysqlApp = $this->generateSecret(24);
             $persist['mysql_admin_password'] = $mysqlApp;
         }
 
         $postgres = (string) ($infrastructure->postgres_admin_password ?? '');
         if ($postgres === '') {
+            if ($stackAlreadyDeployed) {
+                throw ValidationException::withMessages([
+                    'stack' => 'Password Postgres assente nel pannello. Non rigenero segreti su uno stack già deployato.',
+                ]);
+            }
+
             $postgres = $this->generateSecret(32);
             $persist['postgres_admin_password'] = $postgres;
         }

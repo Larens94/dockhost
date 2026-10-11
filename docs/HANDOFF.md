@@ -68,6 +68,8 @@ Admin + membri dominio. Flusso: cliente → spazio (piano) → dominio.
 
 Env: `DOKPLOY_URL`, `DOKPLOY_API_KEY`. Le Application Laravel usano `infrastructure.dokploy_environment_id`.
 
+Production foundations (branch `cursor/production-foundations`): heal MariaDB senza wipe (`POST …/heal-mysql`); backup DB dominio; environment Dokploy sotto infra (tab Ambienti); allinea DB da altro dominio con guardrail production. Dopo deploy: `php artisan migrate`.
+
 ## Deploy pannello
 
 Su Dokploy: Application Git da **GitHub** `Larens94/dockhost`, branch `main`, Dockerfile, porta 80, isolated off. Non usare più il remote GitLab.

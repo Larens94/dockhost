@@ -28,9 +28,12 @@ use App\Models\Infrastructure;
 use App\Services\Hosting\AccessAccountManager;
 use App\Services\Infra\ComposeRuntimeInspector;
 use App\Services\Infra\ComposeTemplate;
+use App\Services\Infra\InfrastructureEnvironmentProvisioner;
 use App\Services\Infra\InfrastructureProvisioner;
+use App\Services\Infra\MysqlCredentialHealer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -82,6 +85,7 @@ class InfrastructureController extends Controller
             $infrastructure->sftpUsers()->orderBy('username')->get(),
         );
         $infrastructure->loadCount('domains');
+        $infrastructure->load(['environments' => fn ($query) => $query->orderByDesc('is_default')->orderBy('slug')]);
         $infrastructure->databaseAccounts->each->revealPassword();
         $infrastructure->sftpUsers->each->revealPassword();
         $infrastructure->makeVisible([
@@ -232,6 +236,32 @@ class InfrastructureController extends Controller
         return $this->redirectToShow($infrastructure);
     }
 
+    public function healMysqlCredentials(
+        Infrastructure $infrastructure,
+        MysqlCredentialHealer $healer,
+    ): RedirectResponse {
+        $result = $healer->heal($infrastructure);
+
+        return $this->redirectToShow($infrastructure)
+            ->with('success', $result['message']);
+    }
+
+    public function storeEnvironment(
+        Request $request,
+        Infrastructure $infrastructure,
+        InfrastructureEnvironmentProvisioner $environments,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:64'],
+        ]);
+
+        $environments->ensureDefaultProduction($infrastructure);
+        $environments->create($infrastructure, $validated['name']);
+
+        return $this->redirectToShow($infrastructure)
+            ->with('success', __('panel.infrastructures.environment_created', ['name' => $validated['name']]));
+    }
+
     public function destroy(
         DestroyInfrastructureRequest $request,
         Infrastructure $infrastructure,
@@ -246,7 +276,7 @@ class InfrastructureController extends Controller
     private function redirectToShow(Infrastructure $infrastructure): RedirectResponse
     {
         $tab = request()->query('tab');
-        $allowed = ['generale', 'servizi', 'domini', 'accessi', 'volumi', 'dokploy', 'pericolo'];
+        $allowed = ['generale', 'servizi', 'domini', 'accessi', 'volumi', 'ambienti', 'dokploy', 'pericolo'];
 
         return redirect()->route('infrastructures.show', [
             'infrastructure' => $infrastructure,

@@ -37,14 +37,17 @@ use App\Http\Requests\UpdateDomainRequest;
 use App\Http\Requests\UpdateDomainSiteEnvRequest;
 use App\Models\DatabaseAccount;
 use App\Models\Domain;
+use App\Models\DomainBackup;
 use App\Models\Infrastructure;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Dokploy\DokployApplicationAttacher;
 use App\Services\Hosting\AccessAccountManager;
+use App\Services\Hosting\DomainBackupManager;
 use App\Services\Hosting\DomainProvisioner;
 use App\Services\Hosting\DomainSiteEnvManager;
+use App\Services\Hosting\EnvironmentAligner;
 use App\Services\Infra\MysqlProvisioner;
 use App\Services\Panel\DomainAccessMailer;
 use App\Support\DomainPhpSettings;
@@ -118,6 +121,8 @@ class DomainController extends Controller
             'sftpUsers',
             'dokployApplication',
             'infrastructure',
+            'infrastructureEnvironment',
+            'backups' => fn ($query) => $query->latest()->limit(20),
         ]);
 
         $canManageAccess = $user->canManageDomainMembers($domain);
@@ -132,8 +137,15 @@ class DomainController extends Controller
             ? Infrastructure::assignablePayloads()
             : collect([$domain->infrastructure?->domainMemberPayload()])->filter()->values();
 
+        $alignTargets = Domain::query()
+            ->where('infrastructure_id', $domain->infrastructure_id)
+            ->where('id', '!=', $domain->id)
+            ->orderBy('fqdn')
+            ->get(['id', 'fqdn', 'infrastructure_environment_id']);
+
         return Inertia::render('Domains/Show', [
             'domain' => $this->domainPayloadForPanel($domain, $user),
+            'alignTargets' => $alignTargets,
             'domainMembers' => $canManageAccess
                 ? $domain->members->map(fn (User $member): array => [
                     'id' => $member->id,
@@ -340,6 +352,60 @@ class DomainController extends Controller
 
         return $this->redirectToDomain($domain, 'database')
             ->with('success', __('panel.domains.show.delete_db_user_done'));
+    }
+
+    public function storeDatabaseBackup(
+        Domain $domain,
+        DomainBackupManager $backups,
+    ): RedirectResponse {
+        $backup = $backups->createDatabaseBackup($domain);
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.backup_created', ['id' => $backup->id]));
+    }
+
+    public function restoreDatabaseBackup(
+        Domain $domain,
+        DomainBackup $backup,
+        DomainBackupManager $backups,
+    ): RedirectResponse {
+        abort_unless((int) $backup->domain_id === (int) $domain->id, 404);
+
+        $backups->restoreDatabaseBackup($backup, $domain);
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.backup_restored', ['id' => $backup->id]));
+    }
+
+    public function alignFromDomain(
+        Request $request,
+        Domain $domain,
+        EnvironmentAligner $aligner,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'source_domain_id' => ['required', 'integer', 'exists:domains,id'],
+            'allow_overwrite_production' => ['sometimes', 'boolean'],
+        ]);
+
+        $source = Domain::query()->findOrFail($validated['source_domain_id']);
+
+        abort_unless(
+            (int) $source->infrastructure_id === (int) $domain->infrastructure_id,
+            422,
+            'Sorgente e destinazione devono condividere la stessa infrastruttura.',
+        );
+
+        $backup = $aligner->alignDatabase(
+            $source,
+            $domain,
+            (bool) ($validated['allow_overwrite_production'] ?? false),
+        );
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.aligned_from', [
+                'source' => $source->fqdn,
+                'id' => $backup->id,
+            ]));
     }
 
     public function storeSftpUser(

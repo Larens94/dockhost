@@ -90,18 +90,21 @@ Default resta: le app (oggi Laravel; poi Node/Go/Python) si agganciano a uno sta
 
 Opzione successiva: per ogni servizio, poter **non** usare l’infra condivisa e attaccare invece un servizio Dokploy **dedicato** al sito — es. MariaDB proprio, SFTP/volume proprio, ecc. I dedicati, quando arriveranno, restano **per environment**.
 
-## Più avanti: environment Dokploy (dev / prod, e altri a richiesta)
+## Production foundations (P0) — in corso / fatto in codice
 
-Non ora. Oggi una Infrastructure DokHosts è già un **Project** Dokploy (`dokploy_project_id`) e un solo environment, di solito `production` (`dokploy_environment_id`). `DokployClient::createEnvironment` (`environment.create`) esiste già: il provisioner lo usa se `project.create` non restituisce un env.
+- **Credenziali MariaDB sicure** — `updateStack` / `secretsFor` non inventano più `MYSQL_*` se il compose esiste già; allinea da Dokploy o fallisce. Heal non distruttivo: `MysqlCredentialHealer` (align compose → login infra → altrimenti root `ALTER USER`). UI: tab Pericolo → «Ripara credenziali MariaDB».
+- **Backup DB dominio** — `DomainBackup` + `DomainBackupManager` (dump/restore PDO via rete). UI tab Database del dominio. File/volume backup ancora da fare.
+- **Multi-environment** — tabella `infrastructure_environments`, relation su Domain, tab Ambienti su infra. `production` default al provision; create env chiama `environment.create`. Clone compose per env non-prod: ancora da fare (suffix `${slug}-${env}-mariadb`).
+- **Allinea da prod** — `EnvironmentAligner` dump sorgente → restore target; rifiuta overwrite di production senza checkbox.
 
-Modello da implementare dopo:
+## Più avanti: environment Dokploy (compose per env)
 
-- Infrastructure = un Project. Sotto, una lista di environment. Di base **dev** e **prod**. Staging, test o un altro nome si aggiungono: non è un elenco fisso di quattro.
-- Ogni environment è la stessa repo, un branch, un database e le sue variabili. Dev non usa il database di prod. L’utente del sito resta `user@'%'` con GRANT solo su quel database.
-- Replicare = `environment.create` sul project + clone compose/servizi, oppure stesso template Compose con suffix slug e credenziali nuove (non inventare API assenti dal client: compose create/update/deploy sì; un “clone environment” dedicato **no**).
-- Le Application (Laravel ora; poi Node/Go/Python, compreso un caso come EWM) scelgono **infra + environment**, non un environment ID incollato a mano.
-- Servizi condivisi su quell’env: decidere una regola nomi prima di scrivere codice. Proposta: production resta `${slug}-mariadb`; gli altri env `${slug}-${env}-mariadb` (stesso schema per postgres/sftp). Così `DB_HOST` punta al servizio di quell’env.
-- I servizi dedicati per sito (sezione sopra) si applicano comunque **per env**.
+Foundation sopra è in codice. Resta:
+
+- Clone compose / servizi per env non-prod (stesso template, suffix slug, credenziali nuove — non inventare API assenti).
+- Application scelgono **infra + environment** in UI (oggi Domain ha `infrastructure_environment_id`).
+- Naming servizi: production `${slug}-mariadb`; altri `${slug}-${env}-mariadb`.
+- I servizi dedicati per sito restano **per env**.
 
 ## Più avanti: applicazioni grandi (es. EWM Platform)
 

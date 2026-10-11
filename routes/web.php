@@ -89,6 +89,12 @@ Route::middleware('auth')->group(function () {
         ->name('domains.database-users.reset-password');
     Route::delete('domains/{domain}/database-users/{databaseAccount}', [DomainController::class, 'destroyDatabaseAccount'])
         ->name('domains.database-users.destroy');
+    Route::post('domains/{domain}/backups/database', [DomainController::class, 'storeDatabaseBackup'])
+        ->name('domains.backups.database.store');
+    Route::post('domains/{domain}/backups/{backup}/restore', [DomainController::class, 'restoreDatabaseBackup'])
+        ->name('domains.backups.restore');
+    Route::post('domains/{domain}/align-from', [DomainController::class, 'alignFromDomain'])
+        ->name('domains.align-from');
     Route::post('domains/{domain}/sftp-users', [DomainController::class, 'storeSftpUser'])
         ->name('domains.sftp-users.store');
     Route::post('domains/{domain}/laravel', [DomainController::class, 'attachLaravel'])
@@ -146,6 +152,10 @@ Route::middleware('auth')->group(function () {
             ->name('infrastructures.dokploy-inspect');
         Route::post('infrastructures/{infrastructure}/reset-mysql', [InfrastructureController::class, 'resetMysqlDatadir'])
             ->name('infrastructures.mysql.reset');
+        Route::post('infrastructures/{infrastructure}/heal-mysql', [InfrastructureController::class, 'healMysqlCredentials'])
+            ->name('infrastructures.mysql.heal');
+        Route::post('infrastructures/{infrastructure}/environments', [InfrastructureController::class, 'storeEnvironment'])
+            ->name('infrastructures.environments.store');
 
         Route::resource('customers', CustomerController::class)->only([
             'index',

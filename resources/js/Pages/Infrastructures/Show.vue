@@ -4,6 +4,7 @@
   used_by: none
   rules:   none
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
+           composer-2.5-fast | cursor | 2026-10-11 | s_prod_foundations | Ambienti tab + heal MariaDB (no wipe)
 -->
 
 <script setup>
@@ -100,6 +101,7 @@ const tabs = computed(() => [
     { id: 'domini', label: t('infrastructures.tabs.domains') },
     { id: 'accessi', label: t('infrastructures.tabs.access') },
     { id: 'volumi', label: t('infrastructures.tabs.volumes') },
+    { id: 'ambienti', label: t('infrastructures.tabs.environments') },
     { id: 'dokploy', label: t('infrastructures.tabs.dokploy') },
     { id: 'pericolo', label: t('infrastructures.tabs.danger') },
 ]);
@@ -231,6 +233,22 @@ const resetMysqlDatadir = () => {
         onSuccess: () => {
             showResetMysqlModal.value = false;
         },
+    });
+};
+
+const healMysqlForm = useForm({});
+const environmentForm = useForm({ name: '' });
+
+const healMysqlCredentials = () => {
+    healMysqlForm.post(actionUrl(`/infrastructures/${props.infrastructure.id}/heal-mysql`), {
+        preserveScroll: true,
+    });
+};
+
+const createEnvironment = () => {
+    environmentForm.post(actionUrl(`/infrastructures/${props.infrastructure.id}/environments`), {
+        preserveScroll: true,
+        onSuccess: () => environmentForm.reset(),
     });
 };
 
@@ -1059,11 +1077,69 @@ const sftpPublicHost = computed(() => {
             </ul>
         </section>
 
+        <section v-show="currentTab === 'ambienti'" class="min-w-0 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+            <h2 class="text-base font-semibold">{{ t('infrastructures.environments') }}</h2>
+            <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
+                {{ t('infrastructures.environments_help') }}
+            </p>
+            <ul v-if="infrastructure.environments?.length" class="mb-4 space-y-2">
+                <li
+                    v-for="env in infrastructure.environments"
+                    :key="env.id"
+                    class="rounded-lg bg-zinc-50 px-3 py-2 text-sm"
+                >
+                    <span class="font-medium">{{ env.name }}</span>
+                    <span class="text-zinc-500"> · {{ env.slug }}</span>
+                    <span v-if="env.is_default" class="ml-2 text-xs uppercase tracking-wide text-emerald-700">
+                        {{ t('infrastructures.environment_default') }}
+                    </span>
+                </li>
+            </ul>
+            <p v-else class="mb-4 text-sm text-zinc-500">{{ t('infrastructures.no_environments') }}</p>
+            <form class="grid gap-3 sm:grid-cols-2" @submit.prevent="createEnvironment">
+                <div>
+                    <label class="block text-xs font-medium" for="infra-env-name">{{ t('infrastructures.environment_name') }}</label>
+                    <input
+                        id="infra-env-name"
+                        v-model="environmentForm.name"
+                        type="text"
+                        required
+                        maxlength="64"
+                        class="mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10"
+                        :placeholder="t('infrastructures.environment_name_placeholder')"
+                    />
+                    <p v-if="environmentForm.errors.name" class="mt-1 text-sm text-red-600">{{ environmentForm.errors.name }}</p>
+                </div>
+                <div class="flex items-end">
+                    <button
+                        type="submit"
+                        class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                        :disabled="environmentForm.processing || !environmentForm.name"
+                    >
+                        {{ t('infrastructures.create_environment') }}
+                    </button>
+                </div>
+            </form>
+        </section>
+
         <section v-show="currentTab === 'pericolo'" class="min-w-0 rounded-xl border border-red-200 bg-white p-6 shadow-sm">
             <h2 class="text-base font-semibold text-red-800">{{ t('common.danger_zone') }}</h2>
             <p class="mt-1 mb-5 text-sm break-words text-zinc-500 [overflow-wrap:anywhere]">
                 {{ t('infrastructures.danger_help') }}
             </p>
+            <div class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+                <h3 class="text-sm font-semibold text-emerald-950">{{ t('infrastructures.heal_mysql') }}</h3>
+                <p class="mt-1 text-sm text-emerald-900/80">{{ t('infrastructures.heal_mysql_help') }}</p>
+                <button
+                    type="button"
+                    class="mt-3 rounded-lg border border-emerald-300 bg-white px-3.5 py-2 text-sm font-medium text-emerald-950 hover:bg-emerald-50 disabled:opacity-50"
+                    :disabled="healMysqlForm.processing"
+                    @click="healMysqlCredentials"
+                >
+                    {{ t('infrastructures.heal_mysql') }}
+                </button>
+                <p v-if="healMysqlForm.errors.heal" class="mt-2 text-sm text-red-600">{{ healMysqlForm.errors.heal }}</p>
+            </div>
             <p v-if="hasDomains" class="mb-4 text-sm break-words text-red-600">
                 {{ t('infrastructures.domains_block') }}
             </p>

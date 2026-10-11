@@ -2,7 +2,7 @@
 
 // Infrastructure.php — Infrastructure module.
 //
-// exports: Infrastructure | attr:Fillable | attr:Hidden | Infrastructure::nextSlug(): string | Infrastructure::scopePanelManaged(Builder $query): Builder | Infrastructure::domains(): HasMany | Infrastructure::databaseAccounts(): HasMany | Infrastructure::sftpUsers(): HasMany | Infrastructure::isPanelManaged(): bool | Infrastructure::isDeployed(): bool | Infrastructure::hasService(string $key): bool | Infrastructure::canHostDomains(): bool | Infrastructure::canProvisionMysql(): bool | Infrastructure::canProvisionPostgres(): bool | Infrastructure::stackCredentials(): array | Infrastructure::assignmentPayload(): array | Infrastructure::dokployProjectUrl() | Infrastructure::dokployComposeUrl() | Infrastructure::dokployApplicationUrl(?string $applicationId) | Infrastructure::sftpSyncUrl(): string | (+2 more)
+// exports: Infrastructure | attr:Fillable | attr:Hidden | Infrastructure::nextSlug(): string | Infrastructure::scopePanelManaged(Builder $query): Builder | Infrastructure::domains(): HasMany | Infrastructure::environments(): HasMany | Infrastructure::databaseAccounts(): HasMany | Infrastructure::sftpUsers(): HasMany | Infrastructure::isPanelManaged(): bool | Infrastructure::isDeployed(): bool | Infrastructure::hasService(string $key): bool | Infrastructure::canHostDomains(): bool | Infrastructure::canProvisionMysql(): bool | Infrastructure::canProvisionPostgres(): bool | Infrastructure::stackCredentials(): array | Infrastructure::assignmentPayload(): array | Infrastructure::dokployProjectUrl() | Infrastructure::dokployComposeUrl() | Infrastructure::dokployApplicationUrl(?string $applicationId) | Infrastructure::sftpSyncUrl(): string | (+2 more)
 // used_by: app/Console/Commands/AlignMysqlFromComposeCommand.php
 //         app/Console/Commands/DokployInspectCommand.php
 //         app/Http/Controllers/DomainController.php
@@ -159,6 +159,11 @@ class Infrastructure extends Model
     public function domains(): HasMany
     {
         return $this->hasMany(Domain::class);
+    }
+
+    public function environments(): HasMany
+    {
+        return $this->hasMany(InfrastructureEnvironment::class);
     }
 
     public function databaseAccounts(): HasMany

@@ -1,0 +1,205 @@
+<?php
+
+// DomainBackupManager.php — Create/restore domain database backups over the network (no Dokploy exec).
+//
+// exports: DomainBackupManager | DomainBackupManager::createDatabaseBackup(Domain $domain): DomainBackup | DomainBackupManager::restoreDatabaseBackup(DomainBackup $backup): void
+// used_by: app/Http/Controllers/DomainController.php
+// rules:   DB dump via admin PDO on shared MariaDB — GRANT stays one-database for site users.
+//          File/volume backup is recorded as kind=files with a clear “not yet wired” error until SFTP pull lands.
+//          Never log SQL dump contents or passwords.
+// agent:   composer-2.5-fast | cursor | 2026-10-11 | s_domain_backup | PDO SQL dump + restore for domain DB
+// message:
+
+namespace App\Services\Hosting;
+
+use App\Enums\DatabaseEngine;
+use App\Models\DatabaseAccount;
+use App\Models\Domain;
+use App\Models\DomainBackup;
+use App\Models\Infrastructure;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use PDO;
+use PDOException;
+use Throwable;
+
+class DomainBackupManager
+{
+    public function createDatabaseBackup(Domain $domain): DomainBackup
+    {
+        $account = $domain->databaseAccounts()->orderBy('id')->first();
+
+        if (! $account instanceof DatabaseAccount || $account->engine !== DatabaseEngine::Mysql) {
+            throw ValidationException::withMessages([
+                'backup' => 'Questo dominio non ha un database MySQL da salvare.',
+            ]);
+        }
+
+        $infrastructure = $account->infrastructure
+            ?? Infrastructure::query()->where('slug', $account->infra_slug)->first();
+
+        if (! $infrastructure instanceof Infrastructure) {
+            throw ValidationException::withMessages([
+                'backup' => 'Infrastruttura del database non trovata.',
+            ]);
+        }
+
+        $backup = DomainBackup::query()->create([
+            'domain_id' => $domain->id,
+            'infrastructure_environment_id' => $domain->infrastructure_environment_id,
+            'kind' => 'database',
+            'status' => 'running',
+            'meta' => [
+                'database_name' => $account->database_name,
+                'username' => $account->username,
+            ],
+        ]);
+
+        try {
+            $pdo = $this->adminPdo($infrastructure);
+            $sql = $this->dumpDatabase($pdo, $account->database_name);
+            $relative = 'backups/domains/'.$domain->id.'/'.$backup->id.'-'.$account->database_name.'.sql';
+            Storage::disk('local')->put($relative, $sql);
+
+            $backup->update([
+                'status' => 'completed',
+                'disk_path' => $relative,
+                'bytes' => strlen($sql),
+                'error' => null,
+            ]);
+        } catch (Throwable $exception) {
+            $backup->update([
+                'status' => 'failed',
+                'error' => $exception->getMessage(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'backup' => 'Backup database fallito: '.$exception->getMessage(),
+            ]);
+        }
+
+        return $backup->refresh();
+    }
+
+    public function restoreDatabaseBackup(DomainBackup $backup, ?Domain $into = null): void
+    {
+        if ($backup->kind !== 'database' || $backup->status !== 'completed' || ! filled($backup->disk_path)) {
+            throw ValidationException::withMessages([
+                'backup' => 'Backup non ripristinabile (stato o tipo non validi).',
+            ]);
+        }
+
+        $domain = $into ?? $backup->domain;
+        $account = $domain?->databaseAccounts()->orderBy('id')->first();
+        $infrastructure = $account?->infrastructure
+            ?? ($account ? Infrastructure::query()->where('slug', $account->infra_slug)->first() : null);
+
+        if (! $account instanceof DatabaseAccount || ! $infrastructure instanceof Infrastructure) {
+            throw ValidationException::withMessages([
+                'backup' => 'Dominio o account database assente per il restore.',
+            ]);
+        }
+
+        $sql = Storage::disk('local')->get((string) $backup->disk_path);
+
+        if (! is_string($sql) || $sql === '') {
+            throw ValidationException::withMessages([
+                'backup' => 'File di backup assente o vuoto.',
+            ]);
+        }
+
+        try {
+            $pdo = $this->adminPdo($infrastructure);
+            $databaseIdentifier = '`'.str_replace('`', '``', $account->database_name).'`';
+            $pdo->exec("CREATE DATABASE IF NOT EXISTS {$databaseIdentifier}");
+            $pdo->exec("USE {$databaseIdentifier}");
+
+            foreach ($this->splitSqlStatements($sql) as $statement) {
+                if (preg_match('/^(CREATE DATABASE|USE)\b/i', $statement) === 1) {
+                    continue;
+                }
+
+                $pdo->exec($statement);
+            }
+        } catch (PDOException $exception) {
+            throw ValidationException::withMessages([
+                'backup' => 'Restore fallito: '.$exception->getMessage(),
+            ]);
+        }
+    }
+
+    private function adminPdo(Infrastructure $infrastructure): PDO
+    {
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;charset=utf8mb4',
+            $infrastructure->mysql_host,
+            $infrastructure->mysql_port,
+        );
+
+        return new PDO(
+            $dsn,
+            (string) $infrastructure->mysql_admin_user,
+            (string) $infrastructure->mysql_admin_password,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+        );
+    }
+
+    private function dumpDatabase(PDO $pdo, string $database): string
+    {
+        $databaseIdentifier = '`'.str_replace('`', '``', $database).'`';
+        $lines = [
+            '-- DockHost domain backup',
+            'SET NAMES utf8mb4;',
+            'SET FOREIGN_KEY_CHECKS=0;',
+            "CREATE DATABASE IF NOT EXISTS {$databaseIdentifier};",
+            "USE {$databaseIdentifier};",
+        ];
+
+        $tables = $pdo->query('SHOW TABLES FROM '.$databaseIdentifier)->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($tables as $table) {
+            $tableName = (string) $table;
+            $tableIdentifier = '`'.str_replace('`', '``', $tableName).'`';
+            $create = $pdo->query('SHOW CREATE TABLE '.$databaseIdentifier.'.'.$tableIdentifier)->fetch(PDO::FETCH_ASSOC);
+            $createSql = is_array($create) ? (string) ($create['Create Table'] ?? '') : '';
+
+            if ($createSql === '') {
+                continue;
+            }
+
+            $lines[] = 'DROP TABLE IF EXISTS '.$tableIdentifier.';';
+            $lines[] = $createSql.';';
+
+            $rows = $pdo->query('SELECT * FROM '.$databaseIdentifier.'.'.$tableIdentifier);
+            while ($row = $rows->fetch(PDO::FETCH_ASSOC)) {
+                $columns = array_map(
+                    fn (string $column): string => '`'.str_replace('`', '``', $column).'`',
+                    array_keys($row),
+                );
+                $values = array_map(function (mixed $value) use ($pdo): string {
+                    if ($value === null) {
+                        return 'NULL';
+                    }
+
+                    return $pdo->quote((string) $value);
+                }, array_values($row));
+
+                $lines[] = 'INSERT INTO '.$tableIdentifier.' ('.implode(', ', $columns).') VALUES ('.implode(', ', $values).');';
+            }
+        }
+
+        $lines[] = 'SET FOREIGN_KEY_CHECKS=1;';
+
+        return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function splitSqlStatements(string $sql): array
+    {
+        $parts = preg_split('/;\s*\n/', $sql) ?: [];
+
+        return array_values(array_filter(array_map('trim', $parts), fn (string $part): bool => $part !== '' && ! str_starts_with($part, '--')));
+    }
+}
