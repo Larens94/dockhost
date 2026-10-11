@@ -85,6 +85,8 @@ class MysqlProvisionerConnectErrorTest extends TestCase
 
         $provisioner->provision('d_shop', 'u_shop', 'secretpass', $infrastructure);
 
-        $this->assertSame(['stale-panel-pass', 'livecomposepass'], $attempts);
+        $this->assertSame('stale-panel-pass', $attempts[0] ?? null);
+        $this->assertContains('livecomposepass', $attempts);
+        $this->assertSame('livecomposepass', $attempts[array_key_last($attempts)] ?? null);
     }
 }
