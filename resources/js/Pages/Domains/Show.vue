@@ -10,6 +10,8 @@
            composer-2.5-fast | cursor | 2026-09-25 | s_access_mail | Invita button + copy for email invite flow
            composer-2.5-fast | cursor | 2026-10-11 | s_prod_foundations | Backup DB + align-from-prod on Database tab
            composer-2.5-fast | cursor | 2026-10-11 | s_runtime_env | APP_ENV / APP_DEBUG / LOG_LEVEL runtime block
+           composer-2.5-fast | cursor | 2026-10-11 | s_domain_tabs_ia | Tabs: overview, app, database, sftp, access, danger
+           composer-2.5-fast | cursor | 2026-10-11 | s_domain_ui_color | Semantic tab/card color accents for IA
 -->
 
 <script setup>
@@ -104,16 +106,21 @@ const props = defineProps({
 const isLaravelStack = computed(() => (props.domain.stack || 'none') === 'laravel');
 
 const tabs = computed(() => {
-    const base = [
-        { id: 'generale', label: t('domains.tabs.general') },
-        { id: 'database', label: t('domains.tabs.database') },
-        { id: 'sftp', label: t('domains.tabs.sftp') },
-    ];
+    const base = [{ id: 'generale', label: t('domains.tabs.general') }];
 
     if (isLaravelStack.value) {
         base.push({ id: 'laravel', label: t('domains.tabs.laravel') });
     } else {
         base.push({ id: 'sito', label: t('domains.tabs.site') });
+    }
+
+    base.push(
+        { id: 'database', label: t('domains.tabs.database') },
+        { id: 'sftp', label: t('domains.tabs.sftp') },
+    );
+
+    if (props.canManageAccess) {
+        base.push({ id: 'accessi', label: t('domains.tabs.access') });
     }
 
     if (props.canDestroyDomain) {
@@ -145,16 +152,81 @@ const currentTab = computed(() => {
     return allowedTabs.value.includes(tab) ? tab : 'generale';
 });
 
+const isAppTab = computed(() => currentTab.value === 'laravel' || currentTab.value === 'sito');
+
 const tabHref = (tab) => {
     const base = `/domains/${props.domain.id}`;
 
     return tab === 'generale' ? base : `${base}?tab=${tab}`;
 };
 
-const tabClass = (tab) =>
-    currentTab.value === tab
-        ? 'border-zinc-900 text-zinc-900'
-        : 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800';
+const tabTones = {
+    generale: {
+        active: 'border-zinc-800 text-zinc-900',
+        idle: 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800',
+    },
+    laravel: {
+        active: 'border-red-600 text-red-700',
+        idle: 'border-transparent text-zinc-500 hover:border-red-200 hover:text-red-700',
+    },
+    sito: {
+        active: 'border-teal-600 text-teal-800',
+        idle: 'border-transparent text-zinc-500 hover:border-teal-200 hover:text-teal-800',
+    },
+    database: {
+        active: 'border-sky-600 text-sky-800',
+        idle: 'border-transparent text-zinc-500 hover:border-sky-200 hover:text-sky-800',
+    },
+    sftp: {
+        active: 'border-emerald-600 text-emerald-800',
+        idle: 'border-transparent text-zinc-500 hover:border-emerald-200 hover:text-emerald-800',
+    },
+    accessi: {
+        active: 'border-orange-500 text-orange-800',
+        idle: 'border-transparent text-zinc-500 hover:border-orange-200 hover:text-orange-800',
+    },
+    pericolo: {
+        active: 'border-red-600 text-red-700',
+        idle: 'border-transparent text-zinc-500 hover:border-red-200 hover:text-red-700',
+    },
+};
+
+const tabClass = (tab) => {
+    const tone = tabTones[tab] ?? tabTones.generale;
+
+    return currentTab.value === tab ? tone.active : tone.idle;
+};
+
+const sectionTone = {
+    overview: 'rounded-xl border border-zinc-200 bg-white p-6 shadow-sm',
+    meta: 'rounded-xl border border-zinc-200 bg-gradient-to-br from-zinc-50 to-white p-4 shadow-sm',
+    runtime:
+        'rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50/90 to-white p-6 shadow-sm',
+    runtimeDebug:
+        'rounded-xl border border-amber-300 bg-gradient-to-br from-amber-50 to-white p-6 shadow-sm',
+    siteEnv: 'rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50/80 to-white p-6 shadow-sm',
+    php: 'rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50/70 to-white p-6 shadow-sm',
+    boot: 'rounded-xl border border-zinc-300 bg-gradient-to-br from-zinc-50 to-white p-6 shadow-sm',
+    database: 'rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50/70 to-white p-6 shadow-sm',
+    backup: 'rounded-xl border border-cyan-200 bg-gradient-to-br from-cyan-50/70 to-white p-6 shadow-sm',
+    sftp: 'rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/70 to-white p-6 shadow-sm',
+    access: 'rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50/70 to-white p-6 shadow-sm',
+    danger: 'min-w-0 rounded-xl border border-red-300 bg-gradient-to-br from-red-50 to-white p-6 shadow-sm',
+};
+
+const headingTone = {
+    overview: 'text-zinc-900',
+    runtime: 'text-teal-950',
+    runtimeDebug: 'text-amber-950',
+    siteEnv: 'text-sky-950',
+    php: 'text-orange-950',
+    boot: 'text-zinc-900',
+    database: 'text-sky-950',
+    backup: 'text-cyan-950',
+    sftp: 'text-emerald-950',
+    access: 'text-orange-950',
+    danger: 'text-red-800',
+};
 
 const actionUrl = (path) => {
     const tab = currentTab.value;
@@ -381,7 +453,7 @@ const inputClass =
 const spazio = computed(() => props.domain.subscription);
 
 const grantAccess = () => {
-    accessForm.post(`/domains/${props.domain.id}/members`, { preserveScroll: true });
+    accessForm.post(actionUrl(`/domains/${props.domain.id}/members`), { preserveScroll: true });
 };
 
 const revokeAccess = (memberId) => {
@@ -389,11 +461,11 @@ const revokeAccess = (memberId) => {
         return;
     }
 
-    useForm({}).delete(`/domains/${props.domain.id}/members/${memberId}`, { preserveScroll: true });
+    useForm({}).delete(actionUrl(`/domains/${props.domain.id}/members/${memberId}`), { preserveScroll: true });
 };
 
 const updateMemberRole = (memberId, role) => {
-    useForm({ role }).put(`/domains/${props.domain.id}/members/${memberId}`, { preserveScroll: true });
+    useForm({ role }).put(actionUrl(`/domains/${props.domain.id}/members/${memberId}`), { preserveScroll: true });
 };
 </script>
 
@@ -460,7 +532,7 @@ const updateMemberRole = (memberId, role) => {
                 :href="tabHref(tab.id)"
                 preserve-scroll
                 preserve-state
-                class="border-b-2 px-3 py-2 text-sm font-medium"
+                class="border-b-2 px-3 py-2 text-sm font-medium transition-colors"
                 :class="tabClass(tab.id)"
             >
                 {{ tab.label }}
@@ -468,8 +540,8 @@ const updateMemberRole = (memberId, role) => {
         </nav>
 
         <div v-show="currentTab === 'generale'" class="min-w-0 space-y-6">
-            <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">{{ t('domains.show.heading') }}</h2>
+            <section :class="sectionTone.overview">
+                <h2 class="text-base font-semibold" :class="headingTone.overview">{{ t('domains.show.heading') }}</h2>
                 <form
                     v-if="canEditFqdn"
                     class="mt-5 grid gap-4 sm:grid-cols-[1fr_auto]"
@@ -505,399 +577,44 @@ const updateMemberRole = (memberId, role) => {
             </section>
 
             <dl class="grid min-w-0 gap-4 sm:grid-cols-2">
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <div :class="sectionTone.meta">
                     <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.infra') }}</dt>
                     <dd class="mt-2 text-sm font-medium">{{ domain.infra_slug }}</dd>
                 </div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.stack') }}</dt>
-                    <dd class="mt-2 text-sm font-medium">{{ domain.stack_label || domain.stack || t('common.hosting_only') }}</dd>
+                <div
+                    class="rounded-xl border p-4 shadow-sm"
+                    :class="isLaravelStack
+                        ? 'border-red-100 bg-gradient-to-br from-red-50/80 to-white'
+                        : 'border-teal-100 bg-gradient-to-br from-teal-50/80 to-white'"
+                >
+                    <dt
+                        class="text-xs font-medium uppercase tracking-wide"
+                        :class="isLaravelStack ? 'text-red-700/70' : 'text-teal-700/70'"
+                    >
+                        {{ t('common.stack') }}
+                    </dt>
+                    <dd
+                        class="mt-2 text-sm font-medium"
+                        :class="isLaravelStack ? 'text-red-950' : 'text-teal-950'"
+                    >
+                        {{ domain.stack_label || domain.stack || t('common.hosting_only') }}
+                    </dd>
                 </div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.customer') }}</dt>
-                    <dd class="mt-2 text-sm font-medium">
+                <div class="rounded-xl border border-orange-100 bg-gradient-to-br from-orange-50/70 to-white p-4 shadow-sm">
+                    <dt class="text-xs font-medium uppercase tracking-wide text-orange-700/70">{{ t('common.customer') }}</dt>
+                    <dd class="mt-2 text-sm font-medium text-orange-950">
                         {{ spazio?.customer?.name || domain.customer?.name || '—' }}
                     </dd>
                 </div>
                 <div
                     v-for="share in domain.storage_shares"
                     :key="share.id"
-                    class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:col-span-2"
+                    class="rounded-xl border border-emerald-100 bg-gradient-to-br from-emerald-50/70 to-white p-4 shadow-sm sm:col-span-2"
                 >
-                    <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500">{{ t('common.storage') }}</dt>
-                    <dd class="mt-2 break-all text-sm font-medium">{{ share.path }}</dd>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-emerald-700/70">{{ t('common.storage') }}</dt>
+                    <dd class="mt-2 break-all text-sm font-medium text-emerald-950">{{ share.path }}</dd>
                 </div>
             </dl>
-
-            <section
-                v-if="phpSettingsApplicable"
-                class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
-            >
-                <h2 class="text-base font-semibold">{{ t('domains.show.php_heading') }}</h2>
-                <p class="mt-1 text-sm text-zinc-500">
-                    {{ t('domains.show.php_help') }}
-                    <strong class="font-medium text-zinc-700">{{ t('domains.show.php_deploy_note') }}</strong>
-                    {{ t('domains.show.php_deploy_note_rest') }}
-                </p>
-                <p v-if="page.props.flash?.success && currentTab === 'generale'" class="mt-3 text-sm text-emerald-700">
-                    {{ page.props.flash.success }}
-                </p>
-                <form v-if="canMutateHosting" class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="savePhpSettings">
-                    <div>
-                        <label class="block text-sm font-medium" :for="`php-mem-${domain.id}`">memory_limit (web)</label>
-                        <input
-                            :id="`php-mem-${domain.id}`"
-                            v-model="phpSettingsForm.memory_limit"
-                            type="text"
-                            required
-                            :class="inputClass"
-                        />
-                        <p class="mt-1 text-xs text-zinc-500">Env: PHP_MEMORY_LIMIT</p>
-                        <p v-if="phpSettingsForm.errors.memory_limit" class="mt-1 text-sm text-red-600">
-                            {{ phpSettingsForm.errors.memory_limit }}
-                        </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" :for="`php-artisan-${domain.id}`">{{ t('domains.show.artisan_memory') }}</label>
-                        <input
-                            :id="`php-artisan-${domain.id}`"
-                            v-model="phpSettingsForm.artisan_memory_limit"
-                            type="text"
-                            required
-                            :class="inputClass"
-                        />
-                        <p class="mt-1 text-xs text-zinc-500">Env: RUNTS_SYNC_MEMORY_LIMIT, ARTISAN_MEMORY_LIMIT</p>
-                        <p v-if="phpSettingsForm.errors.artisan_memory_limit" class="mt-1 text-sm text-red-600">
-                            {{ phpSettingsForm.errors.artisan_memory_limit }}
-                        </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" :for="`php-upload-${domain.id}`">upload_max_filesize</label>
-                        <input
-                            :id="`php-upload-${domain.id}`"
-                            v-model="phpSettingsForm.upload_max_filesize"
-                            type="text"
-                            required
-                            :class="inputClass"
-                        />
-                        <p class="mt-1 text-xs text-zinc-500">Env: UPLOAD_MAX_FILESIZE</p>
-                        <p v-if="phpSettingsForm.errors.upload_max_filesize" class="mt-1 text-sm text-red-600">
-                            {{ phpSettingsForm.errors.upload_max_filesize }}
-                        </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" :for="`php-post-${domain.id}`">post_max_size</label>
-                        <input
-                            :id="`php-post-${domain.id}`"
-                            v-model="phpSettingsForm.post_max_size"
-                            type="text"
-                            required
-                            :class="inputClass"
-                        />
-                        <p class="mt-1 text-xs text-zinc-500">Env: POST_MAX_SIZE</p>
-                        <p v-if="phpSettingsForm.errors.post_max_size" class="mt-1 text-sm text-red-600">
-                            {{ phpSettingsForm.errors.post_max_size }}
-                        </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" :for="`php-exec-${domain.id}`">max_execution_time (s)</label>
-                        <input
-                            :id="`php-exec-${domain.id}`"
-                            v-model.number="phpSettingsForm.max_execution_time"
-                            type="number"
-                            min="1"
-                            required
-                            :class="inputClass"
-                        />
-                        <p class="mt-1 text-xs text-zinc-500">Env: MAX_EXECUTION_TIME</p>
-                        <p v-if="phpSettingsForm.errors.max_execution_time" class="mt-1 text-sm text-red-600">
-                            {{ phpSettingsForm.errors.max_execution_time }}
-                        </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" :for="`php-input-${domain.id}`">max_input_time (s)</label>
-                        <input
-                            :id="`php-input-${domain.id}`"
-                            v-model.number="phpSettingsForm.max_input_time"
-                            type="number"
-                            min="1"
-                            required
-                            :class="inputClass"
-                        />
-                        <p class="mt-1 text-xs text-zinc-500">Env: MAX_INPUT_TIME</p>
-                        <p v-if="phpSettingsForm.errors.max_input_time" class="mt-1 text-sm text-red-600">
-                            {{ phpSettingsForm.errors.max_input_time }}
-                        </p>
-                    </div>
-                    <div class="sm:col-span-2 flex flex-wrap items-center gap-4">
-                        <label class="inline-flex items-center gap-2 text-sm text-zinc-700">
-                            <input v-model="phpSettingsForm.deploy_now" type="checkbox" class="rounded border-zinc-300" />
-                            {{ t('domains.show.deploy_now') }}
-                        </label>
-                        <button
-                            type="submit"
-                            class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-                            :disabled="phpSettingsForm.processing"
-                        >
-                            {{ t('domains.show.save_php') }}
-                        </button>
-                    </div>
-                    <p v-if="phpSettingsForm.errors.php_settings" class="sm:col-span-2 text-sm text-red-600">
-                        {{ phpSettingsForm.errors.php_settings }}
-                    </p>
-                </form>
-                <dl v-else class="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">memory_limit</dt>
-                        <dd class="mt-1 text-sm font-medium">{{ phpSettings.memory_limit }}</dd>
-                    </div>
-                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('domains.show.artisan_cli') }}</dt>
-                        <dd class="mt-1 text-sm font-medium">{{ phpSettings.artisan_memory_limit }}</dd>
-                    </div>
-                </dl>
-            </section>
-
-            <section
-                v-if="siteHosting.available"
-                class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
-            >
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <h2 class="text-base font-semibold">{{ t('domains.show.site_env') }}</h2>
-                        <p class="mt-1 text-sm text-zinc-500">
-                            {{ t('domains.show.site_env_help') }}
-                        </p>
-                    </div>
-                    <button
-                        v-if="canMutateHosting"
-                        type="button"
-                        class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-                        :disabled="deploySiteForm.processing"
-                        @click="deploySite"
-                    >
-                        {{ t('domains.show.deploy_site') }}
-                    </button>
-                </div>
-                <p v-if="siteHosting.error" class="mt-3 text-sm text-red-600">{{ siteHosting.error }}</p>
-                <p v-if="deploySiteForm.errors.deploy" class="mt-3 text-sm text-red-600">{{ deploySiteForm.errors.deploy }}</p>
-                <div v-if="siteHosting.git" class="mt-5 grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('domains.show.git_source') }}</p>
-                        <p class="mt-1 text-sm font-medium">{{ siteHosting.git.source_type || '—' }}</p>
-                    </div>
-                    <div class="rounded-lg bg-zinc-50 px-3 py-2 sm:col-span-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.repository') }}</p>
-                        <p class="mt-1 break-all text-sm font-medium">{{ siteHosting.git.repository || '—' }}</p>
-                    </div>
-                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.branch') }}</p>
-                        <p class="mt-1 text-sm font-medium">{{ siteHosting.git.branch || '—' }}</p>
-                    </div>
-                </div>
-                <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">
-                    {{ t('domains.show.git_missing') }}
-                </p>
-
-                <div v-if="canMutateHosting" class="mt-5 rounded-lg border border-neutral-200 bg-zinc-50/60 p-4">
-                    <h3 class="text-sm font-semibold">{{ t('domains.show.runtime_env') }}</h3>
-                    <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.runtime_env_help') }}</p>
-                    <form class="mt-4 grid gap-3 sm:grid-cols-3" @submit.prevent="saveRuntimeEnv(false)">
-                        <div>
-                            <label class="block text-sm font-medium" :for="`runtime-env-${domain.id}`">
-                                {{ t('domains.show.runtime_app_env') }}
-                            </label>
-                            <select
-                                :id="`runtime-env-${domain.id}`"
-                                v-model="runtimeEnvForm.app_env"
-                                :class="inputClass"
-                            >
-                                <option value="local">local (dev)</option>
-                                <option value="staging">staging (test)</option>
-                                <option value="production">production</option>
-                                <option value="testing">testing</option>
-                            </select>
-                            <p v-if="runtimeEnvForm.errors.app_env" class="mt-1 text-sm text-red-600">
-                                {{ runtimeEnvForm.errors.app_env }}
-                            </p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium" :for="`runtime-log-${domain.id}`">
-                                {{ t('domains.show.runtime_log_level') }}
-                            </label>
-                            <select
-                                :id="`runtime-log-${domain.id}`"
-                                v-model="runtimeEnvForm.log_level"
-                                :class="inputClass"
-                            >
-                                <option value="debug">debug</option>
-                                <option value="info">info</option>
-                                <option value="warning">warning</option>
-                                <option value="error">error</option>
-                            </select>
-                            <p v-if="runtimeEnvForm.errors.log_level" class="mt-1 text-sm text-red-600">
-                                {{ runtimeEnvForm.errors.log_level }}
-                            </p>
-                        </div>
-                        <div class="flex flex-col justify-end gap-2">
-                            <label class="flex items-center gap-2 text-sm text-zinc-800">
-                                <input v-model="runtimeEnvForm.app_debug" type="checkbox" class="rounded border-zinc-300" />
-                                {{ t('domains.show.runtime_app_debug') }}
-                            </label>
-                        </div>
-                        <div class="flex flex-wrap gap-2 sm:col-span-3">
-                            <button
-                                type="submit"
-                                class="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
-                                :disabled="runtimeEnvForm.processing"
-                            >
-                                {{ t('domains.show.runtime_save') }}
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-                                :disabled="runtimeEnvForm.processing"
-                                @click="saveRuntimeEnv(true)"
-                            >
-                                {{ t('domains.show.runtime_save_deploy') }}
-                            </button>
-                        </div>
-                        <p v-if="runtimeEnvForm.errors.site_env" class="text-sm text-red-600 sm:col-span-3">
-                            {{ runtimeEnvForm.errors.site_env }}
-                        </p>
-                    </form>
-                </div>
-
-                <div v-if="siteHosting.variables.length" class="mt-5 overflow-x-auto">
-                    <table class="min-w-full text-left text-sm">
-                        <thead>
-                            <tr class="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
-                                <th class="py-2 pr-4 font-medium">{{ t('common.key') }}</th>
-                                <th class="py-2 font-medium">{{ t('common.value') }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in siteHosting.variables"
-                                :key="row.key"
-                                class="border-b border-zinc-100"
-                            >
-                                <td class="py-2 pr-4 font-mono text-xs">{{ row.key }}</td>
-                                <td class="py-2 font-mono text-xs break-all">
-                                    <span v-if="row.redacted" class="text-zinc-500">{{ t('domains.show.redacted') }}</span>
-                                    <span v-else>{{ row.value }}</span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">{{ t('domains.show.no_env') }}</p>
-                <form v-if="canMutateHosting" class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="saveSiteEnv">
-                    <div>
-                        <label class="block text-sm font-medium" :for="`site-env-key-${domain.id}`">{{ t('common.key') }}</label>
-                        <input
-                            :id="`site-env-key-${domain.id}`"
-                            v-model="siteEnvKey"
-                            type="text"
-                            required
-                            placeholder="FEATURE_FLAG"
-                            :class="inputClass"
-                        />
-                        <p v-if="siteEnvForm.errors['entries.0.key']" class="mt-1 text-sm text-red-600">
-                            {{ siteEnvForm.errors['entries.0.key'] }}
-                        </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" :for="`site-env-val-${domain.id}`">{{ t('common.value') }}</label>
-                        <input
-                            :id="`site-env-val-${domain.id}`"
-                            v-model="siteEnvValue"
-                            type="text"
-                            :class="inputClass"
-                        />
-                        <p class="mt-1 text-xs text-zinc-500">{{ t('domains.show.secret_blank') }}</p>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <button
-                            type="submit"
-                            class="rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
-                            :disabled="siteEnvForm.processing"
-                        >
-                            {{ t('domains.show.save_env_key') }}
-                        </button>
-                    </div>
-                    <p v-if="siteEnvForm.errors.site_env" class="sm:col-span-2 text-sm text-red-600">
-                        {{ siteEnvForm.errors.site_env }}
-                    </p>
-                </form>
-            </section>
-
-            <section
-                v-if="canManageAccess"
-                class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
-            >
-                <h2 class="text-base font-semibold">{{ t('domains.show.access') }}</h2>
-                <p class="mt-1 text-sm text-zinc-500">
-                    {{ t('domains.show.access_help') }}
-                </p>
-                <ul v-if="domainMembers.length" class="mt-4 divide-y divide-zinc-100 rounded-lg border border-zinc-100">
-                    <li
-                        v-for="member in domainMembers"
-                        :key="member.id"
-                        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                    >
-                        <span>{{ member.name }} · {{ member.email }}</span>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <select
-                                :value="member.role"
-                                class="rounded-lg border border-zinc-200 px-2 py-1 text-sm"
-                                @change="updateMemberRole(member.id, $event.target.value)"
-                            >
-                                <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
-                                    {{ opt.label }}
-                                </option>
-                            </select>
-                            <button
-                                type="button"
-                                class="text-red-700 hover:underline"
-                                @click="revokeAccess(member.id)"
-                            >
-                                {{ t('common.remove') }}
-                            </button>
-                        </div>
-                    </li>
-                </ul>
-                <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_members') }}</p>
-                <form class="mt-5 grid gap-3 sm:grid-cols-2" @submit.prevent="grantAccess">
-                    <div class="sm:col-span-2">
-                        <label class="block text-sm font-medium" for="access-email">{{ t('common.email') }}</label>
-                        <input id="access-email" v-model="accessForm.email" type="email" required :class="inputClass" />
-                        <p v-if="accessForm.errors.email" class="mt-1 text-sm text-red-600">{{ accessForm.errors.email }}</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" for="access-name">{{ t('domains.show.name_new_user') }}</label>
-                        <input id="access-name" v-model="accessForm.name" type="text" :class="inputClass" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium" for="access-role">{{ t('common.role') }}</label>
-                        <select id="access-role" v-model="accessForm.role" :class="inputClass">
-                            <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
-                                {{ opt.label }}
-                            </option>
-                        </select>
-                        <p v-if="accessForm.errors.role" class="mt-1 text-sm text-red-600">{{ accessForm.errors.role }}</p>
-                    </div>
-                    <div class="flex items-end sm:col-span-2">
-                        <button
-                            type="submit"
-                            class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-                            :disabled="accessForm.processing"
-                        >
-                            {{ t('common.invite') }}
-                        </button>
-                    </div>
-                </form>
-            </section>
         </div>
 
         <div v-show="currentTab === 'database'" class="min-w-0 space-y-6">
@@ -906,9 +623,9 @@ const updateMemberRole = (memberId, role) => {
             </p>
             <section
                 v-if="canMutateHosting && !domain.database_accounts?.length"
-                class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
+                :class="sectionTone.database"
             >
-                <h2 class="text-base font-semibold">{{ t('domains.show.create_database') }}</h2>
+                <h2 class="text-base font-semibold" :class="headingTone.database">{{ t('domains.show.create_database') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
                     {{ t('domains.show.create_database_help') }}
                 </p>
@@ -939,7 +656,7 @@ const updateMemberRole = (memberId, role) => {
                     <div class="sm:col-span-2">
                         <button
                             type="submit"
-                            class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                            class="rounded-lg bg-sky-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
                             :disabled="databaseForm.processing || !canCreateSelectedDatabase"
                         >
                             {{ t('domains.show.create_database') }}
@@ -952,8 +669,8 @@ const updateMemberRole = (memberId, role) => {
                 <p v-if="databaseForm.errors.engine" class="mt-1 text-sm text-red-600">{{ databaseForm.errors.engine }}</p>
             </section>
 
-            <section v-else class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">{{ t('common.database') }}</h2>
+            <section v-else :class="sectionTone.database">
+                <h2 class="text-base font-semibold" :class="headingTone.database">{{ t('common.database') }}</h2>
                 <div v-for="account in domain.database_accounts" :key="account.id" class="mt-5 grid gap-3 sm:grid-cols-2">
                     <div class="rounded-lg bg-zinc-50 px-3 py-2">
                         <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.name') }}</p>
@@ -978,8 +695,8 @@ const updateMemberRole = (memberId, role) => {
                 </div>
             </section>
 
-            <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">{{ t('domains.show.db_users') }}</h2>
+            <section :class="sectionTone.database">
+                <h2 class="text-base font-semibold" :class="headingTone.database">{{ t('domains.show.db_users') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
                     {{ t('domains.show.db_users_help') }}
                 </p>
@@ -1067,9 +784,9 @@ const updateMemberRole = (memberId, role) => {
 
             <section
                 v-if="canMutateHosting && domain.database_accounts?.length"
-                class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
+                :class="sectionTone.backup"
             >
-                <h2 class="text-base font-semibold">{{ t('domains.show.backups') }}</h2>
+                <h2 class="text-base font-semibold" :class="headingTone.backup">{{ t('domains.show.backups') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.backups_help') }}</p>
 
                 <form class="mt-4 grid gap-3 sm:grid-cols-2" @submit.prevent="saveBackupSettings">
@@ -1192,8 +909,8 @@ const updateMemberRole = (memberId, role) => {
         </div>
 
         <div v-show="currentTab === 'sftp'" class="min-w-0 space-y-6">
-            <section class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-                <h2 class="text-base font-semibold">{{ t('common.sftp') }}</h2>
+            <section :class="sectionTone.sftp">
+                <h2 class="text-base font-semibold" :class="headingTone.sftp">{{ t('common.sftp') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
                     {{ t('domains.show.sftp_help') }}
                 </p>
@@ -1224,7 +941,7 @@ const updateMemberRole = (memberId, role) => {
                     </p>
                     <button
                         type="submit"
-                        class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                        class="rounded-lg bg-emerald-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
                         :disabled="sftpUserForm.processing"
                     >
                         {{ t('domains.show.create_sftp') }}
@@ -1233,8 +950,13 @@ const updateMemberRole = (memberId, role) => {
             </section>
         </div>
 
-        <div v-show="currentTab === 'laravel'" class="min-w-0 space-y-6">
+        <div v-show="isAppTab" class="min-w-0 space-y-6">
+            <p v-if="page.props.flash?.success && isAppTab" class="text-sm text-emerald-700">
+                {{ page.props.flash.success }}
+            </p>
+
             <LaravelToolkitPanel
+                v-if="isLaravelStack"
                 :domain="domain"
                 :deploy-preset="laravelDeployPreset"
                 :attach-processing="laravelForm.processing"
@@ -1243,17 +965,338 @@ const updateMemberRole = (memberId, role) => {
                 :can-mutate-hosting="canMutateHosting"
                 @attach="installLaravel"
             />
+            <StackToolkitPanel
+                v-else
+                :domain="domain"
+                :stack-presets="stackPresets"
+                :attach-processing="laravelForm.processing"
+                :attach-error="laravelForm.errors.attach_laravel || ''"
+                :can-open-dokploy="canOpenDokploy"
+                :can-mutate-hosting="canMutateHosting"
+                @attach="installLaravel"
+            />
 
             <section
-                v-if="canMutateHosting"
-                class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
+                v-if="siteHosting.available && canMutateHosting"
+                :class="runtimeEnvForm.app_debug ? sectionTone.runtimeDebug : sectionTone.runtime"
             >
-                <h2 class="text-base font-semibold">{{ t('domains.show.boot_env') }}</h2>
-                <p class="mt-1 text-sm text-zinc-500">
-                    {{ t('domains.show.boot_env_help') }}
+                <h2
+                    class="text-base font-semibold"
+                    :class="runtimeEnvForm.app_debug ? headingTone.runtimeDebug : headingTone.runtime"
+                >
+                    {{ t('domains.show.runtime_env') }}
+                </h2>
+                <p class="mt-1 text-sm text-zinc-600">{{ t('domains.show.runtime_env_help') }}</p>
+                <p
+                    v-if="runtimeEnvForm.app_debug"
+                    class="mt-2 inline-flex rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-900"
+                >
+                    {{ t('domains.show.runtime_debug_badge') }}
                 </p>
-                <p v-if="page.props.flash?.success" class="mt-3 text-sm text-emerald-700">
-                    {{ page.props.flash.success }}
+                <form class="mt-4 grid gap-3 sm:grid-cols-3" @submit.prevent="saveRuntimeEnv(false)">
+                    <div>
+                        <label class="block text-sm font-medium" :for="`runtime-env-${domain.id}`">
+                            {{ t('domains.show.runtime_app_env') }}
+                        </label>
+                        <select
+                            :id="`runtime-env-${domain.id}`"
+                            v-model="runtimeEnvForm.app_env"
+                            :class="inputClass"
+                        >
+                            <option value="local">local (dev)</option>
+                            <option value="staging">staging (test)</option>
+                            <option value="production">production</option>
+                            <option value="testing">testing</option>
+                        </select>
+                        <p v-if="runtimeEnvForm.errors.app_env" class="mt-1 text-sm text-red-600">
+                            {{ runtimeEnvForm.errors.app_env }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`runtime-log-${domain.id}`">
+                            {{ t('domains.show.runtime_log_level') }}
+                        </label>
+                        <select
+                            :id="`runtime-log-${domain.id}`"
+                            v-model="runtimeEnvForm.log_level"
+                            :class="inputClass"
+                        >
+                            <option value="debug">debug</option>
+                            <option value="info">info</option>
+                            <option value="warning">warning</option>
+                            <option value="error">error</option>
+                        </select>
+                        <p v-if="runtimeEnvForm.errors.log_level" class="mt-1 text-sm text-red-600">
+                            {{ runtimeEnvForm.errors.log_level }}
+                        </p>
+                    </div>
+                    <div class="flex flex-col justify-end gap-2">
+                        <label class="flex items-center gap-2 text-sm text-zinc-800">
+                            <input v-model="runtimeEnvForm.app_debug" type="checkbox" class="rounded border-zinc-300" />
+                            {{ t('domains.show.runtime_app_debug') }}
+                        </label>
+                    </div>
+                    <div class="flex flex-wrap gap-2 sm:col-span-3">
+                        <button
+                            type="submit"
+                            class="rounded-lg border border-teal-300 bg-white px-3.5 py-2 text-sm font-medium text-teal-900 hover:bg-teal-50 disabled:opacity-50"
+                            :disabled="runtimeEnvForm.processing"
+                        >
+                            {{ t('domains.show.runtime_save') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-lg bg-teal-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
+                            :disabled="runtimeEnvForm.processing"
+                            @click="saveRuntimeEnv(true)"
+                        >
+                            {{ t('domains.show.runtime_save_deploy') }}
+                        </button>
+                    </div>
+                    <p v-if="runtimeEnvForm.errors.site_env" class="text-sm text-red-600 sm:col-span-3">
+                        {{ runtimeEnvForm.errors.site_env }}
+                    </p>
+                </form>
+            </section>
+
+            <section
+                v-if="siteHosting.available"
+                :class="sectionTone.siteEnv"
+            >
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 class="text-base font-semibold" :class="headingTone.siteEnv">{{ t('domains.show.site_env') }}</h2>
+                        <p class="mt-1 text-sm text-zinc-600">
+                            {{ t('domains.show.site_env_help') }}
+                        </p>
+                    </div>
+                    <button
+                        v-if="canMutateHosting"
+                        type="button"
+                        class="rounded-lg bg-sky-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
+                        :disabled="deploySiteForm.processing"
+                        @click="deploySite"
+                    >
+                        {{ t('domains.show.deploy_site') }}
+                    </button>
+                </div>
+                <p v-if="siteHosting.error" class="mt-3 text-sm text-red-600">{{ siteHosting.error }}</p>
+                <p v-if="deploySiteForm.errors.deploy" class="mt-3 text-sm text-red-600">{{ deploySiteForm.errors.deploy }}</p>
+                <div v-if="siteHosting.git" class="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('domains.show.git_source') }}</p>
+                        <p class="mt-1 text-sm font-medium">{{ siteHosting.git.source_type || '—' }}</p>
+                    </div>
+                    <div class="rounded-lg bg-zinc-50 px-3 py-2 sm:col-span-2">
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.repository') }}</p>
+                        <p class="mt-1 break-all text-sm font-medium">{{ siteHosting.git.repository || '—' }}</p>
+                    </div>
+                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.branch') }}</p>
+                        <p class="mt-1 text-sm font-medium">{{ siteHosting.git.branch || '—' }}</p>
+                    </div>
+                </div>
+                <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">
+                    {{ t('domains.show.git_missing') }}
+                </p>
+
+                <div v-if="siteHosting.variables.length" class="mt-5 overflow-x-auto">
+                    <table class="min-w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
+                                <th class="py-2 pr-4 font-medium">{{ t('common.key') }}</th>
+                                <th class="py-2 font-medium">{{ t('common.value') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in siteHosting.variables"
+                                :key="row.key"
+                                class="border-b border-zinc-100"
+                            >
+                                <td class="py-2 pr-4 font-mono text-xs">{{ row.key }}</td>
+                                <td class="py-2 font-mono text-xs break-all">
+                                    <span v-if="row.redacted" class="text-zinc-500">{{ t('domains.show.redacted') }}</span>
+                                    <span v-else>{{ row.value }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">{{ t('domains.show.no_env') }}</p>
+                <form v-if="canMutateHosting" class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="saveSiteEnv">
+                    <div>
+                        <label class="block text-sm font-medium" :for="`site-env-key-${domain.id}`">{{ t('common.key') }}</label>
+                        <input
+                            :id="`site-env-key-${domain.id}`"
+                            v-model="siteEnvKey"
+                            type="text"
+                            required
+                            placeholder="FEATURE_FLAG"
+                            :class="inputClass"
+                        />
+                        <p v-if="siteEnvForm.errors['entries.0.key']" class="mt-1 text-sm text-red-600">
+                            {{ siteEnvForm.errors['entries.0.key'] }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`site-env-val-${domain.id}`">{{ t('common.value') }}</label>
+                        <input
+                            :id="`site-env-val-${domain.id}`"
+                            v-model="siteEnvValue"
+                            type="text"
+                            :class="inputClass"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">{{ t('domains.show.secret_blank') }}</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <button
+                            type="submit"
+                            class="rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+                            :disabled="siteEnvForm.processing"
+                        >
+                            {{ t('domains.show.save_env_key') }}
+                        </button>
+                    </div>
+                    <p v-if="siteEnvForm.errors.site_env" class="sm:col-span-2 text-sm text-red-600">
+                        {{ siteEnvForm.errors.site_env }}
+                    </p>
+                </form>
+            </section>
+
+            <section
+                v-if="phpSettingsApplicable"
+                :class="sectionTone.php"
+            >
+                <h2 class="text-base font-semibold" :class="headingTone.php">{{ t('domains.show.php_heading') }}</h2>
+                <p class="mt-1 text-sm text-zinc-600">
+                    {{ t('domains.show.php_help') }}
+                    <strong class="font-medium text-orange-900">{{ t('domains.show.php_deploy_note') }}</strong>
+                    {{ t('domains.show.php_deploy_note_rest') }}
+                </p>
+                <form v-if="canMutateHosting" class="mt-5 grid gap-4 sm:grid-cols-2" @submit.prevent="savePhpSettings">
+                    <div>
+                        <label class="block text-sm font-medium" :for="`php-mem-${domain.id}`">memory_limit (web)</label>
+                        <input
+                            :id="`php-mem-${domain.id}`"
+                            v-model="phpSettingsForm.memory_limit"
+                            type="text"
+                            required
+                            :class="inputClass"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">Env: PHP_MEMORY_LIMIT</p>
+                        <p v-if="phpSettingsForm.errors.memory_limit" class="mt-1 text-sm text-red-600">
+                            {{ phpSettingsForm.errors.memory_limit }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`php-artisan-${domain.id}`">{{ t('domains.show.artisan_memory') }}</label>
+                        <input
+                            :id="`php-artisan-${domain.id}`"
+                            v-model="phpSettingsForm.artisan_memory_limit"
+                            type="text"
+                            required
+                            :class="inputClass"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">Env: RUNTS_SYNC_MEMORY_LIMIT, ARTISAN_MEMORY_LIMIT</p>
+                        <p v-if="phpSettingsForm.errors.artisan_memory_limit" class="mt-1 text-sm text-red-600">
+                            {{ phpSettingsForm.errors.artisan_memory_limit }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`php-upload-${domain.id}`">upload_max_filesize</label>
+                        <input
+                            :id="`php-upload-${domain.id}`"
+                            v-model="phpSettingsForm.upload_max_filesize"
+                            type="text"
+                            required
+                            :class="inputClass"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">Env: UPLOAD_MAX_FILESIZE</p>
+                        <p v-if="phpSettingsForm.errors.upload_max_filesize" class="mt-1 text-sm text-red-600">
+                            {{ phpSettingsForm.errors.upload_max_filesize }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`php-post-${domain.id}`">post_max_size</label>
+                        <input
+                            :id="`php-post-${domain.id}`"
+                            v-model="phpSettingsForm.post_max_size"
+                            type="text"
+                            required
+                            :class="inputClass"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">Env: POST_MAX_SIZE</p>
+                        <p v-if="phpSettingsForm.errors.post_max_size" class="mt-1 text-sm text-red-600">
+                            {{ phpSettingsForm.errors.post_max_size }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`php-exec-${domain.id}`">max_execution_time (s)</label>
+                        <input
+                            :id="`php-exec-${domain.id}`"
+                            v-model.number="phpSettingsForm.max_execution_time"
+                            type="number"
+                            min="1"
+                            required
+                            :class="inputClass"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">Env: MAX_EXECUTION_TIME</p>
+                        <p v-if="phpSettingsForm.errors.max_execution_time" class="mt-1 text-sm text-red-600">
+                            {{ phpSettingsForm.errors.max_execution_time }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`php-input-${domain.id}`">max_input_time (s)</label>
+                        <input
+                            :id="`php-input-${domain.id}`"
+                            v-model.number="phpSettingsForm.max_input_time"
+                            type="number"
+                            min="1"
+                            required
+                            :class="inputClass"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">Env: MAX_INPUT_TIME</p>
+                        <p v-if="phpSettingsForm.errors.max_input_time" class="mt-1 text-sm text-red-600">
+                            {{ phpSettingsForm.errors.max_input_time }}
+                        </p>
+                    </div>
+                    <div class="sm:col-span-2 flex flex-wrap items-center gap-4">
+                        <label class="inline-flex items-center gap-2 text-sm text-zinc-700">
+                            <input v-model="phpSettingsForm.deploy_now" type="checkbox" class="rounded border-zinc-300" />
+                            {{ t('domains.show.deploy_now') }}
+                        </label>
+                        <button
+                            type="submit"
+                            class="rounded-lg bg-orange-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                            :disabled="phpSettingsForm.processing"
+                        >
+                            {{ t('domains.show.save_php') }}
+                        </button>
+                    </div>
+                    <p v-if="phpSettingsForm.errors.php_settings" class="sm:col-span-2 text-sm text-red-600">
+                        {{ phpSettingsForm.errors.php_settings }}
+                    </p>
+                </form>
+                <dl v-else class="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">memory_limit</dt>
+                        <dd class="mt-1 text-sm font-medium">{{ phpSettings.memory_limit }}</dd>
+                    </div>
+                    <div class="rounded-lg bg-zinc-50 px-3 py-2">
+                        <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('domains.show.artisan_cli') }}</dt>
+                        <dd class="mt-1 text-sm font-medium">{{ phpSettings.artisan_memory_limit }}</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section
+                v-if="isLaravelStack && canMutateHosting"
+                :class="sectionTone.boot"
+            >
+                <h2 class="text-base font-semibold" :class="headingTone.boot">{{ t('domains.show.boot_env') }}</h2>
+                <p class="mt-1 text-sm text-zinc-600">
+                    {{ t('domains.show.boot_env_help') }}
                 </p>
                 <p v-if="alignEnvForm.errors.align_env" class="mt-3 text-sm text-red-600">
                     {{ alignEnvForm.errors.align_env }}
@@ -1270,23 +1313,77 @@ const updateMemberRole = (memberId, role) => {
             </section>
         </div>
 
-        <div v-show="currentTab === 'sito'" class="min-w-0 space-y-6">
-            <StackToolkitPanel
-                :domain="domain"
-                :stack-presets="stackPresets"
-                :attach-processing="laravelForm.processing"
-                :attach-error="laravelForm.errors.attach_laravel || ''"
-                :can-open-dokploy="canOpenDokploy"
-                :can-mutate-hosting="canMutateHosting"
-                @attach="installLaravel"
-            />
+        <div v-show="currentTab === 'accessi'" class="min-w-0 space-y-6">
+            <section :class="sectionTone.access">
+                <h2 class="text-base font-semibold" :class="headingTone.access">{{ t('domains.show.access') }}</h2>
+                <p class="mt-1 text-sm text-zinc-600">
+                    {{ t('domains.show.access_help') }}
+                </p>
+                <ul v-if="domainMembers.length" class="mt-4 divide-y divide-orange-100 rounded-lg border border-orange-100 bg-white/70">
+                    <li
+                        v-for="member in domainMembers"
+                        :key="member.id"
+                        class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                    >
+                        <span>{{ member.name }} · {{ member.email }}</span>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <select
+                                :value="member.role"
+                                class="rounded-lg border border-zinc-200 px-2 py-1 text-sm"
+                                @change="updateMemberRole(member.id, $event.target.value)"
+                            >
+                                <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
+                                    {{ opt.label }}
+                                </option>
+                            </select>
+                            <button
+                                type="button"
+                                class="text-red-700 hover:underline"
+                                @click="revokeAccess(member.id)"
+                            >
+                                {{ t('common.remove') }}
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+                <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_members') }}</p>
+                <form class="mt-5 grid gap-3 sm:grid-cols-2" @submit.prevent="grantAccess">
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium" for="access-email">{{ t('common.email') }}</label>
+                        <input id="access-email" v-model="accessForm.email" type="email" required :class="inputClass" />
+                        <p v-if="accessForm.errors.email" class="mt-1 text-sm text-red-600">{{ accessForm.errors.email }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" for="access-name">{{ t('domains.show.name_new_user') }}</label>
+                        <input id="access-name" v-model="accessForm.name" type="text" :class="inputClass" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" for="access-role">{{ t('common.role') }}</label>
+                        <select id="access-role" v-model="accessForm.role" :class="inputClass">
+                            <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
+                                {{ opt.label }}
+                            </option>
+                        </select>
+                        <p v-if="accessForm.errors.role" class="mt-1 text-sm text-red-600">{{ accessForm.errors.role }}</p>
+                    </div>
+                    <div class="flex items-end sm:col-span-2">
+                        <button
+                            type="submit"
+                            class="rounded-lg bg-orange-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                            :disabled="accessForm.processing"
+                        >
+                            {{ t('common.invite') }}
+                        </button>
+                    </div>
+                </form>
+            </section>
         </div>
 
         <section
             v-show="currentTab === 'pericolo'"
-            class="min-w-0 rounded-xl border border-red-200 bg-white p-6 shadow-sm"
+            :class="sectionTone.danger"
         >
-            <h2 class="text-base font-semibold text-red-800">{{ t('domains.show.delete_heading') }}</h2>
+            <h2 class="text-base font-semibold" :class="headingTone.danger">{{ t('domains.show.delete_heading') }}</h2>
             <p class="mt-1 mb-5 text-sm text-zinc-500">
                 {{ t('domains.show.delete_help') }}
             </p>

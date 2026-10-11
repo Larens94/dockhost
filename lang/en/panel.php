@@ -138,6 +138,7 @@ return [
             'runtime_env_help' => 'APP_ENV / APP_DEBUG / LOG_LEVEL on the Dokploy application. Use local or staging with debug to see errors while testing; production with debug off for go-live. Deploy so the app reloads them.',
             'runtime_app_env' => 'APP_ENV',
             'runtime_app_debug' => 'APP_DEBUG (show errors)',
+            'runtime_debug_badge' => 'Debug on — errors visible on the page',
             'runtime_log_level' => 'LOG_LEVEL',
             'runtime_save' => 'Save environment',
             'runtime_save_deploy' => 'Save and deploy',
@@ -208,6 +209,7 @@ return [
             'sftp' => 'SFTP',
             'laravel' => 'Laravel',
             'site' => 'Site',
+            'access' => 'Access',
             'danger' => 'Danger',
         ],
         'flash' => [

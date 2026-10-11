@@ -34,7 +34,7 @@ class DomainPhpSettingsTest extends TestCase
         $domain = $this->laravelDomainWithApp('app-php');
 
         $this->actingAs($user)
-            ->from(route('domains.show', ['domain' => $domain, 'tab' => 'generale']))
+            ->from(route('domains.show', ['domain' => $domain, 'tab' => 'laravel']))
             ->post(route('domains.php-settings.update', $domain), [
                 'memory_limit' => '512M',
                 'upload_max_filesize' => '128M',
@@ -44,7 +44,7 @@ class DomainPhpSettingsTest extends TestCase
                 'artisan_memory_limit' => '768M',
                 'deploy_now' => false,
             ])
-            ->assertRedirect(route('domains.show', $domain))
+            ->assertRedirect(route('domains.show', ['domain' => $domain, 'tab' => 'laravel']))
             ->assertSessionHas(
                 'success',
                 'Env aggiornato. Dopo Salva PHP serve deploy del sito perché le direttive si applichino.',

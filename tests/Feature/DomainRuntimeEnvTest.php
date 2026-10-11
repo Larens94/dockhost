@@ -43,7 +43,7 @@ class DomainRuntimeEnvTest extends TestCase
                 'app_debug' => true,
                 'log_level' => 'debug',
             ])
-            ->assertRedirect(route('domains.show', $domain))
+            ->assertRedirect(route('domains.show', ['domain' => $domain, 'tab' => 'laravel']))
             ->assertSessionHas('success');
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.saveEnvironment'

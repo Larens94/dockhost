@@ -14,6 +14,7 @@
 //          composer-2.5-fast | cursor | 2026-09-25 | s_domain_site_env | Site env, deploy sito, git summary on show
 //          composer-2.5-fast | cursor | 2026-09-25 | s_access_mail | Email site DB/SFTP creds to domain owners on create
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Reset DB password also syncs Dokploy DB_* + deploy
+//          composer-2.5-fast | cursor | 2026-10-11 | s_domain_tabs_ia | App env/PHP redirects land on laravel/sito tab
 
 namespace App\Http\Controllers;
 
@@ -197,7 +198,7 @@ class DomainController extends Controller
             ? __('panel.domains.flash.site_env_unchanged')
             : __('panel.domains.flash.site_env_updated', ['keys' => implode(', ', $keys)]);
 
-        return $this->redirectToDomain($domain, 'generale')->with('success', $message);
+        return $this->redirectToDomain($domain, $this->appTabFor($domain))->with('success', $message);
     }
 
     public function updateRuntimeEnv(
@@ -225,7 +226,7 @@ class DomainController extends Controller
                 'trigger' => 'runtime_env',
             ]);
 
-            return $this->redirectToDomain($domain, 'generale')
+            return $this->redirectToDomain($domain, $this->appTabFor($domain))
                 ->with('success', __('panel.domains.flash.runtime_env_deployed'));
         }
 
@@ -234,7 +235,7 @@ class DomainController extends Controller
             ? __('panel.domains.flash.runtime_env_unchanged')
             : __('panel.domains.flash.runtime_env_updated', ['keys' => implode(', ', $keys)]);
 
-        return $this->redirectToDomain($domain, 'generale')->with('success', $message);
+        return $this->redirectToDomain($domain, $this->appTabFor($domain))->with('success', $message);
     }
 
     public function deploySite(
@@ -251,7 +252,8 @@ class DomainController extends Controller
             'trigger' => 'panel',
         ]);
 
-        return $this->redirectToDomain($domain, 'generale')->with('success', __('panel.domains.flash.deploy_started'));
+        return $this->redirectToDomain($domain, $this->appTabFor($domain))
+            ->with('success', __('panel.domains.flash.deploy_started'));
     }
 
     public function updatePhpSettings(
@@ -289,7 +291,7 @@ class DomainController extends Controller
             $message = __('panel.domains.flash.php_no_app');
         }
 
-        return $this->redirectToDomain($domain, 'generale')->with('success', $message);
+        return $this->redirectToDomain($domain, $this->appTabFor($domain))->with('success', $message);
     }
 
     public function storeDatabase(
@@ -595,10 +597,15 @@ class DomainController extends Controller
         $accessMailer->sendSiteCredentialToOwners($domain, $revealed, $actor);
     }
 
+    private function appTabFor(Domain $domain): string
+    {
+        return $domain->stack === DomainStack::Laravel ? 'laravel' : 'sito';
+    }
+
     private function redirectToDomain(Domain $domain, ?string $preferredTab = null): RedirectResponse
     {
         $tab = request()->query('tab', $preferredTab);
-        $allowed = ['generale', 'database', 'sftp', 'laravel', 'sito', 'pericolo'];
+        $allowed = ['generale', 'database', 'sftp', 'laravel', 'sito', 'accessi', 'pericolo'];
 
         return redirect()->route('domains.show', [
             'domain' => $domain,
