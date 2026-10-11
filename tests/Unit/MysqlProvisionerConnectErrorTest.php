@@ -16,6 +16,7 @@ use Illuminate\Validation\ValidationException;
 use Mockery;
 use PDO;
 use PDOException;
+use PDOStatement;
 use Tests\TestCase;
 
 class MysqlProvisionerConnectErrorTest extends TestCase
@@ -62,9 +63,9 @@ class MysqlProvisionerConnectErrorTest extends TestCase
         $pdo = Mockery::mock(PDO::class);
         $pdo->shouldReceive('quote')->andReturnUsing(fn (string $value): string => "'".$value."'");
         $pdo->shouldReceive('exec')->andReturn(1);
-        $hosts = Mockery::mock();
+        $hosts = Mockery::mock(PDOStatement::class);
         $hosts->shouldReceive('execute')->andReturn(true);
-        $hosts->shouldReceive('fetchAll')->andReturn([]);
+        $hosts->shouldReceive('fetchColumn')->andReturn(false);
         $pdo->shouldReceive('prepare')->andReturn($hosts);
 
         $provisioner = new MysqlProvisioner(
