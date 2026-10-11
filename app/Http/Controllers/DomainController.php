@@ -13,6 +13,7 @@
 //          composer-2.5-fast | cursor | 2026-09-24 | s_domain_php | updatePhpSettings persists + Dokploy env merge
 //          composer-2.5-fast | cursor | 2026-09-25 | s_domain_site_env | Site env, deploy sito, git summary on show
 //          composer-2.5-fast | cursor | 2026-09-25 | s_access_mail | Email site DB/SFTP creds to domain owners on create
+//          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Reset DB password also syncs Dokploy DB_* + deploy
 
 namespace App\Http\Controllers;
 
@@ -313,15 +314,18 @@ class DomainController extends Controller
         DatabaseAccount $databaseAccount,
         AccessAccountManager $accounts,
         DomainAccessMailer $accessMailer,
+        DokployApplicationAttacher $attacher,
     ): RedirectResponse {
         $request->accountBelongsToDomain($domain, $databaseAccount);
 
-        $account = $accounts->resetDatabaseAccountPassword($databaseAccount);
-        $revealed = $accounts->revealDatabase($account, $account->password_encrypted);
+        [$account, $password] = $accounts->resetDatabaseAccountPassword($databaseAccount);
+        $attacher->syncDatabaseCredentials($domain, $account);
+        $revealed = $accounts->revealDatabase($account, $password);
         $this->emailSiteCredentialIfPossible($request, $domain, $accessMailer, $revealed);
 
         return $this->redirectToDomain($domain, 'database')
-            ->with('revealed_credential', $revealed);
+            ->with('revealed_credential', $revealed)
+            ->with('success', __('panel.domains.show.reset_db_user_password_done'));
     }
 
     public function destroyDatabaseAccount(

@@ -1,16 +1,17 @@
 <?php
 
-
 // AccessAccountManager.php — AccessAccountManager module.
 //
-// exports: AccessAccountManager | AccessAccountManager::generatedPassword(): string | AccessAccountManager::createDatabaseUserForDomain(Domain $domain, DatabasePrivilege $privilege): DatabaseAccount | AccessAccountManager::createDatabaseUserForInfrastructure( Infrastructure $infrastructure, DatabaseAccount $source, DatabasePrivilege $privilege, ): DatabaseAccount | AccessAccountManager::createSftpUserForDomain(Domain $domain): SftpUser | AccessAccountManager::createSftpUserForInfrastructure(Infrastructure $infrastructure, Domain $domain): SftpUser | AccessAccountManager::revealDatabase(DatabaseAccount $account, string $password): array | AccessAccountManager::revealInitialDomainAccess(Domain $domain): array | AccessAccountManager::revealSftp(SftpUser $user, string $password): array
+// exports: AccessAccountManager | AccessAccountManager::generatedPassword(): string | AccessAccountManager::createDatabaseUserForDomain(Domain $domain, DatabasePrivilege $privilege): DatabaseAccount | AccessAccountManager::createDatabaseUserForInfrastructure( Infrastructure $infrastructure, DatabaseAccount $source, DatabasePrivilege $privilege, ): DatabaseAccount | AccessAccountManager::createSftpUserForDomain(Domain $domain): SftpUser | AccessAccountManager::createSftpUserForInfrastructure(Infrastructure $infrastructure, Domain $domain): SftpUser | AccessAccountManager::resetDatabaseAccountPassword(DatabaseAccount $account): array | AccessAccountManager::revealDatabase(DatabaseAccount $account, string $password): array | AccessAccountManager::revealInitialDomainAccess(Domain $domain): array | AccessAccountManager::revealSftp(SftpUser $user, string $password): array
 // used_by: app/Http/Controllers/DomainController.php
 //         app/Http/Controllers/InfrastructureController.php
 //         tests/Feature/AccessAccountTest.php
 // rules:   Passwords are generated once and returned via reveal*() for one-time flash — not stored for re-display.
 //          SFTP passwords must be alphanumeric without ':' (atmoz users.conf). Never print secrets in logs.
+//          resetDatabaseAccountPassword returns [account, plaintext] so the flash never depends on a second decrypt.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-//          composer | cursor | 2026-09-21 | s_20260921_codedna | credential reveal rules 
+//          composer | cursor | 2026-09-21 | s_20260921_codedna | credential reveal rules
+//          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Reset returns plaintext for Dokploy sync flash
 
 namespace App\Services\Hosting;
 
@@ -53,7 +54,10 @@ class AccessAccountManager
         return $this->createDatabaseUser($source, $privilege);
     }
 
-    public function resetDatabaseAccountPassword(DatabaseAccount $account): DatabaseAccount
+    /**
+     * @return array{0: DatabaseAccount, 1: string}
+     */
+    public function resetDatabaseAccountPassword(DatabaseAccount $account): array
     {
         $infrastructure = $account->infrastructure
             ?? Infrastructure::query()->where('slug', $account->infra_slug)->first();
@@ -86,7 +90,7 @@ class AccessAccountManager
 
         $account->update(['password_encrypted' => $password]);
 
-        return $account->refresh();
+        return [$account->refresh(), $password];
     }
 
     public function deleteDatabaseAccount(DatabaseAccount $account): void
