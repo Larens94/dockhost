@@ -51,6 +51,7 @@ class MysqlProvisioner
         private ?ComposeMysqlCredentialAligner $aligner = null,
         private ?Closure $adminConnector = null,
         private ?Closure $siteUserLoginConnector = null,
+        private ?MysqlCredentialHealer $healer = null,
     ) {}
 
     public function provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void
@@ -147,7 +148,24 @@ class MysqlProvisioner
         try {
             return $this->open($infrastructure);
         } catch (PDOException $exception) {
-            if ($this->isAccessDenied($exception) && $this->aligner?->align($infrastructure)) {
+            if (! $this->isAccessDenied($exception)) {
+                throw $this->connectionValidationException($infrastructure, $exception);
+            }
+
+            // Prefer non-destructive heal (panel → compose → root ALTER) before failing the wizard.
+            if ($this->healer instanceof MysqlCredentialHealer) {
+                try {
+                    $this->healer->heal($infrastructure);
+
+                    return $this->open($infrastructure->refresh());
+                } catch (ValidationException) {
+                    // Fall through to align-only retry / final error.
+                } catch (PDOException $retry) {
+                    throw $this->connectionValidationException($infrastructure, $retry);
+                }
+            }
+
+            if ($this->aligner?->align($infrastructure)) {
                 try {
                     return $this->open($infrastructure->refresh());
                 } catch (PDOException $retry) {
@@ -166,7 +184,7 @@ class MysqlProvisioner
             $infrastructure->mysql_host,
             $infrastructure->mysql_port,
         );
-        $username = (string) $infrastructure->mysql_admin_user;
+        $username = (string) ($infrastructure->mysql_admin_user ?: 'infra');
         $password = (string) $infrastructure->mysql_admin_password;
 
         if ($this->adminConnector instanceof Closure) {

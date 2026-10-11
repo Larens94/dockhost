@@ -1,13 +1,12 @@
 <?php
 
-
 // MysqlProvisionerConnectErrorTest.php — MysqlProvisionerConnectErrorTest module.
 //
 // exports: MysqlProvisionerConnectErrorTest | MysqlProvisionerConnectErrorTest::test_access_denied_becomes_italian_validation_exception(): void | MysqlProvisionerConnectErrorTest::test_retries_after_aligning_compose_password(): void
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace Tests\Unit;
 
@@ -33,6 +32,8 @@ class MysqlProvisionerConnectErrorTest extends TestCase
             function (): PDO {
                 throw new PDOException("SQLSTATE[HY000] [1045] Access denied for user 'infra'@'10.0.1.96' (using password: YES)");
             },
+            null,
+            null,
         );
 
         try {
@@ -61,6 +62,10 @@ class MysqlProvisionerConnectErrorTest extends TestCase
         $pdo = Mockery::mock(PDO::class);
         $pdo->shouldReceive('quote')->andReturnUsing(fn (string $value): string => "'".$value."'");
         $pdo->shouldReceive('exec')->andReturn(1);
+        $hosts = Mockery::mock();
+        $hosts->shouldReceive('execute')->andReturn(true);
+        $hosts->shouldReceive('fetchAll')->andReturn([]);
+        $pdo->shouldReceive('prepare')->andReturn($hosts);
 
         $provisioner = new MysqlProvisioner(
             fn (): PDO => $pdo,
@@ -73,6 +78,8 @@ class MysqlProvisionerConnectErrorTest extends TestCase
 
                 return $pdo;
             },
+            function (): void {},
+            null,
         );
 
         $provisioner->provision('d_shop', 'u_shop', 'secretpass', $infrastructure);

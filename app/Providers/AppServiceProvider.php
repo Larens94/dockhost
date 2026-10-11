@@ -15,6 +15,7 @@ namespace App\Providers;
 use App\Models\Domain;
 use App\Models\User;
 use App\Services\Infra\ComposeMysqlCredentialAligner;
+use App\Services\Infra\MysqlCredentialHealer;
 use App\Services\Infra\MysqlProvisioner;
 use App\Services\Infra\PostgresProvisioner;
 use App\Services\Panel\PanelGitLabCredentialStore;
@@ -47,6 +48,9 @@ class AppServiceProvider extends ServiceProvider
                     );
                 },
                 $app->make(ComposeMysqlCredentialAligner::class),
+                null,
+                null,
+                $app->make(MysqlCredentialHealer::class),
             );
         });
 
