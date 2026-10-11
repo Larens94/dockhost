@@ -670,6 +670,7 @@ class DokployApplicationAttacher
             'APP_KEY='.$this->generateApplicationKey(),
             'APP_DEBUG=false',
             'LOG_CHANNEL=stderr',
+            'LOG_LEVEL=info',
             'FILESYSTEM_DISK=local',
             ...$this->laravelSessionLines($domain),
             ...$this->laravelHttpsLines($domain),
@@ -1011,6 +1012,7 @@ class DokployApplicationAttacher
      */
     private function bootEnvDefaults(Domain $domain): array
     {
+        // APP_ENV / APP_DEBUG / LOG_LEVEL are only filled when missing — runtime UI owns switches.
         return [
             'APP_NAME' => $domain->fqdn,
             'APP_ENV' => 'production',
@@ -1019,6 +1021,7 @@ class DokployApplicationAttacher
             ...$this->laravelSessionEnv($domain),
             'CACHE_STORE' => 'file',
             'LOG_CHANNEL' => 'stderr',
+            'LOG_LEVEL' => 'info',
         ];
     }
 }

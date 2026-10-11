@@ -9,6 +9,7 @@
            composer-2.5-fast | cursor | 2026-09-25 | s_domain_site_env | Env sito, deploy, git read-only on Generale
            composer-2.5-fast | cursor | 2026-09-25 | s_access_mail | Invita button + copy for email invite flow
            composer-2.5-fast | cursor | 2026-10-11 | s_prod_foundations | Backup DB + align-from-prod on Database tab
+           composer-2.5-fast | cursor | 2026-10-11 | s_runtime_env | APP_ENV / APP_DEBUG / LOG_LEVEL runtime block
 -->
 
 <script setup>
@@ -319,6 +320,27 @@ const siteEnvValue = ref('');
 const siteEnvForm = useForm({
     entries: [],
 });
+
+const runtimeEnvValue = (key, fallback = '') => {
+    const row = (props.siteHosting.variables || []).find((item) => item.key === key);
+    if (!row || row.redacted || row.value === undefined || row.value === null || row.value === '') {
+        return fallback;
+    }
+
+    return String(row.value);
+};
+
+const runtimeEnvForm = useForm({
+    app_env: runtimeEnvValue('APP_ENV', 'production'),
+    app_debug: ['true', '1', 'yes', 'on'].includes(String(runtimeEnvValue('APP_DEBUG', 'false')).toLowerCase()),
+    log_level: runtimeEnvValue('LOG_LEVEL', 'info'),
+    deploy: false,
+});
+
+const saveRuntimeEnv = (deploy = false) => {
+    runtimeEnvForm.deploy = deploy;
+    runtimeEnvForm.post(actionUrl(`/domains/${props.domain.id}/runtime-env`), { preserveScroll: true });
+};
 
 const saveSiteEnv = () => {
     const key = siteEnvKey.value.trim().toUpperCase();
@@ -676,6 +698,76 @@ const updateMemberRole = (memberId, role) => {
                 <p v-else-if="!siteHosting.error" class="mt-5 text-sm text-zinc-500">
                     {{ t('domains.show.git_missing') }}
                 </p>
+
+                <div v-if="canMutateHosting" class="mt-5 rounded-lg border border-neutral-200 bg-zinc-50/60 p-4">
+                    <h3 class="text-sm font-semibold">{{ t('domains.show.runtime_env') }}</h3>
+                    <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.runtime_env_help') }}</p>
+                    <form class="mt-4 grid gap-3 sm:grid-cols-3" @submit.prevent="saveRuntimeEnv(false)">
+                        <div>
+                            <label class="block text-sm font-medium" :for="`runtime-env-${domain.id}`">
+                                {{ t('domains.show.runtime_app_env') }}
+                            </label>
+                            <select
+                                :id="`runtime-env-${domain.id}`"
+                                v-model="runtimeEnvForm.app_env"
+                                :class="inputClass"
+                            >
+                                <option value="local">local (dev)</option>
+                                <option value="staging">staging (test)</option>
+                                <option value="production">production</option>
+                                <option value="testing">testing</option>
+                            </select>
+                            <p v-if="runtimeEnvForm.errors.app_env" class="mt-1 text-sm text-red-600">
+                                {{ runtimeEnvForm.errors.app_env }}
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium" :for="`runtime-log-${domain.id}`">
+                                {{ t('domains.show.runtime_log_level') }}
+                            </label>
+                            <select
+                                :id="`runtime-log-${domain.id}`"
+                                v-model="runtimeEnvForm.log_level"
+                                :class="inputClass"
+                            >
+                                <option value="debug">debug</option>
+                                <option value="info">info</option>
+                                <option value="warning">warning</option>
+                                <option value="error">error</option>
+                            </select>
+                            <p v-if="runtimeEnvForm.errors.log_level" class="mt-1 text-sm text-red-600">
+                                {{ runtimeEnvForm.errors.log_level }}
+                            </p>
+                        </div>
+                        <div class="flex flex-col justify-end gap-2">
+                            <label class="flex items-center gap-2 text-sm text-zinc-800">
+                                <input v-model="runtimeEnvForm.app_debug" type="checkbox" class="rounded border-zinc-300" />
+                                {{ t('domains.show.runtime_app_debug') }}
+                            </label>
+                        </div>
+                        <div class="flex flex-wrap gap-2 sm:col-span-3">
+                            <button
+                                type="submit"
+                                class="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+                                :disabled="runtimeEnvForm.processing"
+                            >
+                                {{ t('domains.show.runtime_save') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                                :disabled="runtimeEnvForm.processing"
+                                @click="saveRuntimeEnv(true)"
+                            >
+                                {{ t('domains.show.runtime_save_deploy') }}
+                            </button>
+                        </div>
+                        <p v-if="runtimeEnvForm.errors.site_env" class="text-sm text-red-600 sm:col-span-3">
+                            {{ runtimeEnvForm.errors.site_env }}
+                        </p>
+                    </form>
+                </div>
+
                 <div v-if="siteHosting.variables.length" class="mt-5 overflow-x-auto">
                     <table class="min-w-full text-left text-sm">
                         <thead>

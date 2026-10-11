@@ -34,6 +34,7 @@ use App\Http\Requests\StoreDomainRequest;
 use App\Http\Requests\StoreDomainSftpUserRequest;
 use App\Http\Requests\UpdateDomainPhpSettingsRequest;
 use App\Http\Requests\UpdateDomainRequest;
+use App\Http\Requests\UpdateDomainRuntimeEnvRequest;
 use App\Http\Requests\UpdateDomainSiteEnvRequest;
 use App\Models\DatabaseAccount;
 use App\Models\Domain;
@@ -195,6 +196,43 @@ class DomainController extends Controller
         $message = $keys === []
             ? __('panel.domains.flash.site_env_unchanged')
             : __('panel.domains.flash.site_env_updated', ['keys' => implode(', ', $keys)]);
+
+        return $this->redirectToDomain($domain, 'generale')->with('success', $message);
+    }
+
+    public function updateRuntimeEnv(
+        UpdateDomainRuntimeEnvRequest $request,
+        Domain $domain,
+        DomainSiteEnvManager $siteEnv,
+        AuditLogger $audit,
+    ): RedirectResponse {
+        $result = $siteEnv->mergeEntries($domain, $request->runtimeEntries());
+
+        $audit->record('domain.runtime_env.save', $domain, [
+            'fqdn' => $domain->fqdn,
+            'app_env' => $request->validated('app_env'),
+            'app_debug' => (bool) ($request->validated('app_debug') ?? false),
+            'log_level' => $request->validated('log_level'),
+            'deploy' => $request->shouldDeploy(),
+            'added' => $result['added'],
+            'updated' => $result['updated'],
+        ]);
+
+        if ($request->shouldDeploy()) {
+            $siteEnv->deploy($domain);
+            $audit->record('domain.deploy', $domain, [
+                'fqdn' => $domain->fqdn,
+                'trigger' => 'runtime_env',
+            ]);
+
+            return $this->redirectToDomain($domain, 'generale')
+                ->with('success', __('panel.domains.flash.runtime_env_deployed'));
+        }
+
+        $keys = [...$result['added'], ...$result['updated']];
+        $message = $keys === []
+            ? __('panel.domains.flash.runtime_env_unchanged')
+            : __('panel.domains.flash.runtime_env_updated', ['keys' => implode(', ', $keys)]);
 
         return $this->redirectToDomain($domain, 'generale')->with('success', $message);
     }

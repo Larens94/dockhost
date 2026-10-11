@@ -119,6 +119,8 @@ Route::middleware('auth')->group(function () {
         ->name('domains.php-settings.update');
     Route::post('domains/{domain}/site-env', [DomainController::class, 'updateSiteEnv'])
         ->name('domains.site-env.update');
+    Route::post('domains/{domain}/runtime-env', [DomainController::class, 'updateRuntimeEnv'])
+        ->name('domains.runtime-env.update');
     Route::post('domains/{domain}/deploy', [DomainController::class, 'deploySite'])
         ->name('domains.deploy');
 
