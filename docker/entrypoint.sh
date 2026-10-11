@@ -77,4 +77,7 @@ php artisan view:cache
 php artisan event:cache
 php artisan queue:restart
 
+# Keep Laravel's scheduler alive in this single container (hourly domain DB backups, etc.).
+php artisan schedule:work --verbose >> /var/www/html/storage/logs/scheduler.log 2>&1 &
+
 exec apache2-foreground

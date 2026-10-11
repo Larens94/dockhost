@@ -91,6 +91,8 @@ Route::middleware('auth')->group(function () {
         ->name('domains.database-users.destroy');
     Route::post('domains/{domain}/backups/database', [DomainController::class, 'storeDatabaseBackup'])
         ->name('domains.backups.database.store');
+    Route::post('domains/{domain}/backups/settings', [DomainController::class, 'updateBackupSettings'])
+        ->name('domains.backups.settings');
     Route::post('domains/{domain}/backups/{backup}/restore', [DomainController::class, 'restoreDatabaseBackup'])
         ->name('domains.backups.restore');
     Route::post('domains/{domain}/align-from', [DomainController::class, 'alignFromDomain'])

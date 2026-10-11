@@ -93,7 +93,7 @@ Opzione successiva: per ogni servizio, poter **non** usare l’infra condivisa e
 ## Production foundations (P0) — in corso / fatto in codice
 
 - **Credenziali MariaDB sicure** — `updateStack` / `secretsFor` non inventano più `MYSQL_*` se il compose esiste già; allinea da Dokploy o fallisce. Heal non distruttivo: `MysqlCredentialHealer` (align compose → login infra → altrimenti root `ALTER USER`). UI: tab Pericolo → «Ripara credenziali MariaDB».
-- **Backup DB dominio** — `DomainBackup` + `DomainBackupManager` (dump/restore PDO via rete). UI tab Database del dominio. File/volume backup ancora da fare.
+- **Backup DB dominio** — `DomainBackup` + `DomainBackupManager` (dump/restore PDO via rete). Manuale + automatici configurabili per dominio (`backup_enabled` / daily|weekly / retention), comando `domains:run-database-backups` ogni ora via `schedule:work` nell’entrypoint. File/volume backup ancora da fare.
 - **Multi-environment** — tabella `infrastructure_environments`, relation su Domain, tab Ambienti su infra. `production` default al provision; create env chiama `environment.create`. Clone compose per env non-prod: ancora da fare (suffix `${slug}-${env}-mariadb`).
 - **Allinea da prod** — `EnvironmentAligner` dump sorgente → restore target; rifiuta overwrite di production senza checkbox.
 

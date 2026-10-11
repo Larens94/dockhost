@@ -199,6 +199,11 @@ const databaseUserForm = useForm({
     privilege: 'all',
 });
 const backupForm = useForm({});
+const backupSettingsForm = useForm({
+    backup_enabled: props.domain.backup_enabled !== false,
+    backup_frequency: props.domain.backup_frequency || 'daily',
+    backup_retain_days: props.domain.backup_retain_days || 14,
+});
 const alignForm = useForm({
     source_domain_id: '',
     allow_overwrite_production: false,
@@ -206,6 +211,10 @@ const alignForm = useForm({
 
 const createDatabaseBackup = () => {
     backupForm.post(actionUrl(`/domains/${props.domain.id}/backups/database`), { preserveScroll: true });
+};
+
+const saveBackupSettings = () => {
+    backupSettingsForm.post(actionUrl(`/domains/${props.domain.id}/backups/settings`), { preserveScroll: true });
 };
 
 const restoreDatabaseBackup = (backupId) => {
@@ -970,6 +979,52 @@ const updateMemberRole = (memberId, role) => {
             >
                 <h2 class="text-base font-semibold">{{ t('domains.show.backups') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.backups_help') }}</p>
+
+                <form class="mt-4 grid gap-3 sm:grid-cols-2" @submit.prevent="saveBackupSettings">
+                    <label class="flex items-center gap-2 text-sm text-zinc-800 sm:col-span-2">
+                        <input v-model="backupSettingsForm.backup_enabled" type="checkbox" class="rounded border-zinc-300" />
+                        {{ t('domains.show.backup_enabled') }}
+                    </label>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`backup-freq-${domain.id}`">
+                            {{ t('domains.show.backup_frequency') }}
+                        </label>
+                        <select
+                            :id="`backup-freq-${domain.id}`"
+                            v-model="backupSettingsForm.backup_frequency"
+                            :class="inputClass"
+                        >
+                            <option value="daily">{{ t('domains.show.backup_frequency_daily') }}</option>
+                            <option value="weekly">{{ t('domains.show.backup_frequency_weekly') }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium" :for="`backup-retain-${domain.id}`">
+                            {{ t('domains.show.backup_retain_days') }}
+                        </label>
+                        <input
+                            :id="`backup-retain-${domain.id}`"
+                            v-model.number="backupSettingsForm.backup_retain_days"
+                            type="number"
+                            min="1"
+                            max="365"
+                            :class="inputClass"
+                        />
+                    </div>
+                    <p v-if="domain.backup_last_ran_at" class="text-sm text-zinc-500 sm:col-span-2">
+                        {{ t('domains.show.backup_last_ran') }}: {{ domain.backup_last_ran_at }}
+                    </p>
+                    <div class="sm:col-span-2">
+                        <button
+                            type="submit"
+                            class="rounded-lg border border-neutral-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+                            :disabled="backupSettingsForm.processing"
+                        >
+                            {{ t('domains.show.backup_settings_save') }}
+                        </button>
+                    </div>
+                </form>
+
                 <form class="mt-4" @submit.prevent="createDatabaseBackup">
                     <button
                         type="submit"

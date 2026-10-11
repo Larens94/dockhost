@@ -50,7 +50,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['customer_id', 'subscription_id', 'infrastructure_id', 'infrastructure_environment_id', 'fqdn', 'infra_slug', 'stack', 'php_settings'])]
+#[Fillable([
+    'customer_id',
+    'subscription_id',
+    'infrastructure_id',
+    'infrastructure_environment_id',
+    'fqdn',
+    'infra_slug',
+    'stack',
+    'php_settings',
+    'backup_enabled',
+    'backup_frequency',
+    'backup_retain_days',
+    'backup_last_ran_at',
+])]
 class Domain extends Model
 {
     /** @use HasFactory<DomainFactory> */
@@ -72,6 +85,9 @@ class Domain extends Model
         return [
             'stack' => DomainStack::class,
             'php_settings' => 'array',
+            'backup_enabled' => 'boolean',
+            'backup_retain_days' => 'integer',
+            'backup_last_ran_at' => 'datetime',
         ];
     }
 

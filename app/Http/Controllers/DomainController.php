@@ -364,6 +364,26 @@ class DomainController extends Controller
             ->with('success', __('panel.domains.show.backup_created', ['id' => $backup->id]));
     }
 
+    public function updateBackupSettings(
+        Request $request,
+        Domain $domain,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'backup_enabled' => ['sometimes', 'boolean'],
+            'backup_frequency' => ['required', 'in:daily,weekly'],
+            'backup_retain_days' => ['required', 'integer', 'min:1', 'max:365'],
+        ]);
+
+        $domain->update([
+            'backup_enabled' => (bool) ($validated['backup_enabled'] ?? false),
+            'backup_frequency' => $validated['backup_frequency'],
+            'backup_retain_days' => (int) $validated['backup_retain_days'],
+        ]);
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.backup_settings_saved'));
+    }
+
     public function restoreDatabaseBackup(
         Domain $domain,
         DomainBackup $backup,
