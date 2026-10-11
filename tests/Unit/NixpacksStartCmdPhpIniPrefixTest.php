@@ -28,6 +28,7 @@ class NixpacksStartCmdPhpIniPrefixTest extends TestCase
 
         $this->assertStringContainsString(NixpacksStartCmdPhpIniPrefix::SEPARATOR, $once);
         $this->assertStringContainsString('dokhosts.ini', $once);
+        $this->assertStringContainsString('open_basedir=${DOKHOSTS_STORAGE_PATH:-/data}', $once);
         $this->assertStringEndsWith($core, $once);
 
         $twice = NixpacksStartCmdPhpIniPrefix::apply($once);

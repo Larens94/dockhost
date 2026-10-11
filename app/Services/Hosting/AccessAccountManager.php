@@ -21,7 +21,6 @@ use App\Models\DatabaseAccount;
 use App\Models\Domain;
 use App\Models\Infrastructure;
 use App\Models\SftpUser;
-use App\Models\StorageShare;
 use App\Services\Infra\MysqlProvisioner;
 use App\Services\Infra\PostgresProvisioner;
 use App\Services\Infra\SftpDaemonSync;
@@ -131,13 +130,7 @@ class AccessAccountManager
 
     public function createSftpUserForDomain(Domain $domain): SftpUser
     {
-        $infrastructure = $this->requireInfrastructure($domain);
-
-        return $this->createSftpUser(
-            $infrastructure,
-            $domain,
-            $this->domainHomePath($domain, $infrastructure),
-        );
+        return $this->createSftpUser($this->requireInfrastructure($domain), $domain);
     }
 
     public function createSftpUserForInfrastructure(Infrastructure $infrastructure, Domain $domain): SftpUser
@@ -148,11 +141,7 @@ class AccessAccountManager
             ]);
         }
 
-        return $this->createSftpUser(
-            $infrastructure,
-            $domain,
-            $this->domainHomePath($domain, $infrastructure),
-        );
+        return $this->createSftpUser($infrastructure, $domain);
     }
 
     /**
@@ -253,7 +242,7 @@ class AccessAccountManager
         ]);
     }
 
-    private function createSftpUser(Infrastructure $infrastructure, ?Domain $domain, string $homePath): SftpUser
+    private function createSftpUser(Infrastructure $infrastructure, ?Domain $domain): SftpUser
     {
         $username = $this->nextSftpUsername($infrastructure, $domain);
         $password = self::generatedPassword();
@@ -261,6 +250,9 @@ class AccessAccountManager
         if (str_contains($password, ':')) {
             $password = self::generatedPassword();
         }
+
+        // Jail = /data/{username} (atmoz ChrootDirectory /home/%u on the shared volume).
+        $homePath = rtrim($infrastructure->storage_root, '/').'/'.$username;
 
         $user = SftpUser::query()->create([
             'domain_id' => $domain?->id,
@@ -287,19 +279,6 @@ class AccessAccountManager
         }
 
         return $infrastructure;
-    }
-
-    private function domainHomePath(Domain $domain, Infrastructure $infrastructure): string
-    {
-        $share = $domain->storageShares()->orderBy('id')->first();
-
-        if ($share instanceof StorageShare && is_string($share->path) && $share->path !== '') {
-            return $share->path;
-        }
-
-        $customerSlug = $domain->customer?->storageSlug() ?? 'shared';
-
-        return rtrim($infrastructure->storage_root, '/').'/'.$customerSlug.'/'.$domain->fqdn;
     }
 
     private function uniqueDatabaseUsername(DatabaseAccount $source): string

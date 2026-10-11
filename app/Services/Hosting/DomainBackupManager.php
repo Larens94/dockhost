@@ -8,8 +8,10 @@
 //          File/volume backup is recorded as kind=files with a clear “not yet wired” error until SFTP pull lands.
 //          Never log SQL dump contents or passwords.
 //          Import stores the uploaded dump as a DomainBackup then applies it into the domain DB name only.
+//          Dump/restore/import use the site DB user (one-database GRANT) — never infra *.* for SQL apply.
 // agent:   composer-2.5-fast | cursor | 2026-10-11 | s_domain_backup | PDO SQL dump + restore for domain DB
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump upload import
+//          composer-2.5-fast | cursor | 2026-10-11 | s_db_site_pdo | Site-user PDO for dump/import/restore
 // message:
 
 namespace App\Services\Hosting;
@@ -63,7 +65,7 @@ class DomainBackupManager
         ]);
 
         try {
-            $pdo = $this->adminPdo($infrastructure);
+            $pdo = $this->sitePdo($account, $infrastructure);
             $sql = $this->dumpDatabase($pdo, $account->database_name);
             $relative = 'backups/domains/'.$domain->id.'/'.$backup->id.'-'.$account->database_name.'.sql';
             Storage::disk('local')->put($relative, $sql);
@@ -237,13 +239,10 @@ class DomainBackupManager
         }
 
         try {
-            $pdo = $this->adminPdo($infrastructure);
-            $databaseIdentifier = '`'.str_replace('`', '``', $account->database_name).'`';
-            $pdo->exec("CREATE DATABASE IF NOT EXISTS {$databaseIdentifier}");
-            $pdo->exec("USE {$databaseIdentifier}");
+            $pdo = $this->sitePdo($account, $infrastructure);
 
             foreach ($this->splitSqlStatements($sql) as $statement) {
-                if (preg_match('/^(CREATE DATABASE|USE|DROP DATABASE)\b/i', $statement) === 1) {
+                if ($this->shouldSkipImportedStatement($statement)) {
                     continue;
                 }
 
@@ -256,10 +255,33 @@ class DomainBackupManager
         }
     }
 
-    private function adminPdo(Infrastructure $infrastructure): PDO
+    private function shouldSkipImportedStatement(string $statement): bool
     {
+        return preg_match(
+            '/^(CREATE DATABASE|USE|DROP DATABASE|CREATE USER|ALTER USER|DROP USER|GRANT|REVOKE|FLUSH\s+PRIVILEGES)\b/i',
+            $statement,
+        ) === 1;
+    }
+
+    private function sitePdo(DatabaseAccount $account, Infrastructure $infrastructure): PDO
+    {
+        $host = filled($account->host) ? (string) $account->host : (string) $infrastructure->mysql_host;
+        $port = (int) ($account->port ?: $infrastructure->mysql_port ?: 3306);
+
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+            $host,
+            $port,
+            $account->database_name,
+        );
+
         try {
-            return $this->openAdminPdo($infrastructure);
+            return new PDO(
+                $dsn,
+                (string) $account->username,
+                (string) $account->password_encrypted,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            );
         } catch (PDOException $exception) {
             if (! str_contains($exception->getMessage(), '1045')
                 && ! str_contains($exception->getMessage(), 'Access denied')) {
@@ -268,30 +290,14 @@ class DomainBackupManager
 
             try {
                 $this->healer->heal($infrastructure);
-            } catch (ValidationException $healException) {
-                throw ValidationException::withMessages([
-                    'backup' => 'Backup database fallito (admin MariaDB): '.($healException->errors()['heal'][0] ?? $healException->getMessage()),
-                ]);
+            } catch (ValidationException) {
+                // Heal repairs infra admin; site-user 1045 is usually a wrong site password.
             }
 
-            return $this->openAdminPdo($infrastructure->refresh());
+            throw ValidationException::withMessages([
+                'backup' => 'Accesso database sito negato per '.$account->username.'@'.$host.'. Re-sync utente o reset password dal pannello.',
+            ]);
         }
-    }
-
-    private function openAdminPdo(Infrastructure $infrastructure): PDO
-    {
-        $dsn = sprintf(
-            'mysql:host=%s;port=%d;charset=utf8mb4',
-            $infrastructure->mysql_host,
-            $infrastructure->mysql_port,
-        );
-
-        return new PDO(
-            $dsn,
-            (string) ($infrastructure->mysql_admin_user ?: 'infra'),
-            (string) $infrastructure->mysql_admin_password,
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
-        );
     }
 
     private function dumpDatabase(PDO $pdo, string $database): string

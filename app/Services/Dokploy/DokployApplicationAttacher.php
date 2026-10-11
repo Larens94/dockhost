@@ -536,9 +536,13 @@ class DokployApplicationAttacher
             return $share->path;
         }
 
-        $customerSlug = $domain->customer?->storageSlug() ?? 'shared';
+        $sftp = $domain->sftpUsers()->orderBy('id')->first();
 
-        return rtrim($infrastructure->storage_root, '/').'/'.$customerSlug.'/'.$domain->fqdn;
+        if ($sftp && filled($sftp->username)) {
+            return rtrim($infrastructure->storage_root, '/').'/'.$sftp->username;
+        }
+
+        return rtrim($infrastructure->storage_root, '/').'/'.$this->appName($domain->fqdn);
     }
 
     /**

@@ -16,6 +16,7 @@ use App\Enums\DatabaseEngine;
 use App\Models\Customer;
 use App\Models\DokployApplication;
 use App\Models\Domain;
+use App\Models\SftpUser;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\Infra\ComposeMysqlCredentialAligner;
@@ -91,7 +92,9 @@ class DomainProvisionTest extends TestCase
             'port' => 3306,
         ]);
 
-        $storagePath = rtrim((string) config('infra.storage_root'), '/').'/acme-corp/shop.acme.test';
+        $sftpUser = SftpUser::query()->where('username', 'sftp_shop_acme_test')->first();
+        $this->assertNotNull($sftpUser);
+        $storagePath = rtrim((string) config('infra.storage_root'), '/').'/'.$sftpUser->username;
 
         $this->assertDatabaseHas('storage_shares', [
             'path' => $storagePath,

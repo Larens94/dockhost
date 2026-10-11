@@ -1,6 +1,5 @@
 <?php
 
-
 // SftpDaemonSync.php — SftpDaemonSync module.
 //
 // exports: SftpDaemonSync | SftpDaemonSync::syncToContainer(SftpUser $user): void | SftpDaemonSync::writeUsersFile(?Infrastructure $infrastructure, ?SftpUser $fallbackUser = null): void
@@ -9,8 +8,10 @@
 //         tests/Unit/SftpDaemonSyncTest.php
 // rules:   POST to {slug}-sftp-sync:8787 only — panel MUST NOT mount infra {slug}_data volumes.
 //          Never log Bearer sftp_sync_token or user passwords.
+//          Jail path is /data/{username} (atmoz ChrootDirectory /home/%u); unique uid per user; relocate legacy customer/fqdn homes.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-//          composer | cursor | 2026-09-21 | s_20260921_codedna | sidecar + secrets rules 
+//          composer | cursor | 2026-09-21 | s_20260921_codedna | sidecar + secrets rules
+//          composer-2.5-fast | cursor | 2026-10-11 | s_sftp_jail | Per-user uid + directory relocate into /data/{username}
 
 namespace App\Services\Infra;
 
@@ -72,6 +73,8 @@ class SftpDaemonSync
                 ->map(fn (SftpUser $sftpUser): array => [
                     'username' => $sftpUser->username,
                     'password' => $sftpUser->password_encrypted,
+                    'uid' => $this->uidFor($sftpUser),
+                    'directory' => $this->containerPath($infrastructure, $sftpUser->home_path),
                 ])
                 ->values()
                 ->all(),
@@ -94,7 +97,33 @@ class SftpDaemonSync
             ]);
         }
 
+        $this->alignHomesToJail($infrastructure, $users);
         $this->restartSftpDaemon($infrastructure);
+    }
+
+    /**
+     * @param  Collection<int, SftpUser>  $users
+     */
+    private function alignHomesToJail(Infrastructure $infrastructure, $users): void
+    {
+        foreach ($users as $user) {
+            $jail = rtrim($infrastructure->storage_root, '/').'/'.$user->username;
+
+            if ($user->home_path === $jail) {
+                continue;
+            }
+
+            $user->update(['home_path' => $jail]);
+
+            if ($user->domain_id) {
+                $user->domain?->storageShares()->orderBy('id')->limit(1)->update(['path' => $jail]);
+            }
+        }
+    }
+
+    private function uidFor(SftpUser $user): int
+    {
+        return 10000 + max(1, (int) $user->id);
     }
 
     /**
@@ -115,6 +144,16 @@ class SftpDaemonSync
 
     private function containerPath(Infrastructure $infrastructure, string $path): string
     {
+        $root = rtrim((string) $infrastructure->storage_root, '/');
+
+        if ($root !== '' && str_starts_with($path, $root.'/')) {
+            return '/data/'.ltrim(substr($path, strlen($root)), '/');
+        }
+
+        if ($root !== '' && $path === $root) {
+            return '/data';
+        }
+
         $slugPrefix = '/data/'.$infrastructure->slug.'/';
 
         if (str_starts_with($path, $slugPrefix)) {

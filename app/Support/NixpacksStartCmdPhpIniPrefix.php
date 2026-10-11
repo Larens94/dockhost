@@ -5,8 +5,10 @@
 // exports: NixpacksStartCmdPhpIniPrefix | NixpacksStartCmdPhpIniPrefix::SEPARATOR | NixpacksStartCmdPhpIniPrefix::apply(?string $startCmd): ?string | NixpacksStartCmdPhpIniPrefix::stripPrefix(string $startCmd): string | NixpacksStartCmdPhpIniPrefix::iniWriterShell(): string
 // used_by: app/Services/Dokploy/DokployApplicationAttacher.php
 // rules:   Empty start command stays empty — never invent nginx/php-fpm stack. Idempotent: strip old prefix before re-applying. Uses PHP_* env vars already on Dokploy.
+//          open_basedir includes DOKHOSTS_STORAGE_PATH + app + tmp so sibling /data tenants stay out of PHP fopen.
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_php_ini_start | Shell prefix for Nixpacks PHP/Laravel containers.
 //          grok-4.7 | cursor | 2026-10-09 | s_ini_sep | Separator is a shell no-op so &&__ does not rename mkdir to __mkdir.
+//          composer-2.5-fast | cursor | 2026-10-11 | s_open_basedir | Tenant open_basedir from DOKHOSTS_STORAGE_PATH
 
 namespace App\Support;
 
@@ -66,6 +68,7 @@ final class NixpacksStartCmdPhpIniPrefix
             .'"post_max_size=${POST_MAX_SIZE:-64M}" '
             .'"max_execution_time=${MAX_EXECUTION_TIME:-120}" '
             .'"max_input_time=${MAX_INPUT_TIME:-120}" '
+            .'"open_basedir=${DOKHOSTS_STORAGE_PATH:-/data}:/app:/workspace:/var/www:/tmp:/var/tmp:/usr/local/lib/php:/usr/share/php" '
             .'> "$_dokhosts_ini"';
     }
 }

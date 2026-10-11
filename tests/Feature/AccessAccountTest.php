@@ -1,13 +1,12 @@
 <?php
 
-
 // AccessAccountTest.php — AccessAccountTest module.
 //
 // exports: AccessAccountTest | AccessAccountTest::test_creates_database_user_and_grants_select(): void | AccessAccountTest::test_rejects_database_user_when_domain_has_no_database(): void | AccessAccountTest::test_creates_sftp_user_with_alphanumeric_password(): void | AccessAccountTest::test_generated_sftp_password_never_contains_colon(): void
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace Tests\Feature;
 
@@ -135,7 +134,7 @@ class AccessAccountTest extends TestCase
 
         $this->assertInstanceOf(SftpUser::class, $user);
         $this->assertSame($infrastructure->id, $user->infrastructure_id);
-        $this->assertSame(rtrim($infrastructure->storage_root, '/').'/acme/shop.acme.test', $user->home_path);
+        $this->assertSame(rtrim($infrastructure->storage_root, '/').'/'.$user->username, $user->home_path);
         $this->assertDoesNotMatchRegularExpression('/:/', $user->password_encrypted);
         $this->assertTrue(ctype_alnum($user->password_encrypted));
         Http::assertSent(fn ($request): bool => $request->url() === 'http://infra1-sftp-sync:8787/sync'

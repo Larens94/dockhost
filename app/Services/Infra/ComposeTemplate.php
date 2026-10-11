@@ -522,8 +522,25 @@ services:
       - python
       - -c
       - |
-        import json, os, http.server
+        import json, os, http.server, shutil
         TOKEN = os.environ.get("SFTP_SYNC_TOKEN", "")
+        def under_data(path):
+            path = os.path.realpath(str(path))
+            return path == "/data" or path.startswith("/data/")
+        def ensure_jail(name, desired):
+            jail = os.path.realpath("/data/" + name)
+            if not under_data(jail) or jail == "/data":
+                return jail
+            desired = os.path.realpath(str(desired or jail))
+            if under_data(desired) and desired != "/data" and desired != jail:
+                if os.path.isdir(desired) and not os.path.exists(jail):
+                    os.makedirs(os.path.dirname(jail), mode=0o750, exist_ok=True)
+                    shutil.move(desired, jail)
+                elif os.path.isdir(desired) and os.path.isdir(jail) and not os.listdir(jail):
+                    for entry in os.listdir(desired):
+                        shutil.move(os.path.join(desired, entry), os.path.join(jail, entry))
+            os.makedirs(jail, mode=0o750, exist_ok=True)
+            return jail
         class H(http.server.BaseHTTPRequestHandler):
             def log_message(self, *args):
                 return
@@ -549,12 +566,20 @@ services:
                 for user in body.get("users") or []:
                     name = str(user.get("username", ""))
                     password = str(user.get("password", ""))
+                    try:
+                        uid = int(user.get("uid") or 1001)
+                    except Exception:
+                        uid = 1001
+                    if uid < 1001:
+                        uid = 1001
                     if name and password and ":" not in name and ":" not in password:
-                        lines.append(name + ":" + password + ":1001:1001")
+                        ensure_jail(name, user.get("directory") or ("/data/" + name))
+                        # atmoz chroots to /home/<user> (== /data/<user> on shared volume)
+                        lines.append("%s:%s:%d:%d" % (name, password, uid, uid))
                 open("/etc/sftp/users.conf", "w").write(("\n".join(lines) + "\n") if lines else "")
                 for directory in body.get("directories") or []:
                     path = os.path.realpath(str(directory))
-                    if path == "/data" or path.startswith("/data/"):
+                    if under_data(path):
                         os.makedirs(path, mode=0o750, exist_ok=True)
                 self._ok(b'{"ok":true}')
         http.server.HTTPServer(("0.0.0.0", 8787), H).serve_forever()

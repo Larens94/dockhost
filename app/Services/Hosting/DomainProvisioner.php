@@ -247,9 +247,9 @@ class DomainProvisioner
         string $fqdn,
         Infrastructure $infrastructure,
     ): void {
-        $customer = $subscription->customer;
-        $storageRoot = $infrastructure->storage_root;
-        $storagePath = rtrim($storageRoot, '/').'/'.$customer->storageSlug().'/'.$fqdn;
+        $username = $this->identifier('sftp_'.$fqdn, 32);
+        // atmoz jails to /home/{username} which is /data/{username} on the shared volume.
+        $storagePath = rtrim($infrastructure->storage_root, '/').'/'.$username;
 
         config([
             'infra.storage_root' => $infrastructure->storage_root,
@@ -264,7 +264,7 @@ class DomainProvisioner
         $sftpUser = SftpUser::query()->create([
             'domain_id' => $domain->id,
             'infrastructure_id' => $infrastructure->id,
-            'username' => $this->identifier('sftp_'.$fqdn, 32),
+            'username' => $username,
             'password_encrypted' => AccessAccountManager::generatedPassword(),
             'home_path' => $storagePath,
         ]);
