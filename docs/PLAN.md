@@ -112,7 +112,7 @@ Cosa entra nel pannello:
 - Stack **Node** sull’infra scelta. Nixpacks non inferisce da solo un monorepo Node + Go: il build va scritto (`go build` del watcher, `tsc`, build del client se c’è). Lo start è `node dist/index.js`. La porta del processo è la porta del dominio Traefik.
 - Postgres dell’infra, un database per environment, utente con GRANT solo su quel database. I file possono stare su MinIO dell’infra. S3, Resend, Expo e — se resta — Supabase sono solo variabili d’ambiente verso servizi esterni.
 - Le policy di riga (RLS) non le ricrea DokHosts. O restano su Supabase, o si riscrivono su Postgres.
-- Helmet, CORS, rate limit, Swagger, cron, Vitest e Supertest restano nel repo e nella CI GitLab. SOC2, GDPR e ISO 27001 sono audit dell’applicazione, non un toggle del pannello.
+- Helmet, CORS, rate limit, Swagger, cron, Vitest e Supertest restano nel repo e nella CI del provider Git dell’app. SOC2, GDPR e ISO 27001 sono audit dell’applicazione, non un toggle del pannello.
 - Gli environment sono quelli della sezione sopra: almeno dev e prod; gli altri si aggiungono.
 
 ---
