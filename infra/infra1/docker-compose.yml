@@ -72,6 +72,8 @@ services:
     environment:
       PMA_HOST: ${INFRA_SLUG:-infra1}-mariadb
       PMA_PORT: 3306
+      # Trailing slash required behind Traefik or the login cookie loops.
+      PMA_ABSOLUTE_URI: https://pma-${INFRA_SLUG:-infra1}.cloud.silicoreautomation.com/
       UPLOAD_LIMIT: 64M
     depends_on:
       mariadb:

@@ -2,12 +2,14 @@
 
 // ComposeTemplateTest.php — Unit coverage for ComposeTemplate render/env.
 //
-// exports: ComposeTemplateTest | ComposeTemplateTest::test_template_bakes_slug_and_sftp_port_into_yaml(): void | ComposeTemplateTest::test_isolated_networks_keep_databases_off_the_shared_network(): void | ComposeTemplateTest::test_two_slugs_produce_distinct_hostnames_and_ports(): void | ComposeTemplateTest::test_env_file_includes_slug_and_sftp_port(): void | ComposeTemplateTest::test_optional_phpmyadmin_can_be_omitted(): void | ComposeTemplateTest::test_optional_cache_storage_and_pgadmin_are_included_only_when_enabled(): void | ComposeTemplateTest::test_render_inlines_nonempty_postgres_and_colon_free_sftp_password(): void | ComposeTemplateTest::test_named_mariadb_volume_is_used_only_when_reset(): void | ComposeTemplateTest::test_phpmyadmin_hostname_uses_public_base(): void
+// exports: ComposeTemplateTest | ComposeTemplateTest::test_template_bakes_slug_and_sftp_port_into_yaml(): void | ComposeTemplateTest::test_isolated_networks_keep_databases_off_the_shared_network(): void | ComposeTemplateTest::test_two_slugs_produce_distinct_hostnames_and_ports(): void | ComposeTemplateTest::test_env_file_includes_slug_and_sftp_port(): void | ComposeTemplateTest::test_optional_phpmyadmin_can_be_omitted(): void | ComposeTemplateTest::test_optional_cache_storage_and_pgadmin_are_included_only_when_enabled(): void | ComposeTemplateTest::test_render_inlines_nonempty_postgres_and_colon_free_sftp_password(): void | ComposeTemplateTest::test_named_mariadb_volume_is_used_only_when_reset(): void | ComposeTemplateTest::test_phpmyadmin_hostname_uses_public_base(): void | ComposeTemplateTest::test_phpmyadmin_absolute_uri_requires_trailing_slash(): void
 // used_by: none (PHPUnit entry)
 // rules:   Default render() MUST put MariaDB on dokploy-network and MUST NOT emit name: {slug}-db.
 //          test_isolated_networks_* documents UNUSED render(..., true) only — provisioners must not call it.
+//          PMA_ABSOLUTE_URI must end with / or phpMyAdmin cookies fail behind Traefik.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Clarify default vs unused isolated mode
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_grants_pflag | Expect -p and $$ so Compose does not eat the password
+//          composer-2.5-fast | cursor | 2026-10-10 | s_pma_uri_slash | Assert trailing slash Absolute URI
 // message:
 
 namespace Tests\Unit;
@@ -40,7 +42,10 @@ class ComposeTemplateTest extends TestCase
         $this->assertStringNotContainsString("\n  redis:\n", $yaml);
         $this->assertStringNotContainsString("\n  minio:\n", $yaml);
         $this->assertStringNotContainsString("\n  pgadmin:\n", $yaml);
-        $this->assertStringContainsString('PMA_ABSOLUTE_URI: https://pma-infra2.', $yaml);
+        $this->assertStringContainsString(
+            'PMA_ABSOLUTE_URI: https://pma-infra2.cloud.silicoreautomation.com/',
+            $yaml,
+        );
     }
 
     public function test_isolated_networks_keep_databases_off_the_shared_network(): void
@@ -213,6 +218,32 @@ class ComposeTemplateTest extends TestCase
         $this->assertSame(
             'minio-infra1.cloud.silicoreautomation.com',
             (new ComposeTemplate)->minioHostname('infra1'),
+        );
+    }
+
+    public function test_phpmyadmin_absolute_uri_requires_trailing_slash(): void
+    {
+        $template = new ComposeTemplate;
+
+        $this->assertSame(
+            'https://pma-infra1.cloud.silicoreautomation.com/',
+            $template->phpmyadminAbsoluteUri('infra1'),
+        );
+        $this->assertSame(
+            'https://pma-custom.example.com/',
+            $template->phpmyadminAbsoluteUri('infra1', 'pma-custom.example.com'),
+        );
+        $this->assertSame(
+            'https://pma-custom.example.com/',
+            $template->phpmyadminAbsoluteUri('infra1', 'https://pma-custom.example.com/'),
+        );
+
+        $yaml = $template->render('infra9', 2222, null, [
+            'phpmyadmin_absolute_uri' => 'https://pma-infra9.example.com',
+        ]);
+        $this->assertStringContainsString(
+            'PMA_ABSOLUTE_URI: https://pma-infra9.example.com/',
+            $yaml,
         );
     }
 }

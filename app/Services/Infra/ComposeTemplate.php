@@ -2,7 +2,7 @@
 
 // ComposeTemplate.php — Renders infra Docker Compose YAML + env for Dokploy.
 //
-// exports: ComposeTemplate | ComposeTemplate::catalog(): array | ComposeTemplate::pickerCatalog(): array | ComposeTemplate::allowedServiceKeys(): array | ComposeTemplate::requiredServiceKeys(): array | ComposeTemplate::defaultEnabledServices(): array | ComposeTemplate::normalizeEnabled(?array $enabled): array | ComposeTemplate::render(string $slug, int $sftpHostPort, ?array $enabledServices = null, array $secrets = [], bool $isolatedNetworks = false): string | ComposeTemplate::interpolateStack(string $yaml, string $slug, int $sftpHostPort, array $secrets = []): string | ComposeTemplate::envFile(string $slug, array $secrets): string | ComposeTemplate::phpmyadminHostname(string $slug): string | ComposeTemplate::pgadminHostname(string $slug): string | ComposeTemplate::minioHostname(string $slug): string | ComposeTemplate::pgadminEmail(string $slug): string | ComposeTemplate::publicHost(): string
+// exports: ComposeTemplate | ComposeTemplate::catalog(): array | ComposeTemplate::pickerCatalog(): array | ComposeTemplate::allowedServiceKeys(): array | ComposeTemplate::requiredServiceKeys(): array | ComposeTemplate::defaultEnabledServices(): array | ComposeTemplate::normalizeEnabled(?array $enabled): array | ComposeTemplate::render(string $slug, int $sftpHostPort, ?array $enabledServices = null, array $secrets = [], bool $isolatedNetworks = false): string | ComposeTemplate::interpolateStack(string $yaml, string $slug, int $sftpHostPort, array $secrets = []): string | ComposeTemplate::envFile(string $slug, array $secrets): string | ComposeTemplate::phpmyadminHostname(string $slug): string | ComposeTemplate::phpmyadminAbsoluteUri(string $slug, ?string $host = null): string | ComposeTemplate::pgadminHostname(string $slug): string | ComposeTemplate::minioHostname(string $slug): string | ComposeTemplate::pgadminEmail(string $slug): string | ComposeTemplate::publicHost(): string
 // used_by: app/Http/Controllers/InfrastructureController.php
 //         app/Http/Requests/StoreInfrastructureRequest.php
 //         app/Http/Requests/UpdateInfrastructureRequest.php
@@ -13,9 +13,11 @@
 //          NEVER invent {slug}-db/{slug}-storage for provisioners; isolatedNetworks=true is UNUSED legacy mode only.
 //          Bake slug/ports/secrets into YAML — no ${INFRA_SLUG} left for Dokploy. Dokploy Isolated Deployments stay OFF.
 //          mysql-grants passes the root password as -p"$$MYSQL_PWD". The MariaDB 11 client ignores MYSQL_PWD, so a passwordless login gets 1045 even when the env var is set. Escape every shell $ as $$ or Compose empties it. Never embed those passwords in the shell string and never ALTER root.
+//          PMA_ABSOLUTE_URI must be https://host/ with a trailing slash — without it phpMyAdmin behind Traefik drops the session cookie and the login form loops.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Document shared-network as the shipped default
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_mysql_grants | Grants only the infra user from env, so a second start still logs in
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_grants_pflag | Pass root password with -p; MariaDB 11 ignores MYSQL_PWD
+//          composer-2.5-fast | cursor | 2026-10-10 | s_pma_uri_slash | Trailing slash + domain override for Traefik cookie login
 // message: render(..., true) kept for unit docs of unused isolated mode — callers must pass false.
 
 namespace App\Services\Infra;
@@ -141,16 +143,20 @@ class ComposeTemplate
     }
 
     /**
-     * @param  array{mysql_root_password?: string, mysql_app_password?: string, postgres_password?: string, sftp_bootstrap_password?: string, sftp_host_port?: int, pgadmin_email?: string, pgadmin_password?: string, minio_root_user?: string, minio_root_password?: string, mariadb_volume_name?: string}  $secrets
+     * @param  array{mysql_root_password?: string, mysql_app_password?: string, postgres_password?: string, sftp_bootstrap_password?: string, sftp_host_port?: int, pgadmin_email?: string, pgadmin_password?: string, minio_root_user?: string, minio_root_password?: string, mariadb_volume_name?: string, phpmyadmin_absolute_uri?: string}  $secrets
      */
     public function interpolateStack(string $yaml, string $slug, int $sftpHostPort, array $secrets = []): string
     {
+        $phpmyadminAbsoluteUri = filled($secrets['phpmyadmin_absolute_uri'] ?? null)
+            ? $this->normalizeAbsoluteUri((string) $secrets['phpmyadmin_absolute_uri'])
+            : $this->phpmyadminAbsoluteUri($slug);
+
         $replacements = [
             '${INFRA_SLUG:-infra1}' => $slug,
             '${INFRA_SLUG}' => $slug,
             '${SFTP_HOST_PORT:-2222}' => (string) $sftpHostPort,
             '${SFTP_HOST_PORT}' => (string) $sftpHostPort,
-            '${PMA_ABSOLUTE_URI}' => 'https://'.$this->phpmyadminHostname($slug),
+            '${PMA_ABSOLUTE_URI}' => $phpmyadminAbsoluteUri,
         ];
 
         if (filled($secrets['mysql_root_password'] ?? null)) {
@@ -262,6 +268,24 @@ class ComposeTemplate
         return 'pma-'.$slug.'.'.$this->publicHost();
     }
 
+    /**
+     * phpMyAdmin Docker requires a fully-qualified URI ending with `/` when behind a reverse proxy.
+     */
+    public function phpmyadminAbsoluteUri(string $slug, ?string $host = null): string
+    {
+        if (! filled($host)) {
+            return $this->normalizeAbsoluteUri('https://'.$this->phpmyadminHostname($slug));
+        }
+
+        $value = strtolower(trim((string) $host));
+
+        if (! str_starts_with($value, 'http://') && ! str_starts_with($value, 'https://')) {
+            $value = 'https://'.$value;
+        }
+
+        return $this->normalizeAbsoluteUri($value);
+    }
+
     public function pgadminHostname(string $slug): string
     {
         return 'pga-'.$slug.'.'.$this->publicHost();
@@ -275,6 +299,17 @@ class ComposeTemplate
     public function pgadminEmail(string $slug): string
     {
         return 'admin@'.$slug.'.local';
+    }
+
+    private function normalizeAbsoluteUri(string $uri): string
+    {
+        $trimmed = rtrim(trim($uri), '/');
+
+        if ($trimmed === '') {
+            throw new \InvalidArgumentException('phpMyAdmin absolute URI cannot be empty.');
+        }
+
+        return $trimmed.'/';
     }
 
     public function publicHost(): string
@@ -437,6 +472,7 @@ services:
     environment:
       PMA_HOST: ${INFRA_SLUG}-mariadb
       PMA_PORT: 3306
+      # Rules: trailing slash required; without it Traefik HTTPS login loops back to /index.php.
       PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI}
       UPLOAD_LIMIT: 64M
     depends_on:

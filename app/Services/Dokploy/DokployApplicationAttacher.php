@@ -2,7 +2,7 @@
 
 // DokployApplicationAttacher.php — Creates Dokploy apps in the infra project/environment.
 //
-// exports: DokployApplicationAttacher | DokployApplicationAttacher::attach(Domain $domain, array $attributes = []): DokployApplication | DokployApplicationAttacher::alignBootEnv(Domain $domain): array | DokployApplicationAttacher::applyStackPreset(Domain $domain): array | DokployApplicationAttacher::applyLaravelDeployConfig(Domain $domain): array | DokployApplicationAttacher::refreshNixpacksInstallCommand(Domain $domain): void | DokployApplicationAttacher::syncPhpSettings(Domain $domain, bool $deployNow = false): array | DokployApplicationAttacher::nixpacksPreset(DomainStack $stack): array | DokployApplicationAttacher::laravelDeployPreset(): array
+// exports: DokployApplicationAttacher | DokployApplicationAttacher::attach(Domain $domain, array $attributes = []): DokployApplication | DokployApplicationAttacher::alignBootEnv(Domain $domain): array | DokployApplicationAttacher::applyStackPreset(Domain $domain): array | DokployApplicationAttacher::applyLaravelDeployConfig(Domain $domain): array | DokployApplicationAttacher::refreshNixpacksInstallCommand(Domain $domain): void | DokployApplicationAttacher::syncPhpSettings(Domain $domain, bool $deployNow = false): array | DokployApplicationAttacher::syncDatabaseCredentials(Domain $domain, DatabaseAccount $account, bool $deploy = true): bool | DokployApplicationAttacher::nixpacksPreset(DomainStack $stack): array | DokployApplicationAttacher::laravelDeployPreset(): array
 // used_by: app/Http/Controllers/DomainController.php
 //         app/Services/Hosting/DomainProvisioner.php
 //         app/Services/Hosting/DomainSiteEnvManager.php
@@ -12,6 +12,7 @@
 //          NIXPACKS_START_CMD must use config:clear, not config:cache: Dokploy injects DB_* at runtime and config:cache can bake a stale DB password (1045 on sessions).
 //          Laravel and PHP NIXPACKS_INSTALL_CMD must pass composer --no-scripts --no-interaction so package:discover does not boot the app against DB_HOST during the image build. Dokploy sends the same env to build and runtime, so do not unset DB_*. Panel deploy refreshes only that install command from the preset. Runtime NIXPACKS_START_CMD still runs migrate on dokploy-network.
 //          APP_URL, ASSET_URL must be https://{fqdn} and TRUSTED_PROXIES=* behind Traefik or Inertia/Vite emit http:// URLs (mixed content).
+//          After a site DB password reset, syncDatabaseCredentials MUST rewrite DB_* on the Dokploy app and deploy — otherwise the running container keeps the old DB_PASSWORD and every login/session looks like “password errata”.
 // agent:   grok-4.7 | cursor | 2026-09-22 | s_20260922_composer_install | Install command runs composer before npm so artisan finds vendor
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_nginx_logdir | Start mkdir /var/log/nginx so nginx does not emerg on boot
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_session_cookie | Laravel session is database plus Secure cookie on the site host
@@ -22,6 +23,7 @@
 //          composer-2.5-fast | cursor | 2026-09-24 | s_php_ini_start | Prefix NIXPACKS_START_CMD to write dokhosts.ini from env.
 //          grok-4.7 | cursor | 2026-10-08 | s_20261008_no_scripts | Install skips composer scripts so artisan does not resolve DB_HOST during image build
 //          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Deploy refreshes composer NIXPACKS_INSTALL_CMD from the preset before the build
+//          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Push DB_* + deploy after panel password reset
 // message: Site GRANT stays one-database via MysqlProvisioner; admin infra user may keep *.*.
 
 namespace App\Services\Dokploy;
@@ -190,6 +192,74 @@ class DokployApplicationAttacher
         } catch (Throwable $exception) {
             throw ValidationException::withMessages([
                 'align_env' => $this->dokploy->errorMessage($exception),
+            ]);
+        }
+    }
+
+    /**
+     * Push DB_* from a panel DatabaseAccount onto the Dokploy application env and redeploy.
+     * Skips when there is no app, or when DB_USERNAME points at a different (extra) user.
+     */
+    public function syncDatabaseCredentials(Domain $domain, DatabaseAccount $account, bool $deploy = true): bool
+    {
+        $domain->loadMissing('dokployApplication');
+        $applicationId = $domain->dokployApplication?->dokploy_application_id;
+
+        if (! is_string($applicationId) || $applicationId === '') {
+            return false;
+        }
+
+        try {
+            $application = $this->dokploy->getApplication($applicationId);
+            $currentEnv = is_string($application['env'] ?? null) ? $application['env'] : '';
+            $assignments = $this->envAssignments($currentEnv);
+            $envUsername = $assignments['DB_USERNAME'] ?? null;
+
+            if (is_string($envUsername) && $envUsername !== '' && $envUsername !== $account->username) {
+                return false;
+            }
+
+            if (! is_string($envUsername) || $envUsername === '') {
+                $primary = $domain->databaseAccounts()->orderBy('id')->first();
+
+                if (! $primary instanceof DatabaseAccount || (int) $primary->id !== (int) $account->id) {
+                    return false;
+                }
+            }
+
+            $password = (string) $account->password_encrypted;
+
+            if ($password === '') {
+                throw ValidationException::withMessages([
+                    'database_account' => 'La password del database non è disponibile nel pannello.',
+                ]);
+            }
+
+            $merged = $this->replaceAssignments($currentEnv, [
+                'DB_CONNECTION' => $account->engine->value === 'postgres' ? 'pgsql' : 'mysql',
+                'DB_HOST' => (string) $account->host,
+                'DB_PORT' => (string) $account->port,
+                'DB_DATABASE' => (string) $account->database_name,
+                'DB_USERNAME' => (string) $account->username,
+                'DB_PASSWORD' => $password,
+            ]);
+
+            $this->dokploy->saveEnvironment([
+                'applicationId' => $applicationId,
+                'env' => $merged['env'],
+            ]);
+
+            if ($deploy) {
+                $this->refreshNixpacksInstallCommand($domain);
+                $this->dokploy->deploy(['applicationId' => $applicationId]);
+            }
+
+            return true;
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw ValidationException::withMessages([
+                'database_account' => $this->dokploy->errorMessage($exception),
             ]);
         }
     }
