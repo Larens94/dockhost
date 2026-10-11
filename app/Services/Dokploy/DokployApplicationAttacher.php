@@ -50,7 +50,7 @@ class DokployApplicationAttacher
      * Create the application in the infrastructure's Dokploy project/environment.
      *
      * Same Dokploy environment as the infra compose (Isolated OFF → dokploy-network) so
-     * the app resolves `{slug}-mariadb` / `{slug}-postgres` by hostname. GitLab/Deploy
+     * the app resolves `{slug}-mariadb` / `{slug}-postgres` by hostname. Git provider/Deploy
      * restano su Dokploy (link, non clone). Non chiamiamo saveGitProvider.
      *
      * @param  array<string, mixed>  $attributes

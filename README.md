@@ -1,4 +1,4 @@
-# Silicore Host
+# DockHost (DokHosts)
 
 Pannello hosting clienti sopra [Dokploy](https://dokploy.com). Non è un fork di Dokploy e non vive in vibes-bridge.
 
@@ -6,6 +6,12 @@ Pannello hosting clienti sopra [Dokploy](https://dokploy.com). Non è un fork di
 - **Questo pannello** = cliente → spazio (iscrizione) → dominio → DB condiviso opzionale + storage/SFTP, poi Laravel/Dokploy opzionale.
 
 Vedi [docs/PLAN.md](docs/PLAN.md).
+
+## Source of truth
+
+- **GitHub:** https://github.com/Larens94/dockhost  
+- Branch di default: `main`  
+- Il remote GitLab storico (`git.silicoreautomation.com/internal/dokhosts.git`) **non è più valido**.
 
 ## Repo layout
 
@@ -39,11 +45,11 @@ Non eseguire `php artisan config:cache` in build Docker.
 
 ## Deploy su Dokploy
 
-Remote: `https://git.silicoreautomation.com/internal/dokhosts.git` (`main`).
+Remote: `https://github.com/Larens94/dockhost.git` (`main`).
 
 Il pannello è un’Application autonoma (SQLite + volume). Da UI *Infrastructures* il pannello crea un **nuovo progetto Dokploy** (`project.create` + environment production + `compose.create` / `update` / `deploy`, isolated off, `dokploy-network`). Non mette lo stack nel progetto del pannello.
 
-- Provider GitLab, branch `main`, build **Dockerfile**, porta **80**, isolated **off**
+- Provider **GitHub**, branch `main`, build **Dockerfile**, porta **80**, isolated **off**
 - Volume persistente su `database/` e `storage/`
 - Env runtime (secret solo in Dokploy):
 
