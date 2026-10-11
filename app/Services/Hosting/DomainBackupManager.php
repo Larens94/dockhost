@@ -17,6 +17,7 @@ use App\Models\DatabaseAccount;
 use App\Models\Domain;
 use App\Models\DomainBackup;
 use App\Models\Infrastructure;
+use App\Services\Infra\MysqlCredentialHealer;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use PDO;
@@ -25,6 +26,8 @@ use Throwable;
 
 class DomainBackupManager
 {
+    public function __construct(private MysqlCredentialHealer $healer) {}
+
     public function createDatabaseBackup(Domain $domain): DomainBackup
     {
         $account = $domain->databaseAccounts()->orderBy('id')->first();
@@ -130,6 +133,28 @@ class DomainBackupManager
 
     private function adminPdo(Infrastructure $infrastructure): PDO
     {
+        try {
+            return $this->openAdminPdo($infrastructure);
+        } catch (PDOException $exception) {
+            if (! str_contains($exception->getMessage(), '1045')
+                && ! str_contains($exception->getMessage(), 'Access denied')) {
+                throw $exception;
+            }
+
+            try {
+                $this->healer->heal($infrastructure);
+            } catch (ValidationException $healException) {
+                throw ValidationException::withMessages([
+                    'backup' => 'Backup database fallito (admin MariaDB): '.($healException->errors()['heal'][0] ?? $healException->getMessage()),
+                ]);
+            }
+
+            return $this->openAdminPdo($infrastructure->refresh());
+        }
+    }
+
+    private function openAdminPdo(Infrastructure $infrastructure): PDO
+    {
         $dsn = sprintf(
             'mysql:host=%s;port=%d;charset=utf8mb4',
             $infrastructure->mysql_host,
@@ -138,7 +163,7 @@ class DomainBackupManager
 
         return new PDO(
             $dsn,
-            (string) $infrastructure->mysql_admin_user,
+            (string) ($infrastructure->mysql_admin_user ?: 'infra'),
             (string) $infrastructure->mysql_admin_password,
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
         );
