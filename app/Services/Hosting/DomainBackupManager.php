@@ -1,13 +1,15 @@
 <?php
 
-// DomainBackupManager.php — Create/restore domain database backups over the network (no Dokploy exec).
+// DomainBackupManager.php — Create/restore/import domain database backups over the network (no Dokploy exec).
 //
-// exports: DomainBackupManager | DomainBackupManager::createDatabaseBackup(Domain $domain): DomainBackup | DomainBackupManager::restoreDatabaseBackup(DomainBackup $backup): void
+// exports: DomainBackupManager | DomainBackupManager::createDatabaseBackup(Domain $domain): DomainBackup | DomainBackupManager::restoreDatabaseBackup(DomainBackup $backup, ?Domain $into = null): void | DomainBackupManager::importSqlDump(Domain $domain, UploadedFile $file, bool $allowOverwriteProduction = false): DomainBackup
 // used_by: app/Http/Controllers/DomainController.php
 // rules:   DB dump via admin PDO on shared MariaDB — GRANT stays one-database for site users.
 //          File/volume backup is recorded as kind=files with a clear “not yet wired” error until SFTP pull lands.
 //          Never log SQL dump contents or passwords.
+//          Import stores the uploaded dump as a DomainBackup then applies it into the domain DB name only.
 // agent:   composer-2.5-fast | cursor | 2026-10-11 | s_domain_backup | PDO SQL dump + restore for domain DB
+//          composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump upload import
 // message:
 
 namespace App\Services\Hosting;
@@ -17,7 +19,9 @@ use App\Models\DatabaseAccount;
 use App\Models\Domain;
 use App\Models\DomainBackup;
 use App\Models\Infrastructure;
+use App\Models\InfrastructureEnvironment;
 use App\Services\Infra\MysqlCredentialHealer;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use PDO;
@@ -93,11 +97,8 @@ class DomainBackupManager
         }
 
         $domain = $into ?? $backup->domain;
-        $account = $domain?->databaseAccounts()->orderBy('id')->first();
-        $infrastructure = $account?->infrastructure
-            ?? ($account ? Infrastructure::query()->where('slug', $account->infra_slug)->first() : null);
 
-        if (! $account instanceof DatabaseAccount || ! $infrastructure instanceof Infrastructure) {
+        if (! $domain instanceof Domain) {
             throw ValidationException::withMessages([
                 'backup' => 'Dominio o account database assente per il restore.',
             ]);
@@ -111,6 +112,130 @@ class DomainBackupManager
             ]);
         }
 
+        $this->applySqlToDomain($domain, $sql, 'backup');
+    }
+
+    public function importSqlDump(
+        Domain $domain,
+        UploadedFile $file,
+        bool $allowOverwriteProduction = false,
+    ): DomainBackup {
+        $account = $domain->databaseAccounts()->orderBy('id')->first();
+
+        if (! $account instanceof DatabaseAccount || $account->engine !== DatabaseEngine::Mysql) {
+            throw ValidationException::withMessages([
+                'dump' => __('panel.domains.show.import_dump_no_mysql'),
+            ]);
+        }
+
+        $this->assertProductionImportAllowed($domain, $allowOverwriteProduction);
+
+        $sql = $this->readUploadedSql($file);
+
+        if ($sql === '') {
+            throw ValidationException::withMessages([
+                'dump' => __('panel.domains.show.import_dump_empty'),
+            ]);
+        }
+
+        $backup = DomainBackup::query()->create([
+            'domain_id' => $domain->id,
+            'infrastructure_environment_id' => $domain->infrastructure_environment_id,
+            'kind' => 'database',
+            'status' => 'running',
+            'meta' => [
+                'database_name' => $account->database_name,
+                'username' => $account->username,
+                'source' => 'import',
+                'original_name' => $file->getClientOriginalName(),
+            ],
+        ]);
+
+        try {
+            $relative = 'backups/domains/'.$domain->id.'/'.$backup->id.'-import.sql';
+            Storage::disk('local')->put($relative, $sql);
+
+            $this->applySqlToDomain($domain, $sql, 'dump');
+
+            $backup->update([
+                'status' => 'completed',
+                'disk_path' => $relative,
+                'bytes' => strlen($sql),
+                'error' => null,
+            ]);
+        } catch (ValidationException $exception) {
+            $backup->update([
+                'status' => 'failed',
+                'error' => collect($exception->errors())->flatten()->first() ?: $exception->getMessage(),
+            ]);
+
+            throw $exception;
+        } catch (Throwable $exception) {
+            $backup->update([
+                'status' => 'failed',
+                'error' => $exception->getMessage(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'dump' => __('panel.domains.show.import_dump_failed', ['error' => $exception->getMessage()]),
+            ]);
+        }
+
+        return $backup->refresh();
+    }
+
+    private function assertProductionImportAllowed(Domain $domain, bool $allowOverwriteProduction): void
+    {
+        $env = $domain->infrastructureEnvironment;
+
+        if ($env instanceof InfrastructureEnvironment
+            && $env->is_default
+            && $env->slug === 'production'
+            && ! $allowOverwriteProduction
+        ) {
+            throw ValidationException::withMessages([
+                'allow_overwrite_production' => __('panel.domains.show.import_dump_production_confirm'),
+            ]);
+        }
+    }
+
+    private function readUploadedSql(UploadedFile $file): string
+    {
+        $raw = file_get_contents($file->getRealPath() ?: '');
+
+        if ($raw === false || $raw === '') {
+            return '';
+        }
+
+        $name = strtolower($file->getClientOriginalName());
+
+        if (str_ends_with($name, '.gz')) {
+            $decoded = @gzdecode($raw);
+
+            if ($decoded === false) {
+                throw ValidationException::withMessages([
+                    'dump' => __('panel.domains.show.import_dump_gz_invalid'),
+                ]);
+            }
+
+            return $decoded;
+        }
+
+        return $raw;
+    }
+
+    private function applySqlToDomain(Domain $domain, string $sql, string $errorKey): void
+    {
+        $account = $domain->databaseAccounts()->orderBy('id')->first();
+        $infrastructure = $account?->infrastructure
+            ?? ($account ? Infrastructure::query()->where('slug', $account->infra_slug)->first() : null);
+
+        if (! $account instanceof DatabaseAccount || ! $infrastructure instanceof Infrastructure) {
+            throw ValidationException::withMessages([
+                $errorKey => 'Dominio o account database assente per il restore.',
+            ]);
+        }
+
         try {
             $pdo = $this->adminPdo($infrastructure);
             $databaseIdentifier = '`'.str_replace('`', '``', $account->database_name).'`';
@@ -118,7 +243,7 @@ class DomainBackupManager
             $pdo->exec("USE {$databaseIdentifier}");
 
             foreach ($this->splitSqlStatements($sql) as $statement) {
-                if (preg_match('/^(CREATE DATABASE|USE)\b/i', $statement) === 1) {
+                if (preg_match('/^(CREATE DATABASE|USE|DROP DATABASE)\b/i', $statement) === 1) {
                     continue;
                 }
 
@@ -126,7 +251,7 @@ class DomainBackupManager
             }
         } catch (PDOException $exception) {
             throw ValidationException::withMessages([
-                'backup' => 'Restore fallito: '.$exception->getMessage(),
+                $errorKey => 'Restore fallito: '.$exception->getMessage(),
             ]);
         }
     }

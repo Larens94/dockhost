@@ -12,6 +12,7 @@
            composer-2.5-fast | cursor | 2026-10-11 | s_runtime_env | APP_ENV / APP_DEBUG / LOG_LEVEL runtime block
            composer-2.5-fast | cursor | 2026-10-11 | s_domain_tabs_ia | Tabs: overview, app, database, sftp, access, danger
            composer-2.5-fast | cursor | 2026-10-11 | s_domain_ui_color | Semantic tab/card color accents for IA
+           composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump import on Database tab
 -->
 
 <script setup>
@@ -277,6 +278,11 @@ const backupSettingsForm = useForm({
     backup_frequency: props.domain.backup_frequency || 'daily',
     backup_retain_days: props.domain.backup_retain_days || 14,
 });
+const importDumpForm = useForm({
+    dump: null,
+    confirm_overwrite: false,
+    allow_overwrite_production: false,
+});
 const alignForm = useForm({
     source_domain_id: '',
     allow_overwrite_production: false,
@@ -284,6 +290,18 @@ const alignForm = useForm({
 
 const createDatabaseBackup = () => {
     backupForm.post(actionUrl(`/domains/${props.domain.id}/backups/database`), { preserveScroll: true });
+};
+
+const importDatabaseDump = () => {
+    importDumpForm.post(actionUrl(`/domains/${props.domain.id}/database/import`), {
+        preserveScroll: true,
+        forceFormData: true,
+        onSuccess: () => {
+            importDumpForm.reset();
+            importDumpForm.confirm_overwrite = false;
+            importDumpForm.allow_overwrite_production = false;
+        },
+    });
 };
 
 const saveBackupSettings = () => {
@@ -777,6 +795,63 @@ const updateMemberRole = (memberId, role) => {
                             :disabled="databaseUserForm.processing || !domain.database_accounts?.length"
                         >
                             {{ t('domains.show.create_db_user') }}
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section
+                v-if="canMutateHosting && domain.database_accounts?.length"
+                class="rounded-xl border border-cyan-300 bg-gradient-to-br from-cyan-50/80 to-white p-6 shadow-sm"
+            >
+                <h2 class="text-base font-semibold text-cyan-950">{{ t('domains.show.import_dump') }}</h2>
+                <p class="mt-1 text-sm text-zinc-600">{{ t('domains.show.import_dump_help') }}</p>
+                <form class="mt-4 grid gap-3" @submit.prevent="importDatabaseDump">
+                    <div>
+                        <label class="block text-sm font-medium" :for="`import-dump-${domain.id}`">
+                            {{ t('domains.show.import_dump_file') }}
+                        </label>
+                        <input
+                            :id="`import-dump-${domain.id}`"
+                            type="file"
+                            accept=".sql,.gz,application/sql,application/gzip,text/plain"
+                            class="mt-1 block w-full text-sm text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-cyan-800"
+                            @change="importDumpForm.dump = $event.target.files?.[0] ?? null"
+                        />
+                        <p v-if="importDumpForm.errors.dump" class="mt-1 text-sm text-red-600">
+                            {{ importDumpForm.errors.dump }}
+                        </p>
+                    </div>
+                    <label class="flex items-start gap-2 text-sm text-zinc-800">
+                        <input
+                            v-model="importDumpForm.confirm_overwrite"
+                            type="checkbox"
+                            class="mt-0.5 rounded border-zinc-300"
+                            required
+                        />
+                        <span>{{ t('domains.show.import_dump_confirm') }}</span>
+                    </label>
+                    <p v-if="importDumpForm.errors.confirm_overwrite" class="text-sm text-red-600">
+                        {{ importDumpForm.errors.confirm_overwrite }}
+                    </p>
+                    <label class="flex items-start gap-2 text-sm text-zinc-800">
+                        <input
+                            v-model="importDumpForm.allow_overwrite_production"
+                            type="checkbox"
+                            class="mt-0.5 rounded border-zinc-300"
+                        />
+                        <span>{{ t('domains.show.import_dump_production') }}</span>
+                    </label>
+                    <p v-if="importDumpForm.errors.allow_overwrite_production" class="text-sm text-red-600">
+                        {{ importDumpForm.errors.allow_overwrite_production }}
+                    </p>
+                    <div>
+                        <button
+                            type="submit"
+                            class="rounded-lg bg-cyan-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:opacity-50"
+                            :disabled="importDumpForm.processing || !importDumpForm.dump || !importDumpForm.confirm_overwrite"
+                        >
+                            {{ t('domains.show.import_dump_submit') }}
                         </button>
                     </div>
                 </form>

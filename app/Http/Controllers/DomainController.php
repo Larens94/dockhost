@@ -15,6 +15,7 @@
 //          composer-2.5-fast | cursor | 2026-09-25 | s_access_mail | Email site DB/SFTP creds to domain owners on create
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Reset DB password also syncs Dokploy DB_* + deploy
 //          composer-2.5-fast | cursor | 2026-10-11 | s_domain_tabs_ia | App env/PHP redirects land on laravel/sito tab
+//          composer-2.5-fast | cursor | 2026-10-11 | s_db_import | Import SQL dump into domain database
 
 namespace App\Http\Controllers;
 
@@ -27,6 +28,7 @@ use App\Http\Requests\ApplyDomainStackPresetRequest;
 use App\Http\Requests\AttachLaravelRequest;
 use App\Http\Requests\DeployDomainSiteRequest;
 use App\Http\Requests\DestroyDomainRequest;
+use App\Http\Requests\ImportDomainDatabaseDumpRequest;
 use App\Http\Requests\MutateDomainDatabaseAccountRequest;
 use App\Http\Requests\ResyncDomainDatabaseUsersRequest;
 use App\Http\Requests\StoreDomainDatabaseRequest;
@@ -435,6 +437,29 @@ class DomainController extends Controller
 
         return $this->redirectToDomain($domain, 'database')
             ->with('success', __('panel.domains.show.backup_restored', ['id' => $backup->id]));
+    }
+
+    public function importDatabaseDump(
+        ImportDomainDatabaseDumpRequest $request,
+        Domain $domain,
+        DomainBackupManager $backups,
+        AuditLogger $audit,
+    ): RedirectResponse {
+        $backup = $backups->importSqlDump(
+            $domain,
+            $request->dumpFile(),
+            $request->allowOverwriteProduction(),
+        );
+
+        $audit->record('domain.database.import', $domain, [
+            'fqdn' => $domain->fqdn,
+            'backup_id' => $backup->id,
+            'original_name' => $backup->meta['original_name'] ?? null,
+            'bytes' => $backup->bytes,
+        ]);
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.import_dump_done', ['id' => $backup->id]));
     }
 
     public function alignFromDomain(
