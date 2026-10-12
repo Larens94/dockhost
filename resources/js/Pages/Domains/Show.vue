@@ -14,6 +14,7 @@
            composer-2.5-fast | cursor | 2026-10-11 | s_domain_ui_color | Semantic tab/card color accents for IA
            composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump import on Database tab
            composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Domains tab: aliases + subdomains
+           composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Read flash.revealed_credential; show password on Database tab
 -->
 
 <script setup>
@@ -244,7 +245,7 @@ const actionUrl = (path) => {
 };
 
 const credentials = computed(() => {
-    const raw = page.props.revealedCredential;
+    const raw = page.props.flash?.revealed_credential ?? page.props.revealedCredential;
 
     if (!raw) {
         return [];
@@ -254,7 +255,7 @@ const credentials = computed(() => {
 });
 
 const revealedForDomain = computed(() =>
-    credentials.value.filter((item) => item.domain_id === props.domain.id),
+    credentials.value.filter((item) => Number(item.domain_id) === Number(props.domain.id)),
 );
 
 const domainInfra = computed(() =>
@@ -365,7 +366,7 @@ const resyncMysqlUsers = () => {
 
 const resetDbUserPassword = (accountId) => {
     useForm({}).post(actionUrl(`/domains/${props.domain.id}/database-users/${accountId}/reset-password`), {
-        preserveScroll: true,
+        preserveScroll: false,
     });
 };
 
@@ -858,6 +859,23 @@ const updateMemberRole = (memberId, role) => {
             <p v-if="page.props.flash?.success && currentTab === 'database'" class="text-sm text-emerald-700">
                 {{ page.props.flash.success }}
             </p>
+            <p v-if="page.props.flash?.error && currentTab === 'database'" class="text-sm text-red-700">
+                {{ page.props.flash.error }}
+            </p>
+            <div
+                v-if="revealedForDomain.length"
+                class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            >
+                <p class="font-medium">{{ t('domains.show.password_once') }}</p>
+                <ul class="mt-2 space-y-2">
+                    <li v-for="(item, index) in revealedForDomain" :key="`db-tab-${item.kind}-${index}`">
+                        <span class="text-xs uppercase tracking-wide text-amber-800">
+                            {{ item.kind === 'database' ? t('common.database') : t('common.sftp') }}
+                        </span>
+                        <p class="mt-0.5 font-mono break-all">{{ item.username }} / {{ item.password }}</p>
+                    </li>
+                </ul>
+            </div>
             <section
                 v-if="canMutateHosting && !domain.database_accounts?.length"
                 :class="sectionTone.database"

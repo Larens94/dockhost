@@ -167,6 +167,8 @@ return [
             'resync_mysql_users_none' => 'Nessun utente MySQL su questo dominio da riallineare.',
             'reset_db_user_password' => 'Reimposta password (MariaDB + app)',
             'reset_db_user_password_done' => 'Password aggiornata su MariaDB, nel pannello e (se collegata) sull’env Dokploy dell’app. Usa la password mostrata una sola volta qui sotto.',
+            'reset_db_user_password_done_local' => 'Password aggiornata su MariaDB e nel pannello. Copia la password mostrata una sola volta qui sotto; la sync Dokploy dell’app non è riuscita.',
+            'reset_db_user_password_sync_failed' => 'Password MariaDB aggiornata, ma non è stato possibile aggiornare l’env Dokploy dell’app.',
             'delete_db_user' => 'Elimina utente',
             'delete_db_user_last' => 'Lascia almeno un utente database su questo dominio.',
             'delete_db_user_done' => 'Utente database rimosso da MariaDB e dal pannello.',

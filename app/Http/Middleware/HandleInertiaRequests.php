@@ -5,10 +5,12 @@
 // exports: HandleInertiaRequests | HandleInertiaRequests::share(Request $request): array
 // used_by: none
 // rules:   Flash error may contain SMTP failure text — controller MUST sanitize secrets before session flash.
+//          Share revealed_credential under flash + top-level revealedCredential (closures) for one-time password UI.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 // agent:   composer-2.5-fast | cursor | 2026-09-25 | s_smtp_test | Share flash.error for SMTP test failures.
 // agent:   composer-2.5-fast | cursor | 2026-09-25 | s_smtp_text_fix | Share flash.smtp_test_feedback for Prova invio card.
 // agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Share locale, supportedLocales, and panel translations.
+// agent:   composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Share revealed_credential in flash for Domains/Show banner.
 // message:
 
 namespace App\Http\Middleware;
@@ -52,11 +54,12 @@ class HandleInertiaRequests extends Middleware
                     ]
                     : null,
             ],
-            'revealedCredential' => $request->session()->get('revealed_credential'),
+            'revealedCredential' => fn () => $request->session()->get('revealed_credential'),
             'flash' => [
-                'success' => $request->session()->get('success'),
-                'error' => $request->session()->get('error'),
-                'smtp_test_feedback' => $request->session()->get('smtp_test_feedback'),
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
+                'smtp_test_feedback' => fn () => $request->session()->get('smtp_test_feedback'),
+                'revealed_credential' => fn () => $request->session()->get('revealed_credential'),
             ],
         ];
     }

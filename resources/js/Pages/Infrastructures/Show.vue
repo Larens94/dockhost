@@ -148,9 +148,9 @@ const resetMysqlForm = useForm({
     slug: '',
 });
 const revealed = computed(() => {
-    const credential = page.props.revealedCredential;
+    const credential = page.props.flash?.revealed_credential ?? page.props.revealedCredential;
 
-    if (!credential || credential.infrastructure_id !== props.infrastructure.id) {
+    if (!credential || Number(credential.infrastructure_id) !== Number(props.infrastructure.id)) {
         return null;
     }
 

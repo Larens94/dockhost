@@ -167,6 +167,8 @@ return [
             'resync_mysql_users_none' => 'No MySQL database users on this domain to re-sync.',
             'reset_db_user_password' => 'Reset password (MariaDB + app)',
             'reset_db_user_password_done' => 'Password updated on MariaDB, in the panel, and (when attached) on the Dokploy app env. Use the one-time password shown below.',
+            'reset_db_user_password_done_local' => 'Password updated on MariaDB and in the panel. Copy the one-time password shown below; Dokploy app env sync failed.',
+            'reset_db_user_password_sync_failed' => 'MariaDB password updated, but the Dokploy app env could not be updated.',
             'delete_db_user' => 'Delete user',
             'delete_db_user_last' => 'Keep at least one database user on this domain.',
             'delete_db_user_done' => 'Database user removed from MariaDB and the panel.',

@@ -17,6 +17,7 @@
 //          composer-2.5-fast | cursor | 2026-10-11 | s_domain_tabs_ia | App env/PHP redirects land on laravel/sito tab
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_import | Import SQL dump into domain database
 //          composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Alias/subdomain hosts for multi-tenancy
+//          composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Always flash new DB password even if Dokploy sync fails
 
 namespace App\Http\Controllers;
 
@@ -379,13 +380,33 @@ class DomainController extends Controller
         $request->accountBelongsToDomain($domain, $databaseAccount);
 
         [$account, $password] = $accounts->resetDatabaseAccountPassword($databaseAccount);
-        $attacher->syncDatabaseCredentials($domain, $account);
         $revealed = $accounts->revealDatabase($account, $password);
-        $this->emailSiteCredentialIfPossible($request, $domain, $accessMailer, $revealed);
 
-        return $this->redirectToDomain($domain, 'database')
-            ->with('revealed_credential', $revealed)
-            ->with('success', __('panel.domains.show.reset_db_user_password_done'));
+        $syncError = null;
+
+        try {
+            $attacher->syncDatabaseCredentials($domain, $account);
+        } catch (ValidationException $exception) {
+            $syncError = collect($exception->errors())->flatten()->filter()->first()
+                ?: __('panel.domains.show.reset_db_user_password_sync_failed');
+        }
+
+        try {
+            $this->emailSiteCredentialIfPossible($request, $domain, $accessMailer, $revealed);
+        } catch (\Throwable) {
+            // Password must still be shown once in the panel even if mail fails.
+        }
+
+        $redirect = $this->redirectToDomain($domain, 'database')
+            ->with('revealed_credential', $revealed);
+
+        if (is_string($syncError) && $syncError !== '') {
+            return $redirect
+                ->with('success', __('panel.domains.show.reset_db_user_password_done_local'))
+                ->with('error', $syncError);
+        }
+
+        return $redirect->with('success', __('panel.domains.show.reset_db_user_password_done'));
     }
 
     public function destroyDatabaseAccount(

@@ -9,9 +9,11 @@
 // rules:   Passwords are generated once and returned via reveal*() for one-time flash — not stored for re-display.
 //          SFTP passwords must be alphanumeric without ':' (atmoz users.conf). Never print secrets in logs.
 //          resetDatabaseAccountPassword returns [account, plaintext] so the flash never depends on a second decrypt.
+//          reveal* cast domain_id/infrastructure_id to int so Inertia JSON matches Vue Number() filters.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 //          composer | cursor | 2026-09-21 | s_20260921_codedna | credential reveal rules
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Reset returns plaintext for Dokploy sync flash
+//          composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Cast reveal ids to int for Vue filters
 
 namespace App\Services\Hosting;
 
@@ -155,8 +157,8 @@ class AccessAccountManager
             'password' => $password,
             'privilege' => $account->privilege->value,
             'database_name' => $account->database_name,
-            'domain_id' => $account->domain_id,
-            'infrastructure_id' => $account->infrastructure_id,
+            'domain_id' => $account->domain_id !== null ? (int) $account->domain_id : null,
+            'infrastructure_id' => $account->infrastructure_id !== null ? (int) $account->infrastructure_id : null,
         ];
     }
 
@@ -190,8 +192,8 @@ class AccessAccountManager
             'username' => $user->username,
             'password' => $password,
             'home_path' => $user->home_path,
-            'domain_id' => $user->domain_id,
-            'infrastructure_id' => $user->infrastructure_id,
+            'domain_id' => $user->domain_id !== null ? (int) $user->domain_id : null,
+            'infrastructure_id' => $user->infrastructure_id !== null ? (int) $user->infrastructure_id : null,
         ];
     }
 
