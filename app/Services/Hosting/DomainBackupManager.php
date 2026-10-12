@@ -12,6 +12,7 @@
 // agent:   composer-2.5-fast | cursor | 2026-10-11 | s_domain_backup | PDO SQL dump + restore for domain DB
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump upload import
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_site_pdo | Site-user PDO for dump/import/restore
+//          composer-2.5-fast | cursor | 2026-10-12 | s_db_import_parser | SqlDumpStatementSplitter for phpMyAdmin dumps
 // message:
 
 namespace App\Services\Hosting;
@@ -23,6 +24,7 @@ use App\Models\DomainBackup;
 use App\Models\Infrastructure;
 use App\Models\InfrastructureEnvironment;
 use App\Services\Infra\MysqlCredentialHealer;
+use App\Support\SqlDumpStatementSplitter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -241,7 +243,7 @@ class DomainBackupManager
         try {
             $pdo = $this->sitePdo($account, $infrastructure);
 
-            foreach ($this->splitSqlStatements($sql) as $statement) {
+            foreach (SqlDumpStatementSplitter::statements($sql) as $statement) {
                 if ($this->shouldSkipImportedStatement($statement)) {
                     continue;
                 }
@@ -249,8 +251,12 @@ class DomainBackupManager
                 $pdo->exec($statement);
             }
         } catch (PDOException $exception) {
+            $message = $errorKey === 'dump'
+                ? __('panel.domains.show.import_dump_failed', ['error' => $exception->getMessage()])
+                : __('panel.domains.show.backup_restore_failed', ['error' => $exception->getMessage()]);
+
             throw ValidationException::withMessages([
-                $errorKey => 'Restore fallito: '.$exception->getMessage(),
+                $errorKey => $message,
             ]);
         }
     }
@@ -347,15 +353,5 @@ class DomainBackupManager
         $lines[] = 'SET FOREIGN_KEY_CHECKS=1;';
 
         return implode("\n", $lines)."\n";
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function splitSqlStatements(string $sql): array
-    {
-        $parts = preg_split('/;\s*\n/', $sql) ?: [];
-
-        return array_values(array_filter(array_map('trim', $parts), fn (string $part): bool => $part !== '' && ! str_starts_with($part, '--')));
     }
 }

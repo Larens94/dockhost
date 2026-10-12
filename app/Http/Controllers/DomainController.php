@@ -61,6 +61,7 @@ use App\Services\Hosting\EnvironmentAligner;
 use App\Services\Infra\MysqlProvisioner;
 use App\Services\Panel\DomainAccessMailer;
 use App\Support\DomainPhpSettings;
+use App\Support\PanelDatabaseImportLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -185,6 +186,7 @@ class DomainController extends Controller
             'phpSettings' => DomainPhpSettings::resolved($domain->php_settings),
             'phpSettingsApplicable' => ($domain->stack ?? DomainStack::None)->createsApplication(),
             'siteHosting' => app(DomainSiteEnvManager::class)->panelState($domain),
+            'databaseImport' => PanelDatabaseImportLimits::inertiaPayload(),
         ]);
     }
 

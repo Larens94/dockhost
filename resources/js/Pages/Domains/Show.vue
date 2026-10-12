@@ -16,6 +16,7 @@
            composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Domains tab: aliases + subdomains
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Read flash.revealed_credential; show password on Database tab
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_alert | One credential alert modal; drop duplicate banners
+           composer-2.5-fast | cursor | 2026-10-12 | s_db_import_ui | SQL import modal + client size guard
 -->
 
 <script setup>
@@ -104,6 +105,16 @@ const props = defineProps({
     alignTargets: {
         type: Array,
         default: () => [],
+    },
+    databaseImport: {
+        type: Object,
+        default: () => ({
+            max_kilobytes: 102400,
+            max_bytes: 102400 * 1024,
+            max_label: '100 MB',
+            php_upload_max_filesize: '128M',
+            php_post_max_size: '128M',
+        }),
     },
 });
 
@@ -357,14 +368,49 @@ const createDatabaseBackup = () => {
     backupForm.post(actionUrl(`/domains/${props.domain.id}/backups/database`), { preserveScroll: true });
 };
 
+const importModalOpen = ref(false);
+const importModalPhase = ref('processing');
+const importModalMessage = ref('');
+
+const closeImportModal = () => {
+    importModalOpen.value = false;
+};
+
 const importDatabaseDump = () => {
+    const file = importDumpForm.dump;
+
+    if (file && file.size > props.databaseImport.max_bytes) {
+        importModalPhase.value = 'error';
+        importModalMessage.value = t('domains.show.import_dump_too_large', {
+            max: props.databaseImport.max_label,
+        });
+        importModalOpen.value = true;
+
+        return;
+    }
+
+    importModalPhase.value = 'processing';
+    importModalMessage.value = '';
+    importModalOpen.value = true;
+
     importDumpForm.post(actionUrl(`/domains/${props.domain.id}/database/import`), {
         preserveScroll: true,
         forceFormData: true,
-        onSuccess: () => {
+        onSuccess: (page) => {
+            importModalPhase.value = 'success';
+            importModalMessage.value =
+                page.props.flash?.success || t('domains.show.import_dump_done', { id: '—' });
             importDumpForm.reset();
             importDumpForm.confirm_overwrite = false;
             importDumpForm.allow_overwrite_production = false;
+        },
+        onError: () => {
+            importModalPhase.value = 'error';
+            importModalMessage.value =
+                importDumpForm.errors.dump
+                || importDumpForm.errors.confirm_overwrite
+                || importDumpForm.errors.allow_overwrite_production
+                || t('domains.show.import_dump_failed', { error: '' });
         },
     });
 };
@@ -1035,7 +1081,9 @@ const updateMemberRole = (memberId, role) => {
                 class="rounded-xl border border-cyan-300 bg-gradient-to-br from-cyan-50/80 to-white p-6 shadow-sm"
             >
                 <h2 class="text-base font-semibold text-cyan-950">{{ t('domains.show.import_dump') }}</h2>
-                <p class="mt-1 text-sm text-zinc-600">{{ t('domains.show.import_dump_help') }}</p>
+                <p class="mt-1 text-sm text-zinc-600">
+                    {{ t('domains.show.import_dump_help', { max: databaseImport.max_label }) }}
+                </p>
                 <form class="mt-4 grid gap-3" @submit.prevent="importDatabaseDump">
                     <div>
                         <label class="block text-sm font-medium" :for="`import-dump-${domain.id}`">
@@ -1704,6 +1752,58 @@ const updateMemberRole = (memberId, role) => {
                 {{ t('common.delete') }}
             </button>
         </section>
+
+        <div
+            v-if="importModalOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 p-4"
+            role="alertdialog"
+            aria-modal="true"
+            :aria-label="
+                importModalPhase === 'processing'
+                    ? t('domains.show.import_dump_processing')
+                    : importModalPhase === 'success'
+                      ? t('domains.show.import_dump_success_title')
+                      : t('domains.show.import_dump_error_title')
+            "
+            @click.self="importModalPhase !== 'processing' ? closeImportModal() : undefined"
+        >
+            <div class="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-6 shadow-xl">
+                <h3 class="text-base font-semibold text-zinc-950">
+                    <template v-if="importModalPhase === 'processing'">
+                        {{ t('domains.show.import_dump_processing') }}
+                    </template>
+                    <template v-else-if="importModalPhase === 'success'">
+                        {{ t('domains.show.import_dump_success_title') }}
+                    </template>
+                    <template v-else>
+                        {{ t('domains.show.import_dump_error_title') }}
+                    </template>
+                </h3>
+                <div v-if="importModalPhase === 'processing'" class="mt-4 flex items-center gap-3 text-sm text-zinc-600">
+                    <span
+                        class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-cyan-700 border-t-transparent"
+                        aria-hidden="true"
+                    />
+                    <span>{{ t('domains.show.import_dump_processing') }}</span>
+                </div>
+                <p
+                    v-else
+                    class="mt-4 text-sm"
+                    :class="importModalPhase === 'success' ? 'text-emerald-800' : 'text-red-700'"
+                >
+                    {{ importModalMessage }}
+                </p>
+                <div v-if="importModalPhase !== 'processing'" class="mt-6 flex justify-end">
+                    <button
+                        type="button"
+                        class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                        @click="closeImportModal"
+                    >
+                        {{ t('common.ok') }}
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <div
             v-if="showCredentialAlert && revealedForDomain.length"

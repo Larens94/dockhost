@@ -58,6 +58,7 @@ WORKDIR /var/www/html
 COPY --from=vendor /app /var/www/html
 COPY --from=assets /app/public/build /var/www/html/public/build
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/php-panel.ini /usr/local/etc/php/conf.d/99-panel.ini
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
