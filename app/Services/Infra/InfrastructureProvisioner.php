@@ -11,11 +11,14 @@
 //          generateSecret() is [A-Za-z0-9] only so Compose and the shell cannot expand $ in a password.
 //          phpMyAdmin behind Traefik needs PMA_ABSOLUTE_URI (https host + trailing slash) on every create/updateStack;
 //          attachMissingPublicDomains MUST updateStack (not deploy-only) so the URI matches the public host.
+//          purgeDokploySlug + updateStack MUST stop orphan Docker containers that still claim ${slug}-mariadb etc.
+//          (Dokploy compose.delete alone can leave legacy infra1-mariadb / prior appName suffixes on dokploy-network).
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Revert create/updateStack to shared dokploy-network only
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_mysql_grants | Compose secrets stay alphanumeric so grants cannot rewrite them
 //          composer-2.5-fast | cursor | 2026-10-10 | s_pma_uri_slash | Bake phpMyAdmin Absolute URI from phpmyadmin_domain
 //          composer-2.5-fast | cursor | 2026-10-11 | s_no_secret_regen | Never invent MySQL passwords on updateStack for existing compose
 //          composer-2.5-fast | cursor | 2026-10-12 | s_pma_uri_always | Always bake PMA_ABSOLUTE_URI; rebake compose after public domain attach
+//          composer-2.5-fast | cursor | 2026-10-12 | s_orphan_dns | Stop orphan slug DNS containers on purge/updateStack
 // message: Isolated-network split was a misunderstanding; Fabrizio recreates stacks on Dokploy after deploy.
 
 namespace App\Services\Infra;
@@ -34,6 +37,7 @@ class InfrastructureProvisioner
         private ComposeTemplate $composeTemplate,
         private ComposeDeployStatus $composeDeployStatus,
         private ?ComposeMysqlCredentialAligner $mysqlCredentialAligner = null,
+        private ?InfraOrphanContainerStopper $orphanContainerStopper = null,
     ) {}
 
     /**
@@ -229,7 +233,30 @@ class InfrastructureProvisioner
             ]));
         }
 
+        // Compose.delete may leave legacy container_name=infra1-mariadb (or prior appName) on dokploy-network.
+        $this->resolveOrphanContainerStopper()->stopForSlug($slug);
+
         $this->dokployCleanup(fn () => $this->dokploy->cleanUnusedVolumes());
+    }
+
+    private function resolveOrphanContainerStopper(): InfraOrphanContainerStopper
+    {
+        return $this->orphanContainerStopper ??= app(InfraOrphanContainerStopper::class);
+    }
+
+    private function composeAppName(string $composeId, string $fallbackSlug): string
+    {
+        try {
+            $compose = $this->dokploy->getCompose($composeId);
+            $appName = $compose['appName'] ?? $compose['name'] ?? null;
+
+            if (is_string($appName) && $appName !== '') {
+                return $appName;
+            }
+        } catch (Throwable) {
+        }
+
+        return $fallbackSlug;
     }
 
     /**
@@ -272,6 +299,12 @@ class InfrastructureProvisioner
         );
         $sftpHostPort = (int) ($infrastructure->sftp_host_port ?: $this->sftpHostPort($infrastructure->slug));
         [$secrets, $persist] = $this->secretsFor($infrastructure, $sftpHostPort);
+
+        // Drop ghost ${slug}-mariadb (etc.) left by older deploys before this compose redeploys.
+        $this->resolveOrphanContainerStopper()->stopForSlug(
+            $infrastructure->slug,
+            $this->composeAppName($composeId, $infrastructure->slug),
+        );
 
         // Rules: never ensure {slug}-db/{slug}-storage; always re-push shared dokploy-network compose.
         $composeFile = $this->composeTemplate->render(

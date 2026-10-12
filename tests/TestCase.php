@@ -78,6 +78,8 @@ abstract class TestCase extends BaseTestCase
                 'environments' => [],
             ]),
             'https://dokploy.test/api/settings.cleanUnusedVolumes' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/docker.getContainers' => Http::response([]),
+            'https://dokploy.test/api/docker.stopContainer' => Http::response(['ok' => true]),
         ];
     }
 
@@ -111,6 +113,8 @@ abstract class TestCase extends BaseTestCase
                 ['Name' => '/stack-redis-1', 'State' => 'running', 'Status' => 'Up 2 minutes'],
                 ['Name' => '/stack-minio-1', 'State' => 'running', 'Status' => 'Up 2 minutes'],
             ]),
+            'https://dokploy.test/api/docker.getContainers' => Http::response([]),
+            'https://dokploy.test/api/docker.stopContainer' => Http::response(['ok' => true]),
         ];
     }
 

@@ -2,7 +2,7 @@
 
 // DokployClient.php — DokployClient module.
 //
-// exports: DokployClient | DokployClient::createApplication(array $payload): array | DokployClient::saveEnvironment(array $payload): array | DokployClient::deploy(array $payload): array | DokployClient::createDomain(array $payload): array | DokployClient::createComposeDomain(array $payload): array | DokployClient::saveGitProvider(array $payload): array | DokployClient::allProjects(): array | DokployClient::getProject(string $projectId): array | DokployClient::composeIdsFromProject(array $project): array | DokployClient::createProject(array $payload): array | DokployClient::deleteProject(array $payload): array | DokployClient::deleteCompose(array $payload): array | DokployClient::stopCompose(array $payload): array | DokployClient::cleanUnusedVolumes(?string $serverId = null): array | DokployClient::createEnvironment(array $payload): array | DokployClient::createNetwork(array $payload): array | DokployClient::listNetworks(): array | DokployClient::updateApplication(array $payload): array | DokployClient::createCompose(array $payload): array | (+19 more)
+// exports: DokployClient | DokployClient::createApplication(array $payload): array | DokployClient::saveEnvironment(array $payload): array | DokployClient::deploy(array $payload): array | DokployClient::createDomain(array $payload): array | DokployClient::createComposeDomain(array $payload): array | DokployClient::saveGitProvider(array $payload): array | DokployClient::allProjects(): array | DokployClient::getProject(string $projectId): array | DokployClient::composeIdsFromProject(array $project): array | DokployClient::createProject(array $payload): array | DokployClient::deleteProject(array $payload): array | DokployClient::deleteCompose(array $payload): array | DokployClient::stopCompose(array $payload): array | DokployClient::cleanUnusedVolumes(?string $serverId = null): array | DokployClient::createEnvironment(array $payload): array | DokployClient::createNetwork(array $payload): array | DokployClient::listNetworks(): array | DokployClient::updateApplication(array $payload): array | DokployClient::createCompose(array $payload): array | DokployClient::listContainers(): array | DokployClient::stopContainer(string $containerId): array | (+19 more)
 // used_by: app/Services/Hosting/DomainAliasManager.php
 //         app/Services/Hosting/DomainProvisioner.php
 //         app/Services/Infra/ComposeDeployStatus.php
@@ -18,6 +18,7 @@
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_toolkit_terminal | Messaggi workflow terminale; hook futuro httpExecIsAvailable().
 // agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | Name-match containers when the label list has none running.
 // agent:   composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | deleteDomain + domainsByApplicationId for aliases
+// agent:   composer-2.5-fast | cursor | 2026-10-12 | s_orphan_dns | listContainers + stopContainer for slug DNS orphans
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 // message:
 
@@ -422,6 +423,22 @@ class DokployClient
     public function httpExecIsAvailable(): bool
     {
         return false;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function listContainers(): array
+    {
+        return $this->containerList($this->get('docker.getContainers'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function stopContainer(string $containerId): array
+    {
+        return $this->post('docker.stopContainer', ['containerId' => $containerId]);
     }
 
     /**

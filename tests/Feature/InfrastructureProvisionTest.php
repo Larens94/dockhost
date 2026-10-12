@@ -9,6 +9,7 @@
 //          One infra slug = one compose; DB_HOST hostnames stay ${slug}-mariadb on the shared network.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Expect shared dokploy-network on create
 //          composer-2.5-fast | cursor | 2026-10-12 | s_pma_uri_always | Create must bake PMA_ABSOLUTE_URI on compose.update
+//          composer-2.5-fast | cursor | 2026-10-12 | s_orphan_dns | Create purge must stop legacy infra1-mariadb containers
 // message:
 
 namespace Tests\Feature;
@@ -193,6 +194,22 @@ class InfrastructureProvisionTest extends TestCase
             'https://dokploy.test/api/compose.deploy' => Http::response(['ok' => true]),
             'https://dokploy.test/api/domain.create' => Http::response(['domainId' => 'pma-1']),
             ...$this->dokployComposeStatusFakes(),
+            // After compose status fakes so orphan stop is not overridden by empty getContainers.
+            'https://dokploy.test/api/docker.getContainers' => Http::response([
+                [
+                    'containerId' => 'ghost-maria',
+                    'name' => 'infra1-mariadb',
+                    'state' => 'running',
+                    'status' => 'Up 3 weeks',
+                ],
+                [
+                    'containerId' => 'unrelated',
+                    'name' => 'vibesbridge-com-ivevh2.1.abc',
+                    'state' => 'running',
+                    'status' => 'Up 1 day',
+                ],
+            ]),
+            'https://dokploy.test/api/docker.stopContainer' => Http::response(['ok' => true]),
         ]);
 
         $user = User::factory()->create();
@@ -207,6 +224,12 @@ class InfrastructureProvisionTest extends TestCase
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/project.remove'
             && $request['projectId'] === 'proj-stale');
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/docker.stopContainer'
+            && $request['containerId'] === 'ghost-maria');
+
+        Http::assertNotSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/docker.stopContainer'
+            && $request['containerId'] === 'unrelated');
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/settings.cleanUnusedVolumes');
 
