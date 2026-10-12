@@ -15,10 +15,11 @@
            composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump import on Database tab
            composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Domains tab: aliases + subdomains
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Read flash.revealed_credential; show password on Database tab
+           composer-2.5-fast | cursor | 2026-10-12 | s_reveal_alert | One credential alert modal; drop duplicate banners
 -->
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
 import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
@@ -257,6 +258,30 @@ const credentials = computed(() => {
 const revealedForDomain = computed(() =>
     credentials.value.filter((item) => Number(item.domain_id) === Number(props.domain.id)),
 );
+
+const showCredentialAlert = ref(false);
+const dismissedCredentialKey = ref('');
+
+const credentialAlertKey = computed(() =>
+    revealedForDomain.value
+        .map((item) => `${item.kind}:${item.username}:${item.password}`)
+        .join('|'),
+);
+
+watch(
+    credentialAlertKey,
+    (key) => {
+        if (key !== '' && key !== dismissedCredentialKey.value) {
+            showCredentialAlert.value = true;
+        }
+    },
+    { immediate: true },
+);
+
+const closeCredentialAlert = () => {
+    showCredentialAlert.value = false;
+    dismissedCredentialKey.value = credentialAlertKey.value;
+};
 
 const domainInfra = computed(() =>
     props.infrastructures.find((infra) => infra.slug === props.domain.infra_slug),
@@ -565,24 +590,6 @@ const updateMemberRole = (memberId, role) => {
             {{ domain.fqdn }}
         </p>
 
-        <div
-            v-if="revealedForDomain.length"
-            class="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-        >
-            <p class="font-medium">{{ t('domains.show.password_once') }}</p>
-            <ul class="mt-2 space-y-2">
-                <li v-for="(item, index) in revealedForDomain" :key="`${item.kind}-${index}`">
-                    <span class="text-xs uppercase tracking-wide text-amber-800">
-                        {{ item.kind === 'database' ? t('common.database') : t('common.sftp') }}
-                    </span>
-                    <p class="mt-0.5 font-mono break-all">{{ item.username }} / {{ item.password }}</p>
-                    <p v-if="item.kind === 'sftp' && sftpEndpoint" class="mt-0.5 text-xs text-amber-800">
-                        {{ t('domains.show.host_endpoint', { endpoint: sftpEndpoint }) }}
-                    </p>
-                </li>
-            </ul>
-        </div>
-
         <nav class="-mx-1 mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" :aria-label="t('common.sections')">
             <Link
                 v-for="tab in tabs"
@@ -862,20 +869,6 @@ const updateMemberRole = (memberId, role) => {
             <p v-if="page.props.flash?.error && currentTab === 'database'" class="text-sm text-red-700">
                 {{ page.props.flash.error }}
             </p>
-            <div
-                v-if="revealedForDomain.length"
-                class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-            >
-                <p class="font-medium">{{ t('domains.show.password_once') }}</p>
-                <ul class="mt-2 space-y-2">
-                    <li v-for="(item, index) in revealedForDomain" :key="`db-tab-${item.kind}-${index}`">
-                        <span class="text-xs uppercase tracking-wide text-amber-800">
-                            {{ item.kind === 'database' ? t('common.database') : t('common.sftp') }}
-                        </span>
-                        <p class="mt-0.5 font-mono break-all">{{ item.username }} / {{ item.password }}</p>
-                    </li>
-                </ul>
-            </div>
             <section
                 v-if="canMutateHosting && !domain.database_accounts?.length"
                 :class="sectionTone.database"
@@ -1711,5 +1704,40 @@ const updateMemberRole = (memberId, role) => {
                 {{ t('common.delete') }}
             </button>
         </section>
+
+        <div
+            v-if="showCredentialAlert && revealedForDomain.length"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 p-4"
+            role="alertdialog"
+            aria-modal="true"
+            :aria-label="t('domains.show.password_once')"
+            @click.self="closeCredentialAlert"
+        >
+            <div class="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-6 shadow-xl">
+                <h3 class="text-base font-semibold text-zinc-950">{{ t('domains.show.password_once') }}</h3>
+                <ul class="mt-4 space-y-3">
+                    <li v-for="(item, index) in revealedForDomain" :key="`alert-${item.kind}-${index}`">
+                        <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                            {{ item.kind === 'database' ? t('common.database') : t('common.sftp') }}
+                        </p>
+                        <p class="mt-1 font-mono text-sm break-all text-zinc-900">
+                            {{ item.username }} / {{ item.password }}
+                        </p>
+                        <p v-if="item.kind === 'sftp' && sftpEndpoint" class="mt-1 text-xs text-zinc-500">
+                            {{ t('domains.show.host_endpoint', { endpoint: sftpEndpoint }) }}
+                        </p>
+                    </li>
+                </ul>
+                <div class="mt-6 flex justify-end">
+                    <button
+                        type="button"
+                        class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                        @click="closeCredentialAlert"
+                    >
+                        {{ t('common.ok') }}
+                    </button>
+                </div>
+            </div>
+        </div>
     </AppLayout>
 </template>

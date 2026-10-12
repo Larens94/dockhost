@@ -284,6 +284,7 @@ return [
         'back' => 'Indietro',
         'create' => 'Crea',
         'cancel' => 'Annulla',
+        'ok' => 'OK',
         'delete' => 'Elimina',
         'select' => 'Seleziona…',
         'name' => 'Nome',
