@@ -1,15 +1,17 @@
 {
-    "comment": "MCP Dokploy v1.3: + get_*_deploy_status, get_compose_env_summary, list/restart application containers. Segreti env mascherati. Riavvia MCP in Cursor dopo aggiornamenti.",
+    "comment": "MCP Dokploy v1.3. Copy into ~/.cursor/mcp.json (user) and/or .cursor/mcp.json (project). Use ABSOLUTE paths — Cursor does not reliably expand ${workspaceFolder} for stdio MCP args (literal ${workspaceFolder} or wrong active workspace → MODULE_NOT_FOUND).",
     "mcpServers": {
-        "dokploy": {
+        "dokhosts-dokploy": {
             "type": "stdio",
             "command": "node",
-            "args": ["./mcp/dokploy/server.mjs"],
+            "args": [
+                "/Users/fabriziocorpora/Desktop/workspaces/dockhost/mcp/dokploy/server.mjs"
+            ],
             "env": {
-                "DOKPLOY_URL": "${DOKPLOY_URL}",
-                "DOKPLOY_API_KEY": "${DOKPLOY_API_KEY}",
-                "DOKHOSTS_ROOT": "."
-            }
+                "DOKHOSTS_ROOT": "/Users/fabriziocorpora/Desktop/workspaces/dockhost",
+                "CURSOR_PROJECT_DIR": "/Users/fabriziocorpora/Desktop/workspaces/dockhost"
+            },
+            "envFile": "/Users/fabriziocorpora/Desktop/workspaces/dockhost/.env"
         }
     }
 }

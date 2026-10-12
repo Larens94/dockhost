@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "dokhosts-dokploy": {
+            "type": "stdio",
+            "command": "node",
+            "args": [
+                "/Users/fabriziocorpora/Desktop/workspaces/dockhost/mcp/dokploy/server.mjs"
+            ],
+            "env": {
+                "DOKHOSTS_ROOT": "/Users/fabriziocorpora/Desktop/workspaces/dockhost",
+                "CURSOR_PROJECT_DIR": "/Users/fabriziocorpora/Desktop/workspaces/dockhost"
+            },
+            "envFile": "/Users/fabriziocorpora/Desktop/workspaces/dockhost/.env"
+        }
+    }
+}
