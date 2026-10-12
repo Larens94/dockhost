@@ -97,6 +97,10 @@ Route::middleware('auth')->group(function () {
         ->name('domains.backups.restore');
     Route::post('domains/{domain}/database/import', [DomainController::class, 'importDatabaseDump'])
         ->name('domains.database.import');
+    Route::post('domains/{domain}/aliases', [DomainController::class, 'storeAlias'])
+        ->name('domains.aliases.store');
+    Route::delete('domains/{domain}/aliases/{alias}', [DomainController::class, 'destroyAlias'])
+        ->name('domains.aliases.destroy');
     Route::post('domains/{domain}/align-from', [DomainController::class, 'alignFromDomain'])
         ->name('domains.align-from');
     Route::post('domains/{domain}/sftp-users', [DomainController::class, 'storeSftpUser'])

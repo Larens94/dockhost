@@ -2,7 +2,7 @@
 
 // Domain.php — Domain module.
 //
-// exports: Domain | attr:Fillable | Domain::customer(): BelongsTo | Domain::infrastructure(): BelongsTo | Domain::infrastructureEnvironment(): BelongsTo | Domain::subscription(): BelongsTo | Domain::databaseAccounts(): HasMany | Domain::storageShares(): HasMany | Domain::sftpUsers(): HasMany | Domain::backups(): HasMany | Domain::dokployApplication(): HasOne
+// exports: Domain | attr:Fillable | Domain::customer(): BelongsTo | Domain::infrastructure(): BelongsTo | Domain::infrastructureEnvironment(): BelongsTo | Domain::subscription(): BelongsTo | Domain::databaseAccounts(): HasMany | Domain::storageShares(): HasMany | Domain::sftpUsers(): HasMany | Domain::backups(): HasMany | Domain::aliases(): HasMany | Domain::dokployApplication(): HasOne
 // used_by: app/Console/Commands/AlignMysqlFromComposeCommand.php
 //         app/Http/Controllers/DomainController.php
 //         app/Http/Controllers/LaravelToolkitController.php
@@ -35,6 +35,7 @@
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_iam | pivot role + ownerCount().
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_domain_php | php_settings JSON for Dokploy env.
 // agent:   composer-2.5-fast | cursor | 2026-10-11 | s_prod_foundations | env + backups relations for production P0.
+// agent:   composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | aliases() for multi-tenant hosts
 
 namespace App\Models;
 
@@ -129,6 +130,11 @@ class Domain extends Model
     public function sftpUsers(): HasMany
     {
         return $this->hasMany(SftpUser::class);
+    }
+
+    public function aliases(): HasMany
+    {
+        return $this->hasMany(DomainAlias::class)->orderBy('fqdn');
     }
 
     public function dokployApplication(): HasOne

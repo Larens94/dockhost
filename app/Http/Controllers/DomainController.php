@@ -16,6 +16,7 @@
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Reset DB password also syncs Dokploy DB_* + deploy
 //          composer-2.5-fast | cursor | 2026-10-11 | s_domain_tabs_ia | App env/PHP redirects land on laravel/sito tab
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_import | Import SQL dump into domain database
+//          composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Alias/subdomain hosts for multi-tenancy
 
 namespace App\Http\Controllers;
 
@@ -27,10 +28,12 @@ use App\Http\Requests\AlignLaravelBootEnvRequest;
 use App\Http\Requests\ApplyDomainStackPresetRequest;
 use App\Http\Requests\AttachLaravelRequest;
 use App\Http\Requests\DeployDomainSiteRequest;
+use App\Http\Requests\DestroyDomainAliasRequest;
 use App\Http\Requests\DestroyDomainRequest;
 use App\Http\Requests\ImportDomainDatabaseDumpRequest;
 use App\Http\Requests\MutateDomainDatabaseAccountRequest;
 use App\Http\Requests\ResyncDomainDatabaseUsersRequest;
+use App\Http\Requests\StoreDomainAliasRequest;
 use App\Http\Requests\StoreDomainDatabaseRequest;
 use App\Http\Requests\StoreDomainDatabaseUserRequest;
 use App\Http\Requests\StoreDomainRequest;
@@ -41,6 +44,7 @@ use App\Http\Requests\UpdateDomainRuntimeEnvRequest;
 use App\Http\Requests\UpdateDomainSiteEnvRequest;
 use App\Models\DatabaseAccount;
 use App\Models\Domain;
+use App\Models\DomainAlias;
 use App\Models\DomainBackup;
 use App\Models\Infrastructure;
 use App\Models\Subscription;
@@ -48,6 +52,7 @@ use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Dokploy\DokployApplicationAttacher;
 use App\Services\Hosting\AccessAccountManager;
+use App\Services\Hosting\DomainAliasManager;
 use App\Services\Hosting\DomainBackupManager;
 use App\Services\Hosting\DomainProvisioner;
 use App\Services\Hosting\DomainSiteEnvManager;
@@ -123,6 +128,7 @@ class DomainController extends Controller
             'databaseAccounts',
             'storageShares',
             'sftpUsers',
+            'aliases',
             'dokployApplication',
             'infrastructure',
             'infrastructureEnvironment',
@@ -439,6 +445,48 @@ class DomainController extends Controller
             ->with('success', __('panel.domains.show.backup_restored', ['id' => $backup->id]));
     }
 
+    public function storeAlias(
+        StoreDomainAliasRequest $request,
+        Domain $domain,
+        DomainAliasManager $aliases,
+        AuditLogger $audit,
+    ): RedirectResponse {
+        $alias = $aliases->create($domain, $request->aliasAttributes());
+
+        $audit->record('domain.alias.create', $domain, [
+            'fqdn' => $domain->fqdn,
+            'alias_fqdn' => $alias->fqdn,
+            'kind' => $alias->kind->value,
+            'web_service' => $alias->web_service,
+            'redirect_301' => $alias->redirect_301,
+        ]);
+
+        return $this->redirectToDomain($domain, 'hosts')
+            ->with('success', __('panel.domains.aliases.created', ['fqdn' => $alias->fqdn]));
+    }
+
+    public function destroyAlias(
+        DestroyDomainAliasRequest $request,
+        Domain $domain,
+        DomainAlias $alias,
+        DomainAliasManager $aliases,
+        AuditLogger $audit,
+    ): RedirectResponse {
+        $request->validated();
+        abort_unless((int) $alias->domain_id === (int) $domain->id, 404);
+
+        $fqdn = $alias->fqdn;
+        $aliases->delete($alias);
+
+        $audit->record('domain.alias.delete', $domain, [
+            'fqdn' => $domain->fqdn,
+            'alias_fqdn' => $fqdn,
+        ]);
+
+        return $this->redirectToDomain($domain, 'hosts')
+            ->with('success', __('panel.domains.aliases.deleted', ['fqdn' => $fqdn]));
+    }
+
     public function importDatabaseDump(
         ImportDomainDatabaseDumpRequest $request,
         Domain $domain,
@@ -630,7 +678,7 @@ class DomainController extends Controller
     private function redirectToDomain(Domain $domain, ?string $preferredTab = null): RedirectResponse
     {
         $tab = request()->query('tab', $preferredTab);
-        $allowed = ['generale', 'database', 'sftp', 'laravel', 'sito', 'accessi', 'pericolo'];
+        $allowed = ['generale', 'hosts', 'database', 'sftp', 'laravel', 'sito', 'accessi', 'pericolo'];
 
         return redirect()->route('domains.show', [
             'domain' => $domain,

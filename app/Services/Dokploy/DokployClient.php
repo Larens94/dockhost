@@ -3,7 +3,8 @@
 // DokployClient.php — DokployClient module.
 //
 // exports: DokployClient | DokployClient::createApplication(array $payload): array | DokployClient::saveEnvironment(array $payload): array | DokployClient::deploy(array $payload): array | DokployClient::createDomain(array $payload): array | DokployClient::createComposeDomain(array $payload): array | DokployClient::saveGitProvider(array $payload): array | DokployClient::allProjects(): array | DokployClient::getProject(string $projectId): array | DokployClient::composeIdsFromProject(array $project): array | DokployClient::createProject(array $payload): array | DokployClient::deleteProject(array $payload): array | DokployClient::deleteCompose(array $payload): array | DokployClient::stopCompose(array $payload): array | DokployClient::cleanUnusedVolumes(?string $serverId = null): array | DokployClient::createEnvironment(array $payload): array | DokployClient::createNetwork(array $payload): array | DokployClient::listNetworks(): array | DokployClient::updateApplication(array $payload): array | DokployClient::createCompose(array $payload): array | (+19 more)
-// used_by: app/Services/Hosting/DomainProvisioner.php
+// used_by: app/Services/Hosting/DomainAliasManager.php
+//         app/Services/Hosting/DomainProvisioner.php
 //         app/Services/Infra/ComposeDeployStatus.php
 //         app/Services/Infra/ComposeMysqlCredentialAligner.php
 //         app/Services/Infra/ComposeRuntimeInspector.php
@@ -16,6 +17,7 @@
 // rules:   none
 // agent:   composer-2.5-fast | cursor | 2026-09-24 | s_toolkit_terminal | Messaggi workflow terminale; hook futuro httpExecIsAvailable().
 // agent:   grok-4.7 | cursor | 2026-10-09 | s_github_source | Name-match containers when the label list has none running.
+// agent:   composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | deleteDomain + domainsByApplicationId for aliases
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 // message:
 
@@ -80,6 +82,43 @@ class DokployClient
     public function createDomain(array $payload): array
     {
         return $this->post('domain.create', $payload);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function deleteDomain(array $payload): array
+    {
+        return $this->post('domain.delete', $payload);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function domainsByApplicationId(string $applicationId): array
+    {
+        $payload = $this->get('domain.byApplicationId', ['applicationId' => $applicationId]);
+
+        if ($payload === [] || ! is_array($payload)) {
+            return [];
+        }
+
+        if (array_is_list($payload)) {
+            /** @var list<array<string, mixed>> $payload */
+            return $payload;
+        }
+
+        foreach (['domains', 'data', 'result.data'] as $path) {
+            $nested = data_get($payload, $path);
+
+            if (is_array($nested) && array_is_list($nested)) {
+                /** @var list<array<string, mixed>> $nested */
+                return $nested;
+            }
+        }
+
+        return [];
     }
 
     /**

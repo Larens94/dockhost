@@ -13,6 +13,7 @@
            composer-2.5-fast | cursor | 2026-10-11 | s_domain_tabs_ia | Tabs: overview, app, database, sftp, access, danger
            composer-2.5-fast | cursor | 2026-10-11 | s_domain_ui_color | Semantic tab/card color accents for IA
            composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump import on Database tab
+           composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Domains tab: aliases + subdomains
 -->
 
 <script setup>
@@ -107,7 +108,10 @@ const props = defineProps({
 const isLaravelStack = computed(() => (props.domain.stack || 'none') === 'laravel');
 
 const tabs = computed(() => {
-    const base = [{ id: 'generale', label: t('domains.tabs.general') }];
+    const base = [
+        { id: 'generale', label: t('domains.tabs.general') },
+        { id: 'hosts', label: t('domains.tabs.hosts') },
+    ];
 
     if (isLaravelStack.value) {
         base.push({ id: 'laravel', label: t('domains.tabs.laravel') });
@@ -165,6 +169,10 @@ const tabTones = {
     generale: {
         active: 'border-zinc-800 text-zinc-900',
         idle: 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800',
+    },
+    hosts: {
+        active: 'border-blue-600 text-blue-800',
+        idle: 'border-transparent text-zinc-500 hover:border-blue-200 hover:text-blue-800',
     },
     laravel: {
         active: 'border-red-600 text-red-700',
@@ -287,6 +295,37 @@ const alignForm = useForm({
     source_domain_id: '',
     allow_overwrite_production: false,
 });
+const aliasForm = useForm({
+    kind: 'alias',
+    fqdn: '',
+    subdomain: '',
+    web_service: true,
+    redirect_301: false,
+    mail_service: false,
+    sync_dns: false,
+});
+
+const createAlias = () => {
+    aliasForm.post(actionUrl(`/domains/${props.domain.id}/aliases`), {
+        preserveScroll: true,
+        onSuccess: () => {
+            aliasForm.reset();
+            aliasForm.kind = 'alias';
+            aliasForm.web_service = true;
+            aliasForm.redirect_301 = false;
+        },
+    });
+};
+
+const deleteAlias = (aliasId) => {
+    if (!window.confirm(t('domains.aliases.delete_confirm'))) {
+        return;
+    }
+
+    useForm({}).delete(actionUrl(`/domains/${props.domain.id}/aliases/${aliasId}`), {
+        preserveScroll: true,
+    });
+};
 
 const createDatabaseBackup = () => {
     backupForm.post(actionUrl(`/domains/${props.domain.id}/backups/database`), { preserveScroll: true });
@@ -633,6 +672,186 @@ const updateMemberRole = (memberId, role) => {
                     <dd class="mt-2 break-all text-sm font-medium text-emerald-950">{{ share.path }}</dd>
                 </div>
             </dl>
+        </div>
+
+        <div v-show="currentTab === 'hosts'" class="min-w-0 space-y-6">
+            <p v-if="page.props.flash?.success && currentTab === 'hosts'" class="text-sm text-emerald-700">
+                {{ page.props.flash.success }}
+            </p>
+
+            <section class="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/70 to-white p-5 shadow-sm">
+                <h2 class="text-base font-semibold text-blue-950">{{ t('domains.aliases.heading') }}</h2>
+                <p class="mt-1 text-sm text-zinc-500">
+                    {{ t('domains.aliases.help', { fqdn: domain.fqdn }) }}
+                </p>
+
+                <div class="mt-5 overflow-x-auto">
+                    <table class="min-w-full text-left text-sm">
+                        <thead class="border-b border-blue-100 text-xs uppercase tracking-wide text-blue-800/70">
+                            <tr>
+                                <th class="px-2 py-2 font-medium">{{ t('common.fqdn') }}</th>
+                                <th class="px-2 py-2 font-medium">{{ t('domains.aliases.kind') }}</th>
+                                <th class="px-2 py-2 font-medium">{{ t('domains.aliases.flags') }}</th>
+                                <th v-if="canMutateHosting" class="px-2 py-2 font-medium">{{ t('common.actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-zinc-100">
+                                <td class="px-2 py-3 font-medium text-zinc-900">{{ domain.fqdn }}</td>
+                                <td class="px-2 py-3 text-zinc-600">{{ t('domains.aliases.kind_primary') }}</td>
+                                <td class="px-2 py-3 text-zinc-500">—</td>
+                                <td v-if="canMutateHosting" class="px-2 py-3"></td>
+                            </tr>
+                            <tr
+                                v-for="alias in domain.aliases || []"
+                                :key="alias.id"
+                                class="border-b border-zinc-100"
+                            >
+                                <td class="px-2 py-3">
+                                    <div class="font-medium text-zinc-900">{{ alias.fqdn }}</div>
+                                    <div class="text-xs text-zinc-500">
+                                        {{ t('domains.aliases.for_primary', { fqdn: domain.fqdn }) }}
+                                    </div>
+                                </td>
+                                <td class="px-2 py-3 text-zinc-600">
+                                    {{ alias.kind === 'subdomain'
+                                        ? t('domains.aliases.kind_subdomain')
+                                        : t('domains.aliases.kind_alias') }}
+                                </td>
+                                <td class="px-2 py-3">
+                                    <div class="flex flex-wrap gap-1.5 text-xs">
+                                        <span
+                                            v-if="alias.web_service"
+                                            class="rounded-md bg-blue-100 px-1.5 py-0.5 text-blue-900"
+                                        >{{ t('domains.aliases.flag_web') }}</span>
+                                        <span
+                                            v-if="alias.redirect_301"
+                                            class="rounded-md bg-amber-100 px-1.5 py-0.5 text-amber-900"
+                                        >{{ t('domains.aliases.flag_redirect') }}</span>
+                                        <span
+                                            v-if="alias.mail_service"
+                                            class="rounded-md bg-zinc-100 px-1.5 py-0.5 text-zinc-700"
+                                        >{{ t('domains.aliases.flag_mail') }}</span>
+                                        <span
+                                            v-if="alias.sync_dns"
+                                            class="rounded-md bg-zinc-100 px-1.5 py-0.5 text-zinc-700"
+                                        >{{ t('domains.aliases.flag_dns') }}</span>
+                                    </div>
+                                </td>
+                                <td v-if="canMutateHosting" class="px-2 py-3">
+                                    <button
+                                        type="button"
+                                        class="text-sm font-medium text-red-700 hover:text-red-900"
+                                        @click="deleteAlias(alias.id)"
+                                    >
+                                        {{ t('common.delete') }}
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-if="!(domain.aliases || []).length" class="mt-3 text-sm text-zinc-500">
+                        {{ t('domains.aliases.empty') }}
+                    </p>
+                </div>
+            </section>
+
+            <section
+                v-if="canMutateHosting"
+                class="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/50 to-white p-5 shadow-sm"
+            >
+                <h2 class="text-base font-semibold text-blue-950">{{ t('domains.aliases.add_heading') }}</h2>
+                <p class="mt-1 text-sm text-zinc-500">{{ t('domains.aliases.add_help') }}</p>
+
+                <form class="mt-5 space-y-4" @submit.prevent="createAlias">
+                    <fieldset class="grid gap-3 sm:grid-cols-2">
+                        <label class="flex items-center gap-2 text-sm text-zinc-800">
+                            <input v-model="aliasForm.kind" type="radio" value="alias" class="border-zinc-300" />
+                            {{ t('domains.aliases.kind_alias') }}
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-zinc-800">
+                            <input v-model="aliasForm.kind" type="radio" value="subdomain" class="border-zinc-300" />
+                            {{ t('domains.aliases.kind_subdomain') }}
+                        </label>
+                    </fieldset>
+
+                    <div v-if="aliasForm.kind === 'alias'">
+                        <label class="block text-sm font-medium text-zinc-700" for="alias-fqdn">
+                            {{ t('domains.aliases.fqdn_label') }}
+                        </label>
+                        <input
+                            id="alias-fqdn"
+                            v-model="aliasForm.fqdn"
+                            type="text"
+                            placeholder="shop.example.net"
+                            :class="inputClass"
+                            class="mt-1"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">{{ t('domains.aliases.fqdn_help') }}</p>
+                        <p v-if="aliasForm.errors.fqdn" class="mt-1 text-sm text-red-600">{{ aliasForm.errors.fqdn }}</p>
+                    </div>
+
+                    <div v-else>
+                        <label class="block text-sm font-medium text-zinc-700" for="alias-subdomain">
+                            {{ t('domains.aliases.subdomain_label') }}
+                        </label>
+                        <div class="mt-1 flex items-center gap-2">
+                            <input
+                                id="alias-subdomain"
+                                v-model="aliasForm.subdomain"
+                                type="text"
+                                placeholder="app"
+                                :class="inputClass"
+                                class="min-w-0 flex-1"
+                            />
+                            <span class="shrink-0 text-sm text-zinc-500">.{{ domain.fqdn }}</span>
+                        </div>
+                        <p v-if="aliasForm.errors.subdomain" class="mt-1 text-sm text-red-600">{{ aliasForm.errors.subdomain }}</p>
+                    </div>
+
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="flex items-start gap-2 text-sm text-zinc-800">
+                            <input v-model="aliasForm.web_service" type="checkbox" class="mt-0.5 rounded border-zinc-300" />
+                            <span>
+                                <span class="font-medium">{{ t('domains.aliases.flag_web') }}</span>
+                                <span class="mt-0.5 block text-xs text-zinc-500">{{ t('domains.aliases.web_help') }}</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-2 text-sm text-zinc-800">
+                            <input v-model="aliasForm.redirect_301" type="checkbox" class="mt-0.5 rounded border-zinc-300" />
+                            <span>
+                                <span class="font-medium">{{ t('domains.aliases.flag_redirect') }}</span>
+                                <span class="mt-0.5 block text-xs text-zinc-500">{{ t('domains.aliases.redirect_help') }}</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-2 text-sm text-zinc-800">
+                            <input v-model="aliasForm.mail_service" type="checkbox" class="mt-0.5 rounded border-zinc-300" />
+                            <span>
+                                <span class="font-medium">{{ t('domains.aliases.flag_mail') }}</span>
+                                <span class="mt-0.5 block text-xs text-zinc-500">{{ t('domains.aliases.mail_help') }}</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-2 text-sm text-zinc-800">
+                            <input v-model="aliasForm.sync_dns" type="checkbox" class="mt-0.5 rounded border-zinc-300" />
+                            <span>
+                                <span class="font-medium">{{ t('domains.aliases.flag_dns') }}</span>
+                                <span class="mt-0.5 block text-xs text-zinc-500">{{ t('domains.aliases.dns_help') }}</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <p v-if="aliasForm.errors.web_service" class="text-sm text-red-600">{{ aliasForm.errors.web_service }}</p>
+                    <p v-if="aliasForm.errors.kind" class="text-sm text-red-600">{{ aliasForm.errors.kind }}</p>
+
+                    <button
+                        type="submit"
+                        class="rounded-lg bg-blue-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-50"
+                        :disabled="aliasForm.processing"
+                    >
+                        {{ t('domains.aliases.submit') }}
+                    </button>
+                </form>
+            </section>
         </div>
 
         <div v-show="currentTab === 'database'" class="min-w-0 space-y-6">
