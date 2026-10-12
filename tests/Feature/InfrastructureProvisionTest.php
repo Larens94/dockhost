@@ -8,6 +8,7 @@
 //          MUST NOT expect name: {slug}-db / {slug}-storage. MUST NOT require network.create fakes on create.
 //          One infra slug = one compose; DB_HOST hostnames stay ${slug}-mariadb on the shared network.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Expect shared dokploy-network on create
+//          composer-2.5-fast | cursor | 2026-10-12 | s_pma_uri_always | Create must bake PMA_ABSOLUTE_URI on compose.update
 // message:
 
 namespace Tests\Feature;
@@ -101,6 +102,8 @@ class InfrastructureProvisionTest extends TestCase
             && str_contains((string) $request['composeFile'], '"2222:22"')
             && str_contains((string) $request['composeFile'], "\n  sftp-sync:\n")
             && str_contains((string) $request['composeFile'], 'infra1-sftp-sync')
+            && str_contains((string) $request['composeFile'], 'PMA_ABSOLUTE_URI: https://pma-infra1.cloud.silicoreautomation.com/')
+            && ! str_contains((string) $request['composeFile'], '${PMA_ABSOLUTE_URI}')
             && ! str_contains((string) $request['composeFile'], '${INFRA_SLUG}')
             && ! str_contains((string) $request['composeFile'], "\n  redis:\n")
             && ! str_contains((string) $request['composeFile'], "\n  minio:\n")
@@ -128,12 +131,14 @@ class InfrastructureProvisionTest extends TestCase
                 && ! str_contains((string) $sftp[1], ':')
                 && str_contains($compose, 'POSTGRES_PASSWORD: '.$postgres[1])
                 && ! str_contains($compose, '${POSTGRES_PASSWORD}')
-                && str_contains($compose, 'mariadb -hinfra1-mariadb')
+                && str_contains($compose, 'mariadb --protocol=tcp -h"$$INFRA_SLUG-mariadb"')
                 && ! str_contains($compose, 'mysql -h')
                 && str_contains($compose, 'hostname: infra1-mariadb')
                 && str_contains($compose, "dokploy-network:\n        aliases:\n          - infra1-mariadb")
                 && ! str_contains($compose, 'name: infra1-db')
-                && str_contains($compose, '"2222:22"');
+                && str_contains($compose, '"2222:22"')
+                && str_contains($compose, 'PMA_ABSOLUTE_URI: https://pma-infra1.cloud.silicoreautomation.com/')
+                && ! str_contains($compose, '${PMA_ABSOLUTE_URI}');
         });
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/compose.saveEnvironment'

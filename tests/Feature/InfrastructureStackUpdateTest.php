@@ -6,6 +6,7 @@
 // used_by: none (PHPUnit entry)
 // rules:   updateStack MUST push dokploy-network MariaDB aliases and MUST NOT call network.create / emit {slug}-db.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Assert shared network on stack update
+//          composer-2.5-fast | cursor | 2026-10-12 | s_pma_uri_always | Enabling phpMyAdmin rebakes PMA_ABSOLUTE_URI
 // message:
 
 namespace Tests\Feature;
@@ -148,6 +149,18 @@ class InfrastructureStackUpdateTest extends TestCase
             && $request['certificateType'] === 'letsencrypt'
             && $request['domainType'] === 'compose'
             && $request['composeId'] === 'compose-1');
+
+        Http::assertSent(function (Request $request): bool {
+            if ($request->url() !== 'https://dokploy.test/api/compose.update') {
+                return false;
+            }
+
+            $compose = (string) ($request['composeFile'] ?? '');
+
+            return $request['composeId'] === 'compose-1'
+                && str_contains($compose, 'PMA_ABSOLUTE_URI: https://pma-infra1.cloud.silicoreautomation.com/')
+                && ! str_contains($compose, '${PMA_ABSOLUTE_URI}');
+        });
     }
 
     public function test_update_stack_enables_redis_minio_and_pgadmin_with_domains(): void

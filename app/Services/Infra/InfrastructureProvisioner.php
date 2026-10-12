@@ -9,10 +9,13 @@
 //          New rows MUST keep isolated_networks=false (column may remain). Do NOT delete live infras from here casually.
 //          Never print DB/SFTP secrets. Site DB users are created elsewhere with GRANT on one DB only — not *.* .
 //          generateSecret() is [A-Za-z0-9] only so Compose and the shell cannot expand $ in a password.
+//          phpMyAdmin behind Traefik needs PMA_ABSOLUTE_URI (https host + trailing slash) on every create/updateStack;
+//          attachMissingPublicDomains MUST updateStack (not deploy-only) so the URI matches the public host.
 // agent:   composer | cursor | 2026-09-21 | s_20260921_shared_net | Revert create/updateStack to shared dokploy-network only
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_mysql_grants | Compose secrets stay alphanumeric so grants cannot rewrite them
 //          composer-2.5-fast | cursor | 2026-10-10 | s_pma_uri_slash | Bake phpMyAdmin Absolute URI from phpmyadmin_domain
 //          composer-2.5-fast | cursor | 2026-10-11 | s_no_secret_regen | Never invent MySQL passwords on updateStack for existing compose
+//          composer-2.5-fast | cursor | 2026-10-12 | s_pma_uri_always | Always bake PMA_ABSOLUTE_URI; rebake compose after public domain attach
 // message: Isolated-network split was a misunderstanding; Fabrizio recreates stacks on Dokploy after deploy.
 
 namespace App\Services\Infra;
@@ -55,6 +58,10 @@ class InfrastructureProvisioner
             'pgadmin_password' => $this->generateSecret(24),
             'minio_root_user' => $this->generateSecret(16),
             'minio_root_password' => $this->generateSecret(32),
+            // Bake Absolute URI on first render so Traefik cookies work before domain attach.
+            ...(in_array('phpmyadmin', $enabledServices, true)
+                ? ['phpmyadmin_absolute_uri' => $this->composeTemplate->phpmyadminAbsoluteUri($slug)]
+                : []),
         ];
 
         // Rules: always shared dokploy-network — never pass isolatedNetworks=true on create.
@@ -441,8 +448,51 @@ class InfrastructureProvisioner
         }
 
         if ($attached) {
-            $this->redeployCompose($infrastructure);
+            // Re-bake YAML (PMA_ABSOLUTE_URI) without re-entering attachMissingPublicDomains.
+            $this->rebakeComposeWithoutDomainAttach($infrastructure->refresh());
         }
+    }
+
+    /**
+     * Push the current template + secrets and deploy, without attaching public domains again.
+     * Used after attachMissingPublicDomains so we never recurse updateStack → attach → updateStack.
+     */
+    private function rebakeComposeWithoutDomainAttach(Infrastructure $infrastructure): void
+    {
+        $composeId = $infrastructure->dokploy_compose_id;
+
+        if (! is_string($composeId) || $composeId === '') {
+            return;
+        }
+
+        $normalized = $this->composeTemplate->normalizeEnabled($infrastructure->enabled_services);
+        $sftpHostPort = (int) ($infrastructure->sftp_host_port ?: $this->sftpHostPort($infrastructure->slug));
+        [$secrets, $persist] = $this->secretsFor($infrastructure, $sftpHostPort);
+
+        $composeFile = $this->composeTemplate->render(
+            $infrastructure->slug,
+            $sftpHostPort,
+            $normalized,
+            $secrets,
+            false,
+        );
+
+        $this->pushCompose(
+            $composeId,
+            $composeFile,
+            $this->composeTemplate->envFile($infrastructure->slug, $secrets),
+        );
+
+        $infrastructure->update([
+            ...$persist,
+            'enabled_services' => $normalized,
+            'sftp_host_port' => $sftpHostPort,
+            'isolated_networks' => false,
+            'status' => 'deploying',
+            'last_error' => null,
+        ]);
+
+        $this->composeDeployStatus->sync($infrastructure);
     }
 
     private function redeployCompose(Infrastructure $infrastructure): void
@@ -622,10 +672,11 @@ class InfrastructureProvisioner
             'minio_root_user' => $minioUser,
             'minio_root_password' => $minioPassword,
             ...($mariadbVolumeName !== '' ? ['mariadb_volume_name' => $mariadbVolumeName] : []),
-            ...($phpmyadminDomain !== ''
+            // Always bake when phpMyAdmin is enabled — never ship compose without Absolute URI (Traefik AJAX crash).
+            ...($infrastructure->hasService('phpmyadmin')
                 ? ['phpmyadmin_absolute_uri' => $this->composeTemplate->phpmyadminAbsoluteUri(
                     $infrastructure->slug,
-                    $phpmyadminDomain,
+                    $phpmyadminDomain !== '' ? $phpmyadminDomain : null,
                 )]
                 : []),
         ], $persist];
