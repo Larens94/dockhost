@@ -10,7 +10,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -23,18 +22,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(ServicePlanSeeder::class);
-
-        $email = env('ADMIN_EMAIL', 'test@example.com');
-        $password = env('ADMIN_PASSWORD');
-
-        User::query()->updateOrCreate(
-            ['email' => $email],
-            [
-                'name' => 'Admin',
-                'password' => $password ?: 'password',
-                'is_admin' => true,
-            ],
-        );
+        $this->call([
+            ServicePlanSeeder::class,
+        ]);
     }
 }
