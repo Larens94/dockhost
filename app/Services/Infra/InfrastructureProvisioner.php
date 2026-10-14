@@ -267,13 +267,7 @@ class InfrastructureProvisioner
         try {
             $operation();
         } catch (Throwable $exception) {
-            $message = strtolower($this->dokploy->errorMessage($exception));
-
-            if (str_contains($message, 'not found')
-                || str_contains($message, 'already')
-                || str_contains($message, 'unauthorized')
-                || str_contains($message, 'forbidden')
-                || str_contains($message, 'insufficient')) {
+            if ($this->dokploy->isIgnorableForCleanup($exception)) {
                 return;
             }
 

@@ -613,6 +613,27 @@ class DokployClient
         return $raw;
     }
 
+    /**
+     * Dokploy resource already removed or unknown — safe to ignore during infra purge.
+     */
+    public function isIgnorableForCleanup(Throwable $exception): bool
+    {
+        $raw = $this->rawErrorMessage($exception);
+
+        if ($this->isMissingProcedure($exception, $raw)) {
+            return true;
+        }
+
+        $haystack = strtolower($raw.' '.$exception->getMessage());
+
+        return str_contains($haystack, 'not found')
+            || str_contains($haystack, 'non trovato')
+            || str_contains($haystack, 'already')
+            || str_contains($haystack, 'unauthorized')
+            || str_contains($haystack, 'forbidden')
+            || str_contains($haystack, 'insufficient');
+    }
+
     private function rawErrorMessage(Throwable $exception): string
     {
         if ($exception instanceof RequestException) {

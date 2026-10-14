@@ -1,13 +1,12 @@
 <?php
 
-
 // DestroyInfrastructureTest.php — DestroyInfrastructureTest module.
 //
 // exports: DestroyInfrastructureTest | DestroyInfrastructureTest::test_authenticated_user_deletes_infrastructure_without_domains(): void | DestroyInfrastructureTest::test_delete_purges_leftover_dokploy_projects_with_the_same_slug(): void | DestroyInfrastructureTest::test_delete_continues_when_compose_is_already_gone(): void | DestroyInfrastructureTest::test_delete_is_rejected_when_slug_does_not_match(): void | DestroyInfrastructureTest::test_delete_is_rejected_when_domains_are_attached(): void | DestroyInfrastructureTest::test_guests_cannot_delete_infrastructure(): void
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace Tests\Feature;
 
@@ -119,7 +118,10 @@ class DestroyInfrastructureTest extends TestCase
         Http::preventStrayRequests();
         Http::fake([
             ...$this->dokployProjectDiscoveryFakes(),
-            'https://dokploy.test/api/compose.stop' => Http::response(['message' => 'Compose not found'], 404),
+            'https://dokploy.test/api/compose.stop' => Http::response([
+                'message' => 'Compose not found',
+                'code' => 'NOT_FOUND',
+            ], 404),
             'https://dokploy.test/api/compose.delete' => Http::response(['ok' => true]),
             'https://dokploy.test/api/project.remove' => Http::response(['ok' => true]),
         ]);
