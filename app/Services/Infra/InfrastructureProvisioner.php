@@ -217,26 +217,35 @@ class InfrastructureProvisioner
 
         $composeIds = array_values(array_unique($composeIds));
 
+        $dokployResourcesRemoved = false;
+
         foreach ($composeIds as $composeId) {
             $this->dokployCleanup(fn () => $this->dokploy->stopCompose([
                 'composeId' => $composeId,
             ]));
-            $this->dokployCleanup(fn () => $this->dokploy->deleteCompose([
+            if ($this->dokployCleanupAttempt(fn () => $this->dokploy->deleteCompose([
                 'composeId' => $composeId,
                 'deleteVolumes' => true,
-            ]));
+            ]))) {
+                $dokployResourcesRemoved = true;
+            }
         }
 
         foreach ($projectIds as $projectId) {
-            $this->dokployCleanup(fn () => $this->dokploy->deleteProject([
+            if ($this->dokployCleanupAttempt(fn () => $this->dokploy->deleteProject([
                 'projectId' => $projectId,
-            ]));
+            ]))) {
+                $dokployResourcesRemoved = true;
+            }
         }
 
         // Compose.delete may leave legacy container_name=infra1-mariadb (or prior appName) on dokploy-network.
-        $this->resolveOrphanContainerStopper()->stopForSlug($slug);
+        $orphansStopped = $this->resolveOrphanContainerStopper()->stopForSlug($slug) > 0;
 
-        $this->dokployCleanup(fn () => $this->dokploy->cleanUnusedVolumes());
+        // Docker-wide prune can take minutes; skip when Dokploy already had nothing to remove.
+        if ($dokployResourcesRemoved || $orphansStopped) {
+            $this->dokployCleanup(fn () => $this->dokploy->cleanUnusedVolumes());
+        }
     }
 
     private function resolveOrphanContainerStopper(): InfraOrphanContainerStopper
@@ -264,11 +273,21 @@ class InfrastructureProvisioner
      */
     private function dokployCleanup(callable $operation): void
     {
+        $this->dokployCleanupAttempt($operation);
+    }
+
+    /**
+     * @param  callable(): mixed  $operation
+     */
+    private function dokployCleanupAttempt(callable $operation): bool
+    {
         try {
             $operation();
+
+            return true;
         } catch (Throwable $exception) {
             if ($this->dokploy->isIgnorableForCleanup($exception)) {
-                return;
+                return false;
             }
 
             throw $exception;

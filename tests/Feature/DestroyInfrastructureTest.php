@@ -122,8 +122,14 @@ class DestroyInfrastructureTest extends TestCase
                 'message' => 'Compose not found',
                 'code' => 'NOT_FOUND',
             ], 404),
-            'https://dokploy.test/api/compose.delete' => Http::response(['ok' => true]),
-            'https://dokploy.test/api/project.remove' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/compose.delete' => Http::response([
+                'message' => 'Compose not found',
+                'code' => 'NOT_FOUND',
+            ], 404),
+            'https://dokploy.test/api/project.remove' => Http::response([
+                'message' => 'Project not found',
+                'code' => 'NOT_FOUND',
+            ], 404),
         ]);
 
         $user = User::factory()->create();
@@ -142,6 +148,8 @@ class DestroyInfrastructureTest extends TestCase
         $this->assertDatabaseMissing('infrastructures', [
             'id' => $infrastructure->id,
         ]);
+
+        Http::assertNotSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/settings.cleanUnusedVolumes');
     }
 
     public function test_delete_is_rejected_when_slug_does_not_match(): void
