@@ -69,7 +69,6 @@ fi
 
 php artisan migrate --force
 php artisan dokhosts:sync-panel-gitlab-env --no-interaction || true
-php artisan db:seed --force
 php artisan infra:align-mysql-from-compose --prune-fqdn=test.vibesbridge.com --no-interaction || true
 php artisan optimize:clear
 php artisan config:cache
