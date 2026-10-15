@@ -22,6 +22,10 @@ defineProps({
         type: String,
         default: '',
     },
+    fullWidth: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const STORAGE_KEY = 'dokhosts.sidebar.collapsed';
@@ -358,7 +362,7 @@ const navItems = computed(() => {
                 </span>
             </header>
 
-            <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+            <main :class="fullWidth ? 'w-full px-4 py-8 sm:px-8' : 'mx-auto max-w-6xl px-4 py-8 sm:px-6'">
                 <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
                     <div class="min-w-0 flex-1">
                         <h1 class="text-2xl font-semibold tracking-normal">{{ title }}</h1>

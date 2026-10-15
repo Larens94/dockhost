@@ -597,6 +597,11 @@ class DokployClient
         $raw = $this->rawErrorMessage($exception);
 
         if ($this->isMissingProcedure($exception, $raw)) {
+            if (str_contains(strtolower($raw), 'compose not found')) {
+                return 'Compose Dokploy non trovato (ID nel pannello non valido o stack eliminato su Dokploy). '
+                    .'Apri il progetto infra su Dokploy, verifica lo stack compose, poi «Aggiorna stack» dal pannello o allinea manualmente dokploy_compose_id.';
+            }
+
             return 'Dokploy non espone questa procedura HTTP (404). Per i comandi nel container usa il terminale su Dokploy.';
         }
 
@@ -624,7 +629,7 @@ class DokployClient
             return true;
         }
 
-        $haystack = strtolower($raw.' '.$exception->getMessage());
+        $haystack = strtolower($raw.' '.$exception->getMessage().' '.$this->errorMessage($exception));
 
         return str_contains($haystack, 'not found')
             || str_contains($haystack, 'non trovato')

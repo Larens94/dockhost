@@ -301,6 +301,7 @@ class InfrastructureProvisioner
      */
     public function updateStack(Infrastructure $infrastructure, ?array $enabledServices = null): Infrastructure
     {
+        $infrastructure = $this->refreshStoredComposeId($infrastructure);
         $composeId = $infrastructure->dokploy_compose_id;
 
         if (! is_string($composeId) || $composeId === '') {
@@ -356,6 +357,7 @@ class InfrastructureProvisioner
      */
     public function resetMysqlDatadir(Infrastructure $infrastructure): Infrastructure
     {
+        $infrastructure = $this->refreshStoredComposeId($infrastructure);
         $composeId = $infrastructure->dokploy_compose_id;
 
         if (! is_string($composeId) || $composeId === '') {
@@ -795,6 +797,38 @@ class InfrastructureProvisioner
             'status' => 'deploying',
             'last_error' => null,
         ]);
+    }
+
+    /**
+     * Re-link dokploy_compose_id from project.one when Dokploy was recreated manually.
+     */
+    private function refreshStoredComposeId(Infrastructure $infrastructure): Infrastructure
+    {
+        $projectId = $infrastructure->dokploy_project_id;
+
+        if (! is_string($projectId) || $projectId === '') {
+            return $infrastructure;
+        }
+
+        try {
+            $composeIds = $this->dokploy->composeIdsFromProject($this->dokploy->getProject($projectId));
+        } catch (Throwable) {
+            return $infrastructure;
+        }
+
+        if ($composeIds === []) {
+            return $infrastructure;
+        }
+
+        $composeId = $composeIds[0];
+
+        if ($composeId !== $infrastructure->dokploy_compose_id) {
+            $infrastructure->update(['dokploy_compose_id' => $composeId]);
+
+            return $infrastructure->refresh();
+        }
+
+        return $infrastructure;
     }
 
     private function failInfrastructure(Infrastructure $infrastructure, Throwable $exception, bool $keepStatus = false): never

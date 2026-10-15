@@ -456,6 +456,7 @@ const sftpPublicHost = computed(() => {
     <AppLayout
         :title="infrastructure.slug"
         :description="t('infrastructures.show_description')"
+        :full-width="true"
     >
         <template #actions>
             <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
@@ -464,29 +465,31 @@ const sftpPublicHost = computed(() => {
                     :href="infrastructure.dokploy_project_url"
                     target="_blank"
                     rel="noopener"
-                    class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
+                    class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-xs font-semibold text-neutral-700 shadow-2xs hover:bg-neutral-50 hover:text-neutral-900 transition"
                 >
-                    {{ t('infrastructures.open_dokploy') }}
+                    <span>{{ t('infrastructures.open_dokploy') }}</span>
+                    <span class="text-neutral-400">↗</span>
                 </a>
                 <a
                     v-if="infrastructure.dokploy_compose_url"
                     :href="infrastructure.dokploy_compose_url"
                     target="_blank"
                     rel="noopener"
-                    class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
+                    class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-xs font-semibold text-neutral-700 shadow-2xs hover:bg-neutral-50 hover:text-neutral-900 transition"
                 >
-                    {{ t('infrastructures.compose_deploy') }}
+                    <span>{{ t('infrastructures.compose_deploy') }}</span>
+                    <span class="text-neutral-400">↗</span>
                 </a>
                 <Link
                     href="/infrastructures"
-                    class="inline-flex max-w-full items-center justify-center whitespace-normal rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
+                    class="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-neutral-800 transition"
                 >
-                    {{ t('infrastructures.create_another') }}
+                    <span>{{ t('infrastructures.create_another') }}</span>
                 </Link>
             </div>
         </template>
 
-        <nav class="-mx-1 mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" :aria-label="t('common.sections')">
+        <nav class="mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200/80" :aria-label="t('common.sections')">
             <Link
                 v-for="tab in tabs"
                 :key="tab.id"

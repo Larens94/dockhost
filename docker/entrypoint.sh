@@ -27,6 +27,7 @@ if [ -d /etc/sftp ]; then
 fi
 
 chown -R www-data:www-data storage bootstrap/cache || true
+chmod -R ug+rwx storage bootstrap/cache || true
 
 php artisan storage:link --force >/dev/null 2>&1 || true
 
