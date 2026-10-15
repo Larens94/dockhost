@@ -70,7 +70,7 @@ class DomainBackupManager
             $pdo = $this->sitePdo($account, $infrastructure);
             $sql = $this->dumpDatabase($pdo, $account->database_name);
             $relative = 'backups/domains/'.$domain->id.'/'.$backup->id.'-'.$account->database_name.'.sql';
-            Storage::disk('local')->put($relative, $sql);
+            $this->putBackupFile($relative, $sql, 'backup');
 
             $backup->update([
                 'status' => 'completed',
@@ -157,7 +157,7 @@ class DomainBackupManager
 
         try {
             $relative = 'backups/domains/'.$domain->id.'/'.$backup->id.'-import.sql';
-            Storage::disk('local')->put($relative, $sql);
+            $this->putBackupFile($relative, $sql, 'dump');
 
             $this->applySqlToDomain($domain, $sql, 'dump');
 
@@ -186,6 +186,24 @@ class DomainBackupManager
         }
 
         return $backup->refresh();
+    }
+
+    private function putBackupFile(string $relativePath, string $contents, string $errorKey): void
+    {
+        $disk = Storage::disk('local');
+        $directory = dirname($relativePath);
+
+        if ($directory !== '' && $directory !== '.') {
+            $disk->makeDirectory($directory);
+        }
+
+        if ($disk->put($relativePath, $contents) === false) {
+            throw ValidationException::withMessages([
+                $errorKey => __('panel.domains.show.import_dump_failed', [
+                    'error' => 'Could not write backup file to storage.',
+                ]),
+            ]);
+        }
     }
 
     private function assertProductionImportAllowed(Domain $domain, bool $allowOverwriteProduction): void

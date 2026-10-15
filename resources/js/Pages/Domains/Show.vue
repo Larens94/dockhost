@@ -17,6 +17,7 @@
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Read flash.revealed_credential; show password on Database tab
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_alert | One credential alert modal; drop duplicate banners
            composer-2.5-fast | cursor | 2026-10-12 | s_db_import_ui | SQL import modal + client size guard
+           composer-2.5 | cursor | 2026-10-15 | s_domain_show_layout | Align domain show with panel full-width layout and cards
 -->
 
 <script setup>
@@ -219,34 +220,35 @@ const tabClass = (tab) => {
     return currentTab.value === tab ? tone.active : tone.idle;
 };
 
+const sectionCard =
+    'min-w-0 overflow-hidden rounded-2xl border border-neutral-200/80 bg-white p-6 shadow-xs sm:p-8';
+
 const sectionTone = {
-    overview: 'rounded-xl border border-zinc-200 bg-white p-6 shadow-sm',
-    meta: 'rounded-xl border border-zinc-200 bg-gradient-to-br from-zinc-50 to-white p-4 shadow-sm',
-    runtime:
-        'rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50/90 to-white p-6 shadow-sm',
-    runtimeDebug:
-        'rounded-xl border border-amber-300 bg-gradient-to-br from-amber-50 to-white p-6 shadow-sm',
-    siteEnv: 'rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50/80 to-white p-6 shadow-sm',
-    php: 'rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50/70 to-white p-6 shadow-sm',
-    boot: 'rounded-xl border border-zinc-300 bg-gradient-to-br from-zinc-50 to-white p-6 shadow-sm',
-    database: 'rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50/70 to-white p-6 shadow-sm',
-    backup: 'rounded-xl border border-cyan-200 bg-gradient-to-br from-cyan-50/70 to-white p-6 shadow-sm',
-    sftp: 'rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/70 to-white p-6 shadow-sm',
-    access: 'rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50/70 to-white p-6 shadow-sm',
-    danger: 'min-w-0 rounded-xl border border-red-300 bg-gradient-to-br from-red-50 to-white p-6 shadow-sm',
+    overview: sectionCard,
+    meta: `${sectionCard} bg-neutral-50/40`,
+    runtime: sectionCard,
+    runtimeDebug: sectionCard,
+    siteEnv: sectionCard,
+    php: sectionCard,
+    boot: sectionCard,
+    database: sectionCard,
+    backup: sectionCard,
+    sftp: sectionCard,
+    access: sectionCard,
+    danger: 'min-w-0 overflow-hidden rounded-2xl border border-red-200/80 bg-white p-6 shadow-xs sm:p-8',
 };
 
 const headingTone = {
-    overview: 'text-zinc-900',
-    runtime: 'text-teal-950',
-    runtimeDebug: 'text-amber-950',
-    siteEnv: 'text-sky-950',
-    php: 'text-orange-950',
-    boot: 'text-zinc-900',
-    database: 'text-sky-950',
-    backup: 'text-cyan-950',
-    sftp: 'text-emerald-950',
-    access: 'text-orange-950',
+    overview: 'text-neutral-900',
+    runtime: 'text-neutral-900',
+    runtimeDebug: 'text-neutral-900',
+    siteEnv: 'text-neutral-900',
+    php: 'text-neutral-900',
+    boot: 'text-neutral-900',
+    database: 'text-neutral-900',
+    backup: 'text-neutral-900',
+    sftp: 'text-neutral-900',
+    access: 'text-neutral-900',
     danger: 'text-red-800',
 };
 
@@ -577,7 +579,7 @@ const deleteDomain = () => {
 };
 
 const inputClass =
-    'mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10';
+    'mt-1.5 w-full rounded-xl border border-neutral-200 bg-white py-2.5 px-3.5 text-sm text-neutral-900 placeholder:text-neutral-400 outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10 shadow-2xs';
 
 const spazio = computed(() => props.domain.subscription);
 
@@ -602,41 +604,46 @@ const updateMemberRole = (memberId, role) => {
     <AppLayout
         :title="domain.fqdn"
         :description="t('domains.show.description', { space: spazio?.name || t('common.fallback_space'), customer: spazio?.customer?.name || domain.customer?.name || t('common.fallback_customer'), plan: spazio?.service_plan?.name || t('common.fallback_plan') })"
+        :full-width="true"
     >
         <template #actions>
-            <Link
-                v-if="canViewSubscription && domain.subscription_id"
-                :href="`/subscriptions/${domain.subscription_id}`"
-                class="text-sm text-zinc-600 hover:text-zinc-900"
-            >
-                {{ t('common.space') }}
-            </Link>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                <Link
+                    v-if="canViewSubscription && domain.subscription_id"
+                    :href="`/subscriptions/${domain.subscription_id}`"
+                    class="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-xs font-semibold text-neutral-700 shadow-2xs transition hover:bg-neutral-50 hover:text-neutral-900"
+                >
+                    <svg class="h-4 w-4 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                    </svg>
+                    <span>{{ t('common.space') }}</span>
+                </Link>
+                <Link
+                    v-else
+                    href="/domains"
+                    class="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-xs font-semibold text-neutral-700 shadow-2xs transition hover:bg-neutral-50 hover:text-neutral-900"
+                >
+                    <svg class="h-4 w-4 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                    </svg>
+                    <span>{{ t('common.back') }}</span>
+                </Link>
+            </div>
         </template>
 
+        <div class="space-y-6">
         <p
             v-if="!canMutateHosting"
-            class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            class="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
             {{ t('domains.show.readonly') }}
         </p>
 
-        <p v-if="dokployAccessNote" class="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+        <p v-if="dokployAccessNote" class="rounded-xl border border-sky-200/80 bg-sky-50 px-4 py-3 text-sm text-sky-950">
             {{ dokployAccessNote }}
         </p>
 
-        <p class="mb-4 text-sm text-zinc-500">
-            <Link
-                v-if="canViewSubscription && domain.subscription_id"
-                :href="`/subscriptions/${domain.subscription_id}`"
-                class="hover:underline"
-            >
-                {{ spazio?.name || t('common.space') }}
-            </Link>
-            <span v-if="canViewSubscription && domain.subscription_id" class="mx-1.5 text-zinc-300">→</span>
-            {{ domain.fqdn }}
-        </p>
-
-        <nav class="-mx-1 mb-6 flex min-w-0 flex-wrap gap-1 border-b border-neutral-200" :aria-label="t('common.sections')">
+        <nav class="flex min-w-0 flex-wrap gap-1 border-b border-neutral-200/80" :aria-label="t('common.sections')">
             <Link
                 v-for="tab in tabs"
                 :key="tab.id"
@@ -1752,6 +1759,8 @@ const updateMemberRole = (memberId, role) => {
                 {{ t('common.delete') }}
             </button>
         </section>
+
+        </div>
 
         <div
             v-if="importModalOpen"
