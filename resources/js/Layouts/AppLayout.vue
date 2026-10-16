@@ -365,7 +365,10 @@ const navItems = computed(() => {
             <main :class="fullWidth ? 'w-full px-4 py-8 sm:px-8' : 'mx-auto max-w-6xl px-4 py-8 sm:px-6'">
                 <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
                     <div class="min-w-0 flex-1">
-                        <h1 class="text-2xl font-semibold tracking-normal">{{ title }}</h1>
+                        <h1 v-if="$slots.title" class="text-2xl font-semibold tracking-normal">
+                            <slot name="title" />
+                        </h1>
+                        <h1 v-else class="text-2xl font-semibold tracking-normal">{{ title }}</h1>
                         <p v-if="description" class="mt-1 max-w-3xl text-sm break-words text-neutral-500 [overflow-wrap:anywhere]">
                             {{ description }}
                         </p>

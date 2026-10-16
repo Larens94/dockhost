@@ -2,7 +2,7 @@
 
 // SubscriptionController.php — SubscriptionController module.
 //
-// exports: SubscriptionController | SubscriptionController::index(): Response | SubscriptionController::create(Request $request): Response | SubscriptionController::store(StoreSubscriptionRequest $request): RedirectResponse | SubscriptionController::show(Subscription $subscription): Response | SubscriptionController::destroy(DestroySubscriptionRequest $request, Subscription $subscription, DomainProvisioner $provisioner): RedirectResponse
+// exports: SubscriptionController | SubscriptionController::index(): Response | SubscriptionController::create(Request $request): Response | SubscriptionController::store(StoreSubscriptionRequest $request): RedirectResponse | SubscriptionController::show(Subscription $subscription): Response | SubscriptionController::update(UpdateSubscriptionRequest $request, Subscription $subscription): RedirectResponse | SubscriptionController::destroy(DestroySubscriptionRequest $request, Subscription $subscription, DomainProvisioner $provisioner): RedirectResponse
 // used_by: routes/web.php
 // rules:   Destroy decommissions every domain (Dokploy application.delete) before deleting the subscription. Confirmation is the sole domain FQDN, or the space name when there isn't exactly one.
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
@@ -13,6 +13,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\DestroySubscriptionRequest;
 use App\Http\Requests\StoreSubscriptionRequest;
+use App\Http\Requests\UpdateSubscriptionRequest;
 use App\Models\Customer;
 use App\Models\ServicePlan;
 use App\Models\Subscription;
@@ -85,6 +86,13 @@ class SubscriptionController extends Controller
         return Inertia::render('Subscriptions/Show', [
             'subscription' => $subscription,
         ]);
+    }
+
+    public function update(UpdateSubscriptionRequest $request, Subscription $subscription): RedirectResponse
+    {
+        $subscription->update($request->validated());
+
+        return redirect()->route('subscriptions.show', $subscription);
     }
 
     public function destroy(

@@ -85,6 +85,8 @@ return [
             'target_space' => 'the space name',
             'cancel' => 'Cancel',
             'submit' => 'Delete space',
+            'rename_title' => 'Rename space',
+            'rename_body' => 'Change how this space appears in the panel. Domains and Dokploy services are not renamed.',
         ],
     ],
     'domains' => [
@@ -516,6 +518,9 @@ return [
         'create_title' => 'New space',
         'create_description' => 'Attach a customer to a service plan.',
         'space_name' => 'Space name',
+        'profile' => 'Space details',
+        'edit_name' => 'Edit space name',
+        'save_name' => 'Save name',
         'show_description' => 'Space of :customer · :plan',
         'add_domain' => 'Add domain',
         'empty_title' => 'No domains on this space',

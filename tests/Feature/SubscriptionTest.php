@@ -257,6 +257,43 @@ class SubscriptionTest extends TestCase
         ]);
     }
 
+    public function test_authenticated_admin_can_rename_a_space(): void
+    {
+        $user = User::factory()->create();
+        $subscription = Subscription::factory()->create(['name' => 'old-space']);
+
+        $this->actingAs($user)
+            ->put(route('subscriptions.update', $subscription), [
+                'name' => 'renamed-space',
+            ])
+            ->assertRedirect(route('subscriptions.show', $subscription));
+
+        $this->assertDatabaseHas('subscriptions', [
+            'id' => $subscription->id,
+            'name' => 'renamed-space',
+        ]);
+    }
+
+    public function test_space_rename_requires_unique_name(): void
+    {
+        $user = User::factory()->create();
+        Subscription::factory()->create(['name' => 'taken-name']);
+        $subscription = Subscription::factory()->create(['name' => 'my-space']);
+
+        $this->actingAs($user)
+            ->from(route('subscriptions.show', $subscription))
+            ->put(route('subscriptions.update', $subscription), [
+                'name' => 'taken-name',
+            ])
+            ->assertRedirect(route('subscriptions.show', $subscription))
+            ->assertSessionHasErrors('name');
+
+        $this->assertDatabaseHas('subscriptions', [
+            'id' => $subscription->id,
+            'name' => 'my-space',
+        ]);
+    }
+
     public function test_guests_cannot_create_a_subscription(): void
     {
         $customer = Customer::factory()->create();

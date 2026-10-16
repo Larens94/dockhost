@@ -188,6 +188,7 @@ Route::middleware('auth')->group(function () {
             'create',
             'store',
             'show',
+            'update',
             'destroy',
         ]);
 
