@@ -100,7 +100,7 @@ const navItems = computed(() => {
         <Head :title="title" />
 
         <aside
-            class="fixed inset-y-0 left-0 z-20 hidden flex-col bg-white transition-[width] duration-200 lg:flex"
+            class="fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-neutral-200/80 bg-white font-sans transition-[width] duration-200 lg:flex"
             :class="collapsed ? 'w-[4.5rem]' : 'w-[17rem]'"
         >
             <button
@@ -138,18 +138,18 @@ const navItems = computed(() => {
                 </Link>
             </div>
 
-            <nav class="flex-1 space-y-1 overflow-y-auto px-3" :class="collapsed ? 'px-2' : ''">
+            <nav class="flex-1 space-y-0.5 overflow-y-auto px-3" :class="collapsed ? 'px-2' : ''">
                 <Link
                     v-for="item in navItems"
                     :key="item.href"
                     :href="item.href"
                     :title="item.label"
-                    class="flex min-h-11 items-center rounded-lg text-sm"
+                    class="flex min-h-10 items-center rounded-xl text-[13px] leading-5 tracking-normal antialiased [word-spacing:normal]"
                     :class="[
-                        collapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                        collapsed ? 'justify-center px-0' : 'gap-2.5 px-3',
                         isActive(item.href)
-                            ? 'bg-neutral-100 text-neutral-900'
-                            : 'text-neutral-800 hover:bg-neutral-50',
+                            ? 'bg-neutral-100 font-semibold text-neutral-900'
+                            : 'font-medium text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900',
                     ]"
                 >
                     <svg
@@ -242,7 +242,7 @@ const navItems = computed(() => {
                             d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"
                         />
                     </svg>
-                    <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+                    <span v-if="!collapsed" class="truncate [word-spacing:normal]">{{ item.label }}</span>
                 </Link>
             </nav>
 

@@ -8,6 +8,7 @@ fi
 
 mkdir -p \
     storage/app/private \
+    storage/app/private/backups/domains \
     storage/framework/cache \
     storage/framework/sessions \
     storage/framework/views \

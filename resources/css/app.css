@@ -10,10 +10,6 @@
 
 @layer base {
     html {
-        font-feature-settings: 'liga' 0, 'calt' 0;
-        font-variant-ligatures: none;
-        letter-spacing: 0.01em;
         overflow-wrap: anywhere;
-        word-spacing: 0.15em;
     }
 }

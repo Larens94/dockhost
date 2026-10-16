@@ -26,6 +26,7 @@ use App\Models\InfrastructureEnvironment;
 use App\Services\Infra\MysqlCredentialHealer;
 use App\Support\SqlDumpStatementSplitter;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use PDO;
@@ -194,7 +195,19 @@ class DomainBackupManager
         $directory = dirname($relativePath);
 
         if ($directory !== '' && $directory !== '.') {
-            $disk->makeDirectory($directory);
+            $absoluteDirectory = $disk->path($directory);
+
+            if (! File::isDirectory($absoluteDirectory)) {
+                try {
+                    File::makeDirectory($absoluteDirectory, 0775, true);
+                } catch (Throwable $exception) {
+                    throw ValidationException::withMessages([
+                        $errorKey => __('panel.domains.show.import_dump_failed', [
+                            'error' => $exception->getMessage(),
+                        ]),
+                    ]);
+                }
+            }
         }
 
         if ($disk->put($relativePath, $contents) === false) {
