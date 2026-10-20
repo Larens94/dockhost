@@ -8,6 +8,7 @@
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_session_cookie | Laravel provision asserts database session cookie
 //          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Attach writes composer install --no-scripts
+//          grok-4.7 | cursor | 2026-10-21 | s_generic_service | Generic stack and hosting-only create-service button
 // message:
 
 namespace Tests\Feature;
@@ -309,6 +310,87 @@ class DomainProvisionTest extends TestCase
         Http::assertSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/mounts.create'
             && $request['volumeName'] === 'infra1_data');
         Http::assertNotSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/application.saveGitProvider');
+    }
+
+    public function test_generic_stack_creates_application_without_nixpacks_preset(): void
+    {
+        Http::preventStrayRequests();
+        $this->fakeLaravelDokployAttach();
+
+        $mysql = Mockery::mock(MysqlProvisioner::class);
+        $mysql->shouldReceive('provision')->once();
+        $this->instance(MysqlProvisioner::class, $mysql);
+
+        $this->panelInfrastructure([
+            'dokploy_environment_id' => 'env-infra-1',
+            'dokploy_project_id' => 'proj-infra-1',
+        ]);
+
+        $user = User::factory()->create();
+        $subscription = Subscription::factory()->create([
+            'customer_id' => Customer::factory()->create()->id,
+        ]);
+
+        $this->actingAs($user)->post(route('subscriptions.domains.store', $subscription), [
+            'fqdn' => 'engine.acme.test',
+            'create_database' => true,
+            'engine' => DatabaseEngine::Mysql->value,
+            'infra_slug' => 'infra1',
+            'stack' => 'generic',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('domains', [
+            'fqdn' => 'engine.acme.test',
+            'stack' => 'generic',
+        ]);
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/application.create'
+            && $request['name'] === 'engine.acme.test'
+            && $request['environmentId'] === 'env-infra-1');
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/application.saveEnvironment'
+            && str_contains((string) $request['env'], 'APP_URL=https://engine.acme.test')
+            && str_contains((string) $request['env'], 'DB_HOST=infra1-mariadb')
+            && ! str_contains((string) $request['env'], 'NIXPACKS_')
+            && ! str_contains((string) $request['env'], 'APP_KEY='));
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/domain.create'
+            && $request['host'] === 'engine.acme.test');
+    }
+
+    public function test_hosting_only_domain_can_create_a_generic_dokploy_service(): void
+    {
+        Http::preventStrayRequests();
+        $this->fakeLaravelDokployAttach('app-generic');
+
+        $infrastructure = $this->panelInfrastructure([
+            'dokploy_environment_id' => 'env-infra-1',
+            'dokploy_project_id' => 'proj-infra-1',
+        ]);
+
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create([
+            'infrastructure_id' => $infrastructure->id,
+            'infra_slug' => $infrastructure->slug,
+            'fqdn' => 'spazioyoga.example.test',
+            'stack' => 'none',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('domains.service.store', $domain))
+            ->assertRedirect(route('domains.show', ['domain' => $domain, 'tab' => 'sito']));
+
+        $domain->refresh();
+
+        $this->assertSame('generic', $domain->stack->value);
+        $this->assertDatabaseHas('dokploy_applications', [
+            'domain_id' => $domain->id,
+            'dokploy_application_id' => 'app-generic',
+        ]);
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/application.saveEnvironment'
+            && str_contains((string) $request['env'], 'APP_URL=https://spazioyoga.example.test')
+            && ! str_contains((string) $request['env'], 'NIXPACKS_'));
     }
 
     public function test_static_stack_wires_infra_without_app_key(): void

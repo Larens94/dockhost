@@ -5,6 +5,7 @@
   rules:   Attach domain to subscription space on chosen infrastructure and stack.
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
   agent:   antigravity | 2026-10-14 | clean modern user-friendly redesign
+  agent:   grok-4.7 | cursor | 2026-10-21 | s_generic_service | Generic stack card on domain create
 -->
 
 <script setup>
@@ -236,6 +237,9 @@ const inputClass =
                                 <span class="mt-1 block text-xs text-neutral-500">
                                     <template v-if="stack.value === 'none'">
                                         {{ t('domains.create.stack_none') }}
+                                    </template>
+                                    <template v-else-if="stack.value === 'generic'">
+                                        {{ t('domains.create.stack_generic') }}
                                     </template>
                                     <template v-else-if="stack.is_laravel">
                                         {{ t('domains.create.stack_laravel', { volume: `${form.infra_slug || 'infra'}_data` }) }}

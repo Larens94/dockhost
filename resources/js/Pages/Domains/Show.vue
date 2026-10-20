@@ -18,6 +18,7 @@
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_alert | One credential alert modal; drop duplicate banners
            composer-2.5-fast | cursor | 2026-10-12 | s_db_import_ui | SQL import modal + client size guard
            composer-2.5 | cursor | 2026-10-15 | s_domain_show_layout | Align domain show with panel full-width layout and cards
+           grok-4.7 | cursor | 2026-10-21 | s_generic_service | Button creates a generic Dokploy service from hosting-only domains
 -->
 
 <script setup>
@@ -454,6 +455,7 @@ const deleteDbUser = (accountId) => {
 const sftpUserForm = useForm({});
 
 const laravelForm = useForm({});
+const serviceForm = useForm({});
 
 const alignEnvForm = useForm({});
 
@@ -501,6 +503,10 @@ const privilegeLabel = (privilege) => (privilege === 'select' ? t('common.privil
 
 const installLaravel = () => {
     laravelForm.post(actionUrl(`/domains/${props.domain.id}/laravel`));
+};
+
+const createService = () => {
+    serviceForm.post(actionUrl(`/domains/${props.domain.id}/service`));
 };
 
 const alignBootEnv = () => {
@@ -717,6 +723,18 @@ const updateMemberRole = (memberId, role) => {
                     >
                         {{ domain.stack_label || domain.stack || t('common.hosting_only') }}
                     </dd>
+                    <button
+                        v-if="canMutateHosting && !domain.dokploy_application && (domain.stack || 'none') === 'none'"
+                        type="button"
+                        class="mt-3 rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                        :disabled="serviceForm.processing"
+                        @click="createService"
+                    >
+                        {{ t('site.create_service') }}
+                    </button>
+                    <p v-if="serviceForm.errors.attach_service" class="mt-2 text-sm text-red-600">
+                        {{ serviceForm.errors.attach_service }}
+                    </p>
                 </div>
                 <div class="rounded-xl border border-orange-100 bg-gradient-to-br from-orange-50/70 to-white p-4 shadow-sm">
                     <dt class="text-xs font-medium uppercase tracking-wide text-orange-700/70">{{ t('common.customer') }}</dt>
@@ -1330,10 +1348,12 @@ const updateMemberRole = (memberId, role) => {
                 :domain="domain"
                 :stack-presets="stackPresets"
                 :attach-processing="laravelForm.processing"
-                :attach-error="laravelForm.errors.attach_laravel || ''"
+                :attach-error="laravelForm.errors.attach_laravel || serviceForm.errors.attach_service || ''"
+                :service-processing="serviceForm.processing"
                 :can-open-dokploy="canOpenDokploy"
                 :can-mutate-hosting="canMutateHosting"
                 @attach="installLaravel"
+                @create-service="createService"
             />
 
             <section

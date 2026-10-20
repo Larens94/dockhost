@@ -9,6 +9,7 @@
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_session_cookie | Expect database session and host-only cookie
 //          composer-2.5-fast | cursor | 2026-09-23 | s_20260923_app_url | Assert APP_URL https rewrite on align
 //          grok-4.7 | cursor | 2026-10-08 | s_20261008_no_scripts | Expect composer --no-scripts on the Laravel install command
+//          grok-4.7 | cursor | 2026-10-16 | s_queue_worker | Expect queue:work in the Laravel start command
 // message:
 
 namespace Tests\Feature;
@@ -164,6 +165,7 @@ class LaravelBootEnvAlignTest extends TestCase
         $this->assertStringContainsString('mkdir -p /var/log/nginx /var/cache/nginx storage/framework/sessions', $saved);
         $this->assertStringContainsString('chmod -R a+rwx storage bootstrap/cache', $saved);
         $this->assertStringContainsString('php artisan migrate --force', $saved);
+        $this->assertStringContainsString('php artisan queue:work --sleep=3 --tries=3 --max-time=3600', $saved);
         $this->assertStringContainsString('nginx -c /nginx.conf', $saved);
         $this->assertStringNotContainsString('artisan serve', $saved);
 

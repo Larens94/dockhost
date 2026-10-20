@@ -1,9 +1,10 @@
 <!-- StackToolkitPanel.vue — StackToolkitPanel component.
 
-  exports: defineProps | emit:attach
-  used_by: none
-  rules:   none
+  exports: defineProps | emit:attach | emit:create-service
+  used_by: resources/js/Pages/Domains/Show.vue
+  rules:   Generic services are created without a Nixpacks preset. Laravel attach stays a separate action.
   agent:   codedna-cli (no-llm) | unknown | 2026-09-21 | unknown | initial CodeDNA annotation pass
+           grok-4.7 | cursor | 2026-10-21 | s_generic_service | Button creates a Dokploy app without a stack preset
 -->
 
 <script setup>
@@ -30,6 +31,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    serviceProcessing: {
+        type: Boolean,
+        default: false,
+    },
     canOpenDokploy: {
         type: Boolean,
         default: true,
@@ -40,7 +45,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['attach']);
+const emit = defineEmits(['attach', 'create-service']);
 
 const page = usePage();
 const presetForm = useForm({});
@@ -61,6 +66,10 @@ const presetLines = computed(() =>
 );
 
 const frameworkNote = computed(() => {
+    if (stack.value === 'generic') {
+        return t('site.note_generic');
+    }
+
     if (['node', 'python', 'go'].includes(stack.value)) {
         return t('site.note_nixpacks');
     }
@@ -138,6 +147,15 @@ const applyPreset = () => {
                 @click="applyPreset"
             >
                 {{ t('site.apply_preset') }}
+            </button>
+            <button
+                v-if="isNone && !attached"
+                type="button"
+                class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                :disabled="serviceProcessing || !canMutateHosting"
+                @click="emit('create-service')"
+            >
+                {{ t('site.create_service') }}
             </button>
             <button
                 v-if="isNone && !attached"

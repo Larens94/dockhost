@@ -2,7 +2,7 @@
 
 // DomainProvisioner.php — DomainProvisioner module.
 //
-// exports: DomainProvisioner | DomainProvisioner::provision(Subscription $subscription, array $attributes): Domain | DomainProvisioner::provisionDatabase(Domain $domain, DatabaseEngine $engine, ?string $infraSlug = null): DatabaseAccount | DomainProvisioner::attachLaravel(Domain $domain, array $attributes = []): DokployApplication | DomainProvisioner::attachApplication(Domain $domain, array $attributes = []): DokployApplication | DomainProvisioner::decommission(Domain $domain): void
+// exports: DomainProvisioner | DomainProvisioner::provision(Subscription $subscription, array $attributes): Domain | DomainProvisioner::provisionDatabase(Domain $domain, DatabaseEngine $engine, ?string $infraSlug = null): DatabaseAccount | DomainProvisioner::attachLaravel(Domain $domain, array $attributes = []): DokployApplication | DomainProvisioner::attachGeneric(Domain $domain): DokployApplication | DomainProvisioner::attachApplication(Domain $domain, array $attributes = []): DokployApplication | DomainProvisioner::decommission(Domain $domain): void
 // used_by: app/Http/Controllers/DomainController.php
 //         app/Http/Controllers/SubscriptionController.php
 // rules:   Orchestrates Domain + DB + storage + DokployApplication attach — not raw Compose edits.
@@ -14,6 +14,7 @@
 //          composer | cursor | 2026-09-21 | s_20260921_shared_net | GRANT + shared-network attach rules
 //          grok-4.7 | cursor | 2026-09-22 | s_20260922_db_pass | Site DB passwords are alphanumeric so env injection keeps them intact
 // agent:   grok-4.7 | cursor | 2026-10-08 | s_delete_space | Space destroy decommissions each domain.
+//          grok-4.7 | cursor | 2026-10-21 | s_generic_service | Hosting-only domains can create a generic Dokploy app
 
 namespace App\Services\Hosting;
 
@@ -126,6 +127,19 @@ class DomainProvisioner
         return $this->attachApplication(
             $domain->fresh(['infrastructure', 'databaseAccounts', 'storageShares', 'customer']),
             $attributes,
+        );
+    }
+
+    /**
+     * Create the Dokploy application for a hosting-only domain without a Nixpacks preset.
+     * Nixpacks or a Dockerfile in the repository decides the runtime on Dokploy.
+     */
+    public function attachGeneric(Domain $domain): DokployApplication
+    {
+        $domain->forceFill(['stack' => DomainStack::Generic])->save();
+
+        return $this->attachApplication(
+            $domain->fresh(['infrastructure', 'databaseAccounts', 'storageShares', 'customer']),
         );
     }
 

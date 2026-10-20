@@ -7,6 +7,8 @@
 // rules:   Keys match lang/it/panel.php. Italian remains the source wording. Loaded as the panel group by HandleInertiaRequests.
 // agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | English panel strings.
 // agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Full panel UI copy.
+// agent:   grok-4.7 | cursor | 2026-10-16 | s_queue_worker | Queue worker starts with the container.
+// agent:   grok-4.7 | cursor | 2026-10-21 | s_generic_service | Generic stack and create-service copy.
 
 return [
     'locales' => [
@@ -114,6 +116,7 @@ return [
             'stack_legend' => 'Application stack',
             'stack_help' => 'As on Plesk: choose the site type. Only Laravel receives APP_KEY / session / the artisan toolkit. For Node/Python/Go, Nixpacks detects the framework from the repo (Django, Gin, Next, …) on Dokploy, not here.',
             'stack_none' => 'No application. Domain, storage, and SFTP only.',
+            'stack_generic' => 'Dokploy application, no preset. Nixpacks or a Dockerfile in the repo decides the technology.',
             'stack_laravel' => 'Application + Laravel env (APP_KEY, DB_*), volume :volume, HTTPS.',
             'stack_other' => 'Application in the same infra environment, with a volume and connection env (no Laravel keys).',
             'after_create' => 'After “Add domain”, open the application on Dokploy: Provider → GitHub (or the linked Git provider), repository, branch, then Deploy. DokHosts has already placed the app on the chosen infra (network + volume + env). Add app secrets (API keys, mail) in Dokploy’s env editor.',
@@ -417,6 +420,7 @@ return [
     ],
     'stacks' => [
         'none' => 'Hosting only',
+        'generic' => 'Generic',
         'static' => 'HTML / CSS / JS',
         'php' => 'PHP',
         'laravel' => 'Laravel',
@@ -642,7 +646,10 @@ return [
     ],
     'site' => [
         'heading' => 'Site · :stack',
-        'none' => 'Hosting only: domain, storage, and SFTP on infra :infra. No Dokploy application. You can apply Laravel Toolkit later.',
+        'none' => 'Hosting only: domain, storage, and SFTP on infra :infra. No Dokploy application.',
+        'note_generic' => 'No build command. On Dokploy, connect the repository: Nixpacks detects the technology, or choose Dockerfile when the repo has one.',
+        'create_service' => 'Create Dokploy service',
+        'service_created' => 'Service created on Dokploy. Connect the repository: Nixpacks or a Dockerfile decides the technology.',
         'app' => 'Application in the same Dokploy environment as :infra (volume :volume; database on network :network if the infra is isolated). Nixpacks builds the repo; Git provider and Deploy stay on Dokploy.',
         'db_on_infra' => 'DB on the infra',
         'note_nixpacks' => 'Nixpacks detects the framework from the repo (Django, Gin, Next, …). You choose it on Dokploy, not here.',
@@ -695,7 +702,7 @@ return [
         'build_help' => 'Environment tab on Dokploy, build type :type. Composer first, then Node assets. Without vendor, artisan does not start.',
         'copy_nixpacks' => 'Copy Nixpacks env',
         'start_heading' => 'Start (runtime)',
-        'start_help' => 'Goes in NIXPACKS_START_CMD. Artisan runs, then nginx + php-fpm stay up (the Nixpacks PHP start). Without that process the container exits.',
+        'start_help' => 'Goes in NIXPACKS_START_CMD. Artisan runs, then the queue worker, nginx, and php-fpm stay up. Without nginx the container exits.',
         'copy_start' => 'Copy start',
         'apply_build' => 'Apply build and start on Dokploy',
         'open_on_dokploy' => 'Open on Dokploy',
@@ -705,7 +712,7 @@ return [
         'schedule_help' => 'Crontab is managed on the container / on Dokploy. Here you can only list schedule:list.',
         'schedule_button' => 'artisan schedule:list',
         'schedule_terminal' => 'Terminal / cron on Dokploy',
-        'queue_help' => 'Workers are managed on the container / Dokploy. Here only queue:restart.',
+        'queue_help' => 'On container start a background queue:work runs unless QUEUE_CONNECTION is sync. It restarts itself; queue:restart recycles it. The log is storage/logs/queue-worker.log in the container. It applies on the next Deploy, after “Apply build and start”.',
         'logs_help' => 'Application logs are already on Dokploy. DokHosts does not copy them: open the application page there to read them.',
         'open_logs' => 'Open logs on Dokploy',
         'logs_missing' => 'Dokploy URL unavailable: the application or the project/environment references are missing.',

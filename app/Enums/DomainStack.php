@@ -2,7 +2,7 @@
 
 // DomainStack.php — DomainStack module.
 //
-// exports: DomainStack | DomainStack::None | DomainStack::Static | DomainStack::Php | DomainStack::Laravel | DomainStack::Node | DomainStack::Python | DomainStack::Go | DomainStack::label(): string | DomainStack::createsApplication(): bool | DomainStack::isLaravel(): bool | DomainStack::usesLaravelEnv(): bool | DomainStack::usesPhpIniAtRuntime(): bool | DomainStack::mark(): string | DomainStack::choices(): array
+// exports: DomainStack | DomainStack::None | DomainStack::Generic | DomainStack::Static | DomainStack::Php | DomainStack::Laravel | DomainStack::Node | DomainStack::Python | DomainStack::Go | DomainStack::label(): string | DomainStack::createsApplication(): bool | DomainStack::isLaravel(): bool | DomainStack::usesLaravelEnv(): bool | DomainStack::usesPhpIniAtRuntime(): bool | DomainStack::mark(): string | DomainStack::choices(): array
 // used_by: app/Http/Controllers/DomainController.php
 //         app/Http/Controllers/LaravelToolkitController.php
 //         app/Http/Requests/StoreDomainRequest.php
@@ -11,6 +11,7 @@
 //         database/factories/DomainFactory.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
+//          grok-4.7 | cursor | 2026-10-21 | s_generic_service | Generic stack creates a Dokploy app without a Nixpacks preset
 // message:
 
 namespace App\Enums;
@@ -18,6 +19,7 @@ namespace App\Enums;
 enum DomainStack: string
 {
     case None = 'none';
+    case Generic = 'generic';
     case Static = 'static';
     case Php = 'php';
     case Laravel = 'laravel';
@@ -54,6 +56,7 @@ enum DomainStack: string
     {
         return match ($this) {
             self::None => '∅',
+            self::Generic => 'App',
             self::Static => 'HTML',
             self::Php => 'PHP',
             self::Laravel => 'L',
@@ -70,6 +73,7 @@ enum DomainStack: string
     {
         return [
             self::None,
+            self::Generic,
             self::Static,
             self::Php,
             self::Laravel,

@@ -15,6 +15,7 @@
 // agent:   composer-2.5-fast | cursor | 2026-09-25 | s_smtp_test | POST panel/smtp/test admin SMTP test mail.
 // agent:   grok-4.7 | cursor | 2026-10-08 | s_delete_space | DELETE subscriptions/{subscription}.
 // agent:   grok-4.7 | cursor | 2026-10-08 | s_panel_locale | Authenticated account/locale session language.
+// agent:   grok-4.7 | cursor | 2026-10-21 | s_generic_service | POST domains/{domain}/service.
 
 use App\Http\Controllers\Account\LocaleController;
 use App\Http\Controllers\Account\TwoFactorAuthenticationController;
@@ -107,6 +108,8 @@ Route::middleware('auth')->group(function () {
         ->name('domains.sftp-users.store');
     Route::post('domains/{domain}/laravel', [DomainController::class, 'attachLaravel'])
         ->name('domains.laravel.store');
+    Route::post('domains/{domain}/service', [DomainController::class, 'attachGeneric'])
+        ->name('domains.service.store');
     Route::post('domains/{domain}/laravel/align-env', [DomainController::class, 'alignLaravelEnv'])
         ->name('domains.laravel.align-env');
     Route::post('domains/{domain}/laravel/deploy-config', [DomainController::class, 'applyLaravelDeployConfig'])

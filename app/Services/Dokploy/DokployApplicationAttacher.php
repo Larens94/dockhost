@@ -24,6 +24,8 @@
 //          grok-4.7 | cursor | 2026-10-08 | s_20261008_no_scripts | Install skips composer scripts so artisan does not resolve DB_HOST during image build
 //          grok-4.7 | cursor | 2026-10-08 | s_20261008_deploy_install | Deploy refreshes composer NIXPACKS_INSTALL_CMD from the preset before the build
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_pass_sync | Push DB_* + deploy after panel password reset
+//          grok-4.7 | cursor | 2026-10-16 | s_queue_worker | Laravel start keeps a background queue:work unless QUEUE_CONNECTION=sync
+//          grok-4.7 | cursor | 2026-10-21 | s_generic_service | Generic stack has no Nixpacks install or start command
 // message: Site GRANT stays one-database via MysqlProvisioner; admin infra user may keep *.*.
 
 namespace App\Services\Dokploy;
@@ -340,7 +342,7 @@ class DokployApplicationAttacher
                 'NIXPACKS_BUILD_CMD' => 'go build -o /app/server .',
                 'NIXPACKS_START_CMD' => '/app/server',
             ],
-            DomainStack::Laravel, DomainStack::None => [],
+            DomainStack::Generic, DomainStack::Laravel, DomainStack::None => [],
         };
     }
 
@@ -504,19 +506,20 @@ class DokployApplicationAttacher
     /**
      * Nixpacks PHP provider starts nginx + php-fpm from /assets.
      *
-     * Rules: NIXPACKS_INSTALL_CMD replaces the whole Nixpacks install phase, so it must mkdir /var/log/nginx and /var/cache/nginx, then composer install --ignore-platform-reqs --no-interaction --no-scripts, then npm ci. --no-scripts skips package:discover so the build does not boot the app against DB_HOST. npm ci alone drops vendor/autoload.php. Do not pass --no-dev. NIXPACKS_START_CMD must mkdir those nginx dirs again plus storage/framework/sessions (views, cache, logs, bootstrap/cache) and chmod a+rwx storage bootstrap/cache, because php-fpm runs as nobody and nginx emergs without /var/log/nginx/error.log. After migrate use config:clear, not config:cache, so DB_* from Dokploy runtime env is not frozen to a wrong password. End with the nginx + php-fpm start. Never artisan serve. Never a placeholder command.
+     * Rules: NIXPACKS_INSTALL_CMD replaces the whole Nixpacks install phase, so it must mkdir /var/log/nginx and /var/cache/nginx, then composer install --ignore-platform-reqs --no-interaction --no-scripts, then npm ci. --no-scripts skips package:discover so the build does not boot the app against DB_HOST. npm ci alone drops vendor/autoload.php. Do not pass --no-dev. NIXPACKS_START_CMD must mkdir those nginx dirs again plus storage/framework/sessions (views, cache, logs, bootstrap/cache) and chmod a+rwx storage bootstrap/cache, because php-fpm runs as nobody and nginx emergs without /var/log/nginx/error.log. After migrate use config:clear, not config:cache, so DB_* from Dokploy runtime env is not frozen to a wrong password. After queue:restart, background a queue:work loop unless QUEUE_CONNECTION=sync, so the worker survives queue:restart and --max-time. End with the nginx + php-fpm start. Never artisan serve. Never a placeholder command.
      *
      * @return array<string, string>
      */
     public function laravelDeployPreset(): array
     {
         $prepare = 'mkdir -p /var/log/nginx /var/cache/nginx storage/framework/sessions storage/framework/views storage/framework/cache/data storage/logs bootstrap/cache && chmod -R a+rwx storage bootstrap/cache';
+        $worker = '(case "${QUEUE_CONNECTION:-database}" in sync) ;; *) while true; do php artisan queue:work --sleep=3 --tries=3 --max-time=3600 >> storage/logs/queue-worker.log 2>&1 || true; sleep 2; done ;; esac &)';
         $http = 'node /assets/scripts/prestart.mjs /assets/nginx.template.conf /nginx.conf && (php-fpm -y /assets/php-fpm.conf & nginx -c /nginx.conf)';
 
         return [
             'NIXPACKS_INSTALL_CMD' => 'mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci',
             'NIXPACKS_BUILD_CMD' => 'npm run build',
-            'NIXPACKS_START_CMD' => $prepare.' && php artisan migrate --force && php artisan optimize:clear && php artisan config:clear && php artisan route:cache && php artisan view:cache && php artisan event:cache && php artisan queue:restart && '.$http,
+            'NIXPACKS_START_CMD' => $prepare.' && php artisan migrate --force && php artisan optimize:clear && php artisan config:clear && php artisan route:cache && php artisan view:cache && php artisan event:cache && php artisan queue:restart && '.$worker.' && '.$http,
         ];
     }
 

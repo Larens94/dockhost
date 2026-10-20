@@ -18,6 +18,7 @@
 //          composer-2.5-fast | cursor | 2026-10-11 | s_db_import | Import SQL dump into domain database
 //          composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Alias/subdomain hosts for multi-tenancy
 //          composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Always flash new DB password even if Dokploy sync fails
+//          grok-4.7 | cursor | 2026-10-21 | s_generic_service | Hosting-only domains can create a generic Dokploy service
 
 namespace App\Http\Controllers;
 
@@ -27,6 +28,7 @@ use App\Enums\DomainMemberRole;
 use App\Enums\DomainStack;
 use App\Http\Requests\AlignLaravelBootEnvRequest;
 use App\Http\Requests\ApplyDomainStackPresetRequest;
+use App\Http\Requests\AttachGenericServiceRequest;
 use App\Http\Requests\AttachLaravelRequest;
 use App\Http\Requests\DeployDomainSiteRequest;
 use App\Http\Requests\DestroyDomainAliasRequest;
@@ -600,6 +602,29 @@ class DomainController extends Controller
         }
 
         return $this->redirectToDomain($domain, 'laravel');
+    }
+
+    public function attachGeneric(
+        AttachGenericServiceRequest $request,
+        Domain $domain,
+        DomainProvisioner $provisioner,
+    ): RedirectResponse {
+        try {
+            $provisioner->attachGeneric($domain);
+        } catch (ValidationException $exception) {
+            $messages = $exception->errors();
+
+            if (isset($messages['stack'])) {
+                throw ValidationException::withMessages([
+                    'attach_service' => $messages['stack'],
+                ]);
+            }
+
+            throw $exception;
+        }
+
+        return $this->redirectToDomain($domain, 'sito')
+            ->with('success', __('panel.site.service_created'));
     }
 
     public function alignLaravelEnv(
