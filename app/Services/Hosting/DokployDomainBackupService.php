@@ -19,6 +19,7 @@ use App\Models\Domain;
 use App\Models\DomainBackup;
 use App\Models\Infrastructure;
 use App\Services\Dokploy\DokployClient;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -46,19 +47,37 @@ class DokployDomainBackupService
 
         $payload = $this->schedulePayload($domain, $context);
 
-        if (filled($domain->dokploy_backup_id)) {
-            $this->dokploy->updateBackup([
-                ...$payload,
-                'backupId' => (string) $domain->dokploy_backup_id,
-            ]);
+        try {
+            DB::transaction(function () use ($domain, $context, $payload): void {
+                $locked = Domain::query()->whereKey($domain->id)->lockForUpdate()->firstOrFail();
 
-            return;
+                $backupId = filled($locked->dokploy_backup_id)
+                    ? (string) $locked->dokploy_backup_id
+                    : $this->findExistingComposeBackupId($context, $payload);
+
+                if ($backupId !== null) {
+                    if (! filled($locked->dokploy_backup_id)) {
+                        $locked->update(['dokploy_backup_id' => $backupId]);
+                    }
+
+                    $this->dokploy->updateBackup([
+                        ...$payload,
+                        'backupId' => $backupId,
+                    ]);
+
+                    return;
+                }
+
+                $created = $this->dokploy->createBackup($payload);
+                $newId = $this->dokploy->idFrom($created, 'backupId');
+
+                $locked->update(['dokploy_backup_id' => $newId]);
+            });
+
+            $domain->refresh();
+        } catch (Throwable $exception) {
+            $this->failBackup($exception);
         }
-
-        $created = $this->dokploy->createBackup($payload);
-        $backupId = $this->dokploy->idFrom($created, 'backupId');
-
-        $domain->update(['dokploy_backup_id' => $backupId]);
     }
 
     public function syncSettings(Domain $domain): void
@@ -68,19 +87,18 @@ class DokployDomainBackupService
         }
 
         if (! $domain->backup_enabled) {
-            if (filled($domain->dokploy_backup_id)) {
-                $this->dokploy->updateBackup([
-                    'backupId' => (string) $domain->dokploy_backup_id,
-                    'enabled' => false,
-                    'schedule' => $this->cronFor($domain),
-                    'prefix' => $this->backupPrefix($domain),
-                    'destinationId' => $this->destinationId($domain),
-                    'database' => $this->databaseName($domain),
-                    'keepLatestCount' => $this->keepLatestCount($domain),
-                    'serviceName' => config('dokploy.compose_mariadb_service_name', 'mariadb'),
-                    'metadata' => $this->composeMetadata(),
-                    'databaseType' => 'mariadb',
-                ]);
+            $context = $this->resolveContext($domain);
+
+            if ($context !== null && filled($domain->dokploy_backup_id)) {
+                try {
+                    $this->dokploy->updateBackup([
+                        ...$this->schedulePayload($domain, $context),
+                        'backupId' => (string) $domain->dokploy_backup_id,
+                        'enabled' => false,
+                    ]);
+                } catch (Throwable) {
+                    // Best-effort when disabling automatic backups.
+                }
             }
 
             return;
@@ -94,6 +112,12 @@ class DokployDomainBackupService
         $context = $this->requireContext($domain);
 
         $this->ensureSchedule($domain->refresh());
+
+        if (! filled($domain->dokploy_backup_id)) {
+            throw ValidationException::withMessages([
+                'backup' => __('panel.domains.show.backup_dokploy_not_configured'),
+            ]);
+        }
 
         $scheduleId = (string) $domain->dokploy_backup_id;
 
@@ -297,6 +321,8 @@ class DokployDomainBackupService
      */
     private function schedulePayload(Domain $domain, array $context): array
     {
+        $serviceName = $this->mariadbServiceName();
+
         return [
             'schedule' => $this->cronFor($domain),
             'enabled' => (bool) $domain->backup_enabled,
@@ -307,18 +333,89 @@ class DokployDomainBackupService
             'databaseType' => 'mariadb',
             'backupType' => 'compose',
             'composeId' => $context['compose_id'],
-            'metadata' => $this->composeMetadata(),
+            'serviceName' => $serviceName,
+            'metadata' => $this->composeMetadata($context),
         ];
     }
 
     /**
-     * @return array{serviceName: string}
+     * @param  array{database_name: string, destination_id: string, compose_id: string, root_password: string}  $context
+     * @return array<string, mixed>
      */
-    private function composeMetadata(): array
+    private function composeMetadata(array $context): array
     {
-        return [
-            'serviceName' => (string) config('dokploy.compose_mariadb_service_name', 'mariadb'),
+        $metadata = [
+            'serviceName' => $this->mariadbServiceName(),
         ];
+
+        if ($context['root_password'] !== '') {
+            $metadata['mariadb'] = [
+                'databaseUser' => 'root',
+                'databasePassword' => $context['root_password'],
+            ];
+        }
+
+        return $metadata;
+    }
+
+    private function mariadbServiceName(): string
+    {
+        return (string) config('dokploy.compose_mariadb_service_name', 'mariadb');
+    }
+
+    private function failBackup(Throwable $exception): void
+    {
+        throw ValidationException::withMessages([
+            'backup' => __('panel.domains.show.backup_dokploy_failed', [
+                'error' => $this->dokploy->errorMessage($exception),
+            ]),
+        ]);
+    }
+
+    /**
+     * @param  array{database_name: string, destination_id: string, compose_id: string, root_password: string}  $context
+     * @param  array<string, mixed>  $payload
+     */
+    private function findExistingComposeBackupId(array $context, array $payload): ?string
+    {
+        try {
+            $backups = $this->dokploy->backupsOnCompose($context['compose_id']);
+        } catch (Throwable) {
+            return null;
+        }
+
+        $wantedDatabase = (string) ($payload['database'] ?? '');
+        $wantedPrefix = (string) ($payload['prefix'] ?? '');
+        $wantedDestination = (string) ($payload['destinationId'] ?? '');
+
+        foreach ($backups as $backup) {
+            if (($backup['database'] ?? null) !== $wantedDatabase) {
+                continue;
+            }
+
+            if (($backup['prefix'] ?? null) !== $wantedPrefix) {
+                continue;
+            }
+
+            if ($wantedDestination !== ''
+                && ($backup['destinationId'] ?? null) !== $wantedDestination) {
+                continue;
+            }
+
+            $backupType = $backup['backupType'] ?? null;
+
+            if ($backupType !== null && $backupType !== 'compose') {
+                continue;
+            }
+
+            $id = $backup['backupId'] ?? $backup['id'] ?? null;
+
+            if (is_string($id) && $id !== '') {
+                return $id;
+            }
+        }
+
+        return null;
     }
 
     private function backupPrefix(Domain $domain): string

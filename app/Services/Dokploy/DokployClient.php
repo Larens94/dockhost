@@ -362,6 +362,21 @@ class DokployClient
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    public function backupsOnCompose(string $composeId): array
+    {
+        $compose = $this->getCompose($composeId);
+        $backups = data_get($compose, 'backups');
+
+        if (! is_array($backups)) {
+            return [];
+        }
+
+        return array_values(array_filter($backups, is_array(...)));
+    }
+
+    /**
      * @return array<int|string, mixed>
      */
     public function composeDeployments(string $composeId): array

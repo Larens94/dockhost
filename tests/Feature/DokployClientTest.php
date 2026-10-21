@@ -379,6 +379,7 @@ class DokployClientTest extends TestCase
             'backupType' => 'compose',
             'composeId' => 'compose-1',
             'database' => 'd_site',
+            'serviceName' => 'mariadb',
         ]);
         $this->assertSame('bk-1', $client->idFrom($created, 'backupId'));
 
@@ -389,6 +390,7 @@ class DokployClientTest extends TestCase
         );
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/backup.create'
-            && $request['database'] === 'd_site');
+            && $request['database'] === 'd_site'
+            && $request['serviceName'] === 'mariadb');
     }
 }
