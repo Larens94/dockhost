@@ -26,4 +26,8 @@ return [
 
     'public_host' => env('DOKPLOY_PUBLIC_HOST', 'cloud.silicoreautomation.com'),
 
+    'domain_backups_enabled' => (bool) env('DOKPLOY_DOMAIN_BACKUPS', true),
+
+    'compose_mariadb_service_name' => env('DOKPLOY_COMPOSE_MARIADB_SERVICE', 'mariadb'),
+
 ];

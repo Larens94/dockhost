@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'domain_id',
     'infrastructure_environment_id',
     'kind',
+    'storage_provider',
+    'dokploy_backup_id',
     'status',
     'disk_path',
     'bytes',

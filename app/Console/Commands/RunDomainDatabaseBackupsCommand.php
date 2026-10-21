@@ -27,6 +27,12 @@ class RunDomainDatabaseBackupsCommand extends Command
 {
     public function handle(DomainBackupManager $backups): int
     {
+        if (config('dokploy.domain_backups_enabled')) {
+            $this->info('Dokploy domain backups enabled — automatic dumps run on Dokploy; skipping local PDO backups.');
+
+            return self::SUCCESS;
+        }
+
         $query = Domain::query()
             ->where('backup_enabled', true)
             ->whereHas('databaseAccounts', fn ($accounts) => $accounts->where('engine', DatabaseEngine::Mysql))

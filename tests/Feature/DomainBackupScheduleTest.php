@@ -48,6 +48,8 @@ class DomainBackupScheduleTest extends TestCase
 
     public function test_scheduled_command_runs_due_domain_and_skips_recent(): void
     {
+        config(['dokploy.domain_backups_enabled' => false]);
+
         $due = Domain::factory()->create([
             'backup_enabled' => true,
             'backup_frequency' => 'daily',

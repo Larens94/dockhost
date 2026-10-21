@@ -25,18 +25,21 @@ use App\Http\Requests\StoreInfrastructureRequest;
 use App\Http\Requests\StoreInfrastructureSftpUserRequest;
 use App\Http\Requests\UpdateInfrastructureRequest;
 use App\Models\Infrastructure;
+use App\Services\Dokploy\DokployClient;
 use App\Services\Hosting\AccessAccountManager;
 use App\Services\Infra\ComposeRuntimeInspector;
 use App\Services\Infra\ComposeTemplate;
 use App\Services\Infra\InfrastructureEnvironmentProvisioner;
 use App\Services\Infra\InfrastructureProvisioner;
 use App\Services\Infra\MysqlCredentialHealer;
+use App\Support\DokployDestinationPresentation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
+use Throwable;
 
 class InfrastructureController extends Controller
 {
@@ -97,8 +100,21 @@ class InfrastructureController extends Controller
             'minio_root_password',
         ]);
 
+        $backupDestinations = [];
+
+        if (filled(config('dokploy.url')) && filled(config('dokploy.api_key'))) {
+            try {
+                $backupDestinations = DokployDestinationPresentation::forSelect(
+                    app(DokployClient::class)->allDestinations(),
+                );
+            } catch (Throwable) {
+                $backupDestinations = [];
+            }
+        }
+
         return Inertia::render('Infrastructures/Show', [
             'infrastructure' => $infrastructure,
+            'dokployBackupDestinations' => $backupDestinations,
             'credentials' => $infrastructure->stackCredentials(),
             'phpmyadmin_suggested_host' => $this->composeTemplate->phpmyadminHostname($infrastructure->slug),
             'pgadmin_suggested_host' => $this->composeTemplate->pgadminHostname($infrastructure->slug),
@@ -220,9 +236,28 @@ class InfrastructureController extends Controller
         Infrastructure $infrastructure,
         InfrastructureProvisioner $provisioner,
     ): RedirectResponse {
-        $provisioner->updateStack($infrastructure, $request->validated('enabled_services'));
+        $validated = $request->validated();
 
-        return $this->redirectToShow($infrastructure);
+        if (array_key_exists('enabled_services', $validated)) {
+            $provisioner->updateStack($infrastructure, $validated['enabled_services']);
+        }
+
+        if (array_key_exists('dokploy_backup_destination_id', $validated)) {
+            $destinationId = $validated['dokploy_backup_destination_id'];
+            $infrastructure->update([
+                'dokploy_backup_destination_id' => is_string($destinationId) && $destinationId !== ''
+                    ? $destinationId
+                    : null,
+            ]);
+        }
+
+        $redirect = $this->redirectToShow($infrastructure);
+
+        if (array_key_exists('dokploy_backup_destination_id', $validated)) {
+            return $redirect->with('success', __('panel.infrastructures.backup_destination_saved'));
+        }
+
+        return $redirect;
     }
 
     public function resetMysqlDatadir(

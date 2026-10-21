@@ -53,6 +53,7 @@ use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Dokploy\DokployApplicationAttacher;
 use App\Services\Hosting\AccessAccountManager;
+use App\Services\Hosting\DokployDomainBackupService;
 use App\Services\Hosting\DomainAliasManager;
 use App\Services\Hosting\DomainBackupManager;
 use App\Services\Hosting\DomainProvisioner;
@@ -67,6 +68,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class DomainController extends Controller
 {
@@ -118,7 +120,7 @@ class DomainController extends Controller
             ->with('revealed_credential', $accounts->revealInitialDomainAccess($domain));
     }
 
-    public function show(Domain $domain): Response
+    public function show(Domain $domain, DokployDomainBackupService $dokployBackups): Response
     {
         $user = request()->user();
         abort_unless($user instanceof User, 404);
@@ -187,6 +189,7 @@ class DomainController extends Controller
             'phpSettingsApplicable' => ($domain->stack ?? DomainStack::None)->createsApplication(),
             'siteHosting' => app(DomainSiteEnvManager::class)->panelState($domain),
             'databaseImport' => PanelDatabaseImportLimits::inertiaPayload(),
+            'dokployBackups' => $this->dokployBackupPanelState($domain, $dokployBackups),
         ]);
     }
 
@@ -395,7 +398,7 @@ class DomainController extends Controller
 
         try {
             $this->emailSiteCredentialIfPossible($request, $domain, $accessMailer, $revealed);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Password must still be shown once in the panel even if mail fails.
         }
 
@@ -438,6 +441,7 @@ class DomainController extends Controller
     public function updateBackupSettings(
         Request $request,
         Domain $domain,
+        DokployDomainBackupService $dokployBackups,
     ): RedirectResponse {
         $validated = $request->validate([
             'backup_enabled' => ['sometimes', 'boolean'],
@@ -451,8 +455,29 @@ class DomainController extends Controller
             'backup_retain_days' => (int) $validated['backup_retain_days'],
         ]);
 
+        try {
+            $dokployBackups->syncSettings($domain->refresh());
+        } catch (Throwable) {
+            // Dokploy sync is best-effort; panel settings are already saved.
+        }
+
         return $this->redirectToDomain($domain, 'database')
             ->with('success', __('panel.domains.show.backup_settings_saved'));
+    }
+
+    public function restoreDokployBackupFile(
+        Request $request,
+        Domain $domain,
+        DokployDomainBackupService $dokployBackups,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'backup_file' => ['required', 'string', 'max:2048'],
+        ]);
+
+        $dokployBackups->restoreRemoteFile($domain, $validated['backup_file']);
+
+        return $this->redirectToDomain($domain, 'database')
+            ->with('success', __('panel.domains.show.backup_restored_remote'));
     }
 
     public function restoreDatabaseBackup(
@@ -721,5 +746,25 @@ class DomainController extends Controller
         }
 
         return $payload;
+    }
+
+    /**
+     * @return array{enabled: bool, configured: bool, remote_files: list<array<string, mixed>>}
+     */
+    private function dokployBackupPanelState(Domain $domain, DokployDomainBackupService $dokployBackups): array
+    {
+        $enabled = $dokployBackups->isEnabled();
+        $infrastructure = $domain->infrastructure;
+        $configured = $enabled
+            && filled($infrastructure?->dokploy_compose_id)
+            && filled($infrastructure?->dokploy_backup_destination_id);
+
+        $remoteFiles = $configured ? $dokployBackups->listRemoteFiles($domain) : [];
+
+        return [
+            'enabled' => $enabled,
+            'configured' => $configured,
+            'remote_files' => $remoteFiles,
+        ];
     }
 }

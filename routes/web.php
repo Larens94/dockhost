@@ -95,6 +95,8 @@ Route::middleware('auth')->group(function () {
         ->name('domains.backups.settings');
     Route::post('domains/{domain}/backups/{backup}/restore', [DomainController::class, 'restoreDatabaseBackup'])
         ->name('domains.backups.restore');
+    Route::post('domains/{domain}/backups/dokploy/restore', [DomainController::class, 'restoreDokployBackupFile'])
+        ->name('domains.backups.dokploy.restore');
     Route::post('domains/{domain}/database/import', [DomainController::class, 'importDatabaseDump'])
         ->name('domains.database.import');
     Route::post('domains/{domain}/aliases', [DomainController::class, 'storeAlias'])

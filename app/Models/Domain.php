@@ -64,6 +64,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'backup_frequency',
     'backup_retain_days',
     'backup_last_ran_at',
+    'dokploy_backup_id',
 ])]
 class Domain extends Model
 {

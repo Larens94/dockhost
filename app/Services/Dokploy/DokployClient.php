@@ -565,6 +565,102 @@ class DokployClient
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    public function allDestinations(): array
+    {
+        $json = $this->getJson('destination.all', [], 30);
+
+        return $this->unwrapList($json);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function createBackup(array $payload): array
+    {
+        return $this->post('backup.create', $payload, 60);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function updateBackup(array $payload): array
+    {
+        return $this->post('backup.update', $payload, 60);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function removeBackup(string $backupId): array
+    {
+        return $this->post('backup.remove', ['backupId' => $backupId], 30);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function backupOne(string $backupId): array
+    {
+        $json = $this->getJson('backup.one', ['backupId' => $backupId], 30);
+
+        return is_array($json) ? $this->jsonArray($json) : [];
+    }
+
+    public function manualBackupCompose(string $backupId): array
+    {
+        return $this->post('backup.manualBackupCompose', ['backupId' => $backupId], 600);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function listBackupFiles(string $destinationId, string $search): array
+    {
+        $json = $this->getJson('backup.listBackupFiles', [
+            'destinationId' => $destinationId,
+            'search' => $search,
+        ], 120);
+
+        return $this->unwrapList($json);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function restoreComposeBackup(array $payload): array
+    {
+        return $this->post('backup.restoreBackup', $payload, 600);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function unwrapList(mixed $json): array
+    {
+        if (! is_array($json)) {
+            return [];
+        }
+
+        if (array_is_list($json)) {
+            return array_values(array_filter($json, is_array(...)));
+        }
+
+        foreach (['data', 'result', 'result.data', 'destinations', 'backups', 'files'] as $path) {
+            $nested = data_get($json, $path);
+
+            if (is_array($nested) && array_is_list($nested)) {
+                return array_values(array_filter($nested, is_array(...)));
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     public function idFrom(array $payload, string $key): string
@@ -581,7 +677,9 @@ class DokployClient
             $key === 'projectId' ? ($payload['id'] ?? null) : null,
             $key === 'environmentId' ? ($payload['id'] ?? null) : null,
             $key === 'composeId' ? ($payload['id'] ?? null) : null,
+            $key === 'backupId' ? ($payload['id'] ?? null) : null,
             $key === 'networkId' ? ($payload['id'] ?? null) : null,
+            data_get($payload, 'backup.'.$key),
             data_get($payload, 'network.'.$key),
         ] as $value) {
             if (is_string($value) && $value !== '') {

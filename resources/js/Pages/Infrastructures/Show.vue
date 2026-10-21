@@ -41,6 +41,10 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    dokployBackupDestinations: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const stackCredentialRows = computed(() => {
@@ -130,6 +134,16 @@ const tabClass = (tab) =>
 const form = useForm({
     enabled_services: props.services.filter((service) => service.enabled).map((service) => service.key),
 });
+
+const backupDestinationForm = useForm({
+    dokploy_backup_destination_id: props.infrastructure.dokploy_backup_destination_id || '',
+});
+
+const saveBackupDestination = () => {
+    backupDestinationForm.put(actionUrl(`/infrastructures/${props.infrastructure.id}`), {
+        preserveScroll: true,
+    });
+};
 
 const phpmyadminForm = useForm({});
 const pgadminForm = useForm({});
@@ -692,6 +706,44 @@ const sftpPublicHost = computed(() => {
         </div>
 
         <section v-show="currentTab === 'dokploy'" class="min-w-0 space-y-4">
+            <div class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+                <h2 class="text-base font-semibold">{{ t('infrastructures.backup_destination') }}</h2>
+                <p class="mt-1 text-sm text-zinc-500">{{ t('infrastructures.backup_destination_help') }}</p>
+                <p
+                    v-if="!dokployBackupDestinations.length"
+                    class="mt-3 text-sm text-amber-800"
+                >
+                    {{ t('infrastructures.backup_destinations_empty') }}
+                </p>
+                <form v-else class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="saveBackupDestination">
+                    <div class="min-w-[16rem] flex-1">
+                        <label class="block text-sm font-medium" :for="`backup-dest-${infrastructure.id}`">
+                            {{ t('infrastructures.backup_destination') }}
+                        </label>
+                        <select
+                            :id="`backup-dest-${infrastructure.id}`"
+                            v-model="backupDestinationForm.dokploy_backup_destination_id"
+                            class="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+                        >
+                            <option value="">{{ t('infrastructures.backup_destination_none') }}</option>
+                            <option
+                                v-for="dest in dokployBackupDestinations"
+                                :key="dest.id"
+                                :value="dest.id"
+                            >
+                                {{ dest.label }}
+                            </option>
+                        </select>
+                    </div>
+                    <button
+                        type="submit"
+                        class="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                        :disabled="backupDestinationForm.processing"
+                    >
+                        {{ t('infrastructures.backup_destination_save') }}
+                    </button>
+                </form>
+            </div>
             <div class="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>

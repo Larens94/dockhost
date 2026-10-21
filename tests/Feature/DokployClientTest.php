@@ -349,4 +349,46 @@ class DokployClientTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/project.one?projectId=proj-1');
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/settings.cleanUnusedVolumes');
     }
+
+    public function test_backup_and_destination_endpoints(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/destination.all' => Http::response([
+                ['destinationId' => 'dest-1', 'name' => 'prod-s3', 'bucket' => 'backups'],
+            ]),
+            'https://dokploy.test/api/backup.create' => Http::response(['backupId' => 'bk-1']),
+            'https://dokploy.test/api/backup.update' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/backup.remove' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/backup.one*' => Http::response(['backupId' => 'bk-1', 'enabled' => true]),
+            'https://dokploy.test/api/backup.manualBackupCompose' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/backup.listBackupFiles*' => Http::response([
+                ['Name' => 'dump.sql', 'Path' => 'infra1/site.sql', 'IsDir' => false, 'Size' => 42],
+            ]),
+            'https://dokploy.test/api/backup.restoreBackup' => Http::response(['ok' => true]),
+        ]);
+
+        $client = new DokployClient;
+
+        $this->assertSame(
+            [['destinationId' => 'dest-1', 'name' => 'prod-s3', 'bucket' => 'backups']],
+            $client->allDestinations(),
+        );
+
+        $created = $client->createBackup([
+            'backupType' => 'compose',
+            'composeId' => 'compose-1',
+            'database' => 'd_site',
+        ]);
+        $this->assertSame('bk-1', $client->idFrom($created, 'backupId'));
+
+        $this->assertSame(['ok' => true], $client->manualBackupCompose('bk-1'));
+        $this->assertSame(
+            [['Name' => 'dump.sql', 'Path' => 'infra1/site.sql', 'IsDir' => false, 'Size' => 42]],
+            $client->listBackupFiles('dest-1', 'infra1/'),
+        );
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/backup.create'
+            && $request['database'] === 'd_site');
+    }
 }

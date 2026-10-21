@@ -1,13 +1,12 @@
 <?php
 
-
 // UpdateInfrastructureRequest.php — UpdateInfrastructureRequest module.
 //
 // exports: UpdateInfrastructureRequest | UpdateInfrastructureRequest::authorize(): bool | UpdateInfrastructureRequest::rules(): array
 // used_by: app/Http/Controllers/InfrastructureController.php
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace App\Http\Requests;
 
@@ -32,6 +31,7 @@ class UpdateInfrastructureRequest extends FormRequest
         return [
             'enabled_services' => ['nullable', 'array'],
             'enabled_services.*' => ['string', Rule::in($allowed)],
+            'dokploy_backup_destination_id' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

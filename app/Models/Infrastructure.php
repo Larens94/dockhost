@@ -64,6 +64,7 @@ use Illuminate\Support\Collection;
     'dokploy_project_id',
     'dokploy_environment_id',
     'dokploy_compose_id',
+    'dokploy_backup_destination_id',
     'status',
     'mysql_host',
     'mysql_port',

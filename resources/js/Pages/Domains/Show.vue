@@ -117,6 +117,14 @@ const props = defineProps({
             php_post_max_size: '128M',
         }),
     },
+    dokployBackups: {
+        type: Object,
+        default: () => ({
+            enabled: false,
+            configured: false,
+            remote_files: [],
+        }),
+    },
 });
 
 const isLaravelStack = computed(() => (props.domain.stack || 'none') === 'laravel');
@@ -425,6 +433,27 @@ const restoreDatabaseBackup = (backupId) => {
     useForm({}).post(actionUrl(`/domains/${props.domain.id}/backups/${backupId}/restore`), {
         preserveScroll: true,
     });
+};
+
+const restoreDokployBackupFile = (backupFile) => {
+    if (!window.confirm(t('domains.show.restore_db_backup'))) {
+        return;
+    }
+
+    useForm({ backup_file: backupFile }).post(
+        actionUrl(`/domains/${props.domain.id}/backups/dokploy/restore`),
+        { preserveScroll: true },
+    );
+};
+
+const dokployBackupFileLabel = (file) => {
+    const name = file.Name || file.Path || 'backup';
+
+    if (file.Size) {
+        return `${name} · ${file.Size} B`;
+    }
+
+    return name;
 };
 
 const alignFromDomain = () => {
@@ -1147,7 +1176,15 @@ const updateMemberRole = (memberId, role) => {
                 :class="sectionTone.backup"
             >
                 <h2 class="text-base font-semibold" :class="headingTone.backup">{{ t('domains.show.backups') }}</h2>
-                <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.backups_help') }}</p>
+                <p class="mt-1 text-sm text-zinc-500">
+                    {{ dokployBackups.enabled ? t('domains.show.backup_dokploy_help') : t('domains.show.backups_help') }}
+                </p>
+                <p
+                    v-if="dokployBackups.enabled && !dokployBackups.configured"
+                    class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                >
+                    {{ t('domains.show.backup_dokploy_missing_destination') }}
+                </p>
 
                 <form class="mt-4 grid gap-3 sm:grid-cols-2" @submit.prevent="saveBackupSettings">
                     <label class="flex items-center gap-2 text-sm text-zinc-800 sm:col-span-2">
@@ -1212,6 +1249,9 @@ const updateMemberRole = (memberId, role) => {
                     >
                         <span>
                             #{{ backup.id }} · {{ backup.kind }} · {{ backup.status }}
+                            <span v-if="backup.storage_provider === 'dokploy'" class="text-zinc-500">
+                                · {{ t('domains.show.backup_storage_dokploy') }}
+                            </span>
                             <span v-if="backup.bytes" class="text-zinc-500"> · {{ backup.bytes }} B</span>
                         </span>
                         <button
@@ -1225,6 +1265,30 @@ const updateMemberRole = (memberId, role) => {
                     </li>
                 </ul>
                 <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_backups') }}</p>
+
+                <div
+                    v-if="dokployBackups.enabled && dokployBackups.configured && dokployBackups.remote_files?.length"
+                    class="mt-6 border-t border-neutral-100 pt-4"
+                >
+                    <h3 class="text-sm font-semibold">{{ t('domains.show.backup_s3_files') }}</h3>
+                    <ul class="mt-3 space-y-2">
+                        <li
+                            v-for="file in dokployBackups.remote_files"
+                            :key="file.Path || file.Name"
+                            class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm"
+                        >
+                            <span class="break-all">{{ dokployBackupFileLabel(file) }}</span>
+                            <button
+                                v-if="file.Path"
+                                type="button"
+                                class="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-100"
+                                @click="restoreDokployBackupFile(file.Path)"
+                            >
+                                {{ t('domains.show.restore_db_backup') }}
+                            </button>
+                        </li>
+                    </ul>
+                </div>
 
                 <div v-if="alignTargets.length" class="mt-6 border-t border-neutral-100 pt-4">
                     <h3 class="text-sm font-semibold">{{ t('domains.show.align_from') }}</h3>

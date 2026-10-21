@@ -35,10 +35,17 @@ use Throwable;
 
 class DomainBackupManager
 {
-    public function __construct(private MysqlCredentialHealer $healer) {}
+    public function __construct(
+        private MysqlCredentialHealer $healer,
+        private DokployDomainBackupService $dokployBackups,
+    ) {}
 
     public function createDatabaseBackup(Domain $domain): DomainBackup
     {
+        if ($this->dokployBackups->isEnabled()) {
+            return $this->dokployBackups->runManualBackup($domain);
+        }
+
         $account = $domain->databaseAccounts()->orderBy('id')->first();
 
         if (! $account instanceof DatabaseAccount || $account->engine !== DatabaseEngine::Mysql) {
@@ -95,6 +102,20 @@ class DomainBackupManager
 
     public function restoreDatabaseBackup(DomainBackup $backup, ?Domain $into = null): void
     {
+        if ($backup->storage_provider === 'dokploy') {
+            $domain = $into ?? $backup->domain;
+
+            if (! $domain instanceof Domain) {
+                throw ValidationException::withMessages([
+                    'backup' => 'Dominio o account database assente per il restore.',
+                ]);
+            }
+
+            $this->dokployBackups->restoreDomainBackup($backup, $domain);
+
+            return;
+        }
+
         if ($backup->kind !== 'database' || $backup->status !== 'completed' || ! filled($backup->disk_path)) {
             throw ValidationException::withMessages([
                 'backup' => 'Backup non ripristinabile (stato o tipo non validi).',

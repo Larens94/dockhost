@@ -24,7 +24,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withSchedule(function (Schedule $schedule): void {
-        $schedule->command('domains:run-database-backups')->hourly();
+        if (config('dokploy.domain_backups_enabled')) {
+            $schedule->command('domains:provision-dokploy-backups')->dailyAt('02:15');
+        } else {
+            $schedule->command('domains:run-database-backups')->hourly();
+        }
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
