@@ -61,6 +61,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'stack',
     'php_settings',
     'backup_enabled',
+    'backup_schedule',
     'backup_frequency',
     'backup_retain_days',
     'backup_last_ran_at',

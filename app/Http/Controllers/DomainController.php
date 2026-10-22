@@ -61,6 +61,7 @@ use App\Services\Hosting\DomainSiteEnvManager;
 use App\Services\Hosting\EnvironmentAligner;
 use App\Services\Infra\MysqlProvisioner;
 use App\Services\Panel\DomainAccessMailer;
+use App\Support\DomainBackupSchedule;
 use App\Support\DomainPhpSettings;
 use App\Support\PanelDatabaseImportLimits;
 use Illuminate\Http\RedirectResponse;
@@ -190,6 +191,7 @@ class DomainController extends Controller
             'siteHosting' => app(DomainSiteEnvManager::class)->panelState($domain),
             'databaseImport' => PanelDatabaseImportLimits::inertiaPayload(),
             'dokployBackups' => $this->dokployBackupPanelState($domain, $dokployBackups),
+            'backupSchedulePresets' => DomainBackupSchedule::presetsForInertia(),
         ]);
     }
 
@@ -434,8 +436,14 @@ class DomainController extends Controller
     ): RedirectResponse {
         $backup = $backups->createDatabaseBackup($domain);
 
+        $message = $backup->storage_provider === 'dokploy'
+            && $backup->status === 'completed'
+            && ! filled($backup->meta['backup_file'] ?? null)
+            ? __('panel.domains.show.backup_triggered', ['id' => $backup->id])
+            : __('panel.domains.show.backup_created', ['id' => $backup->id]);
+
         return $this->redirectToDomain($domain, 'database')
-            ->with('success', __('panel.domains.show.backup_created', ['id' => $backup->id]));
+            ->with('success', $message);
     }
 
     public function updateBackupSettings(
@@ -445,13 +453,27 @@ class DomainController extends Controller
     ): RedirectResponse {
         $validated = $request->validate([
             'backup_enabled' => ['sometimes', 'boolean'],
-            'backup_frequency' => ['required', 'in:daily,weekly'],
+            'backup_schedule' => ['required', 'string', 'max:32'],
+            'backup_schedule_custom' => ['nullable', 'string', 'max:32'],
             'backup_retain_days' => ['required', 'integer', 'min:1', 'max:365'],
         ]);
 
+        $schedule = $validated['backup_schedule'] === '__custom__'
+            ? trim((string) ($validated['backup_schedule_custom'] ?? ''))
+            : trim($validated['backup_schedule']);
+
+        if (! DomainBackupSchedule::isAllowed($schedule)) {
+            throw ValidationException::withMessages([
+                'backup_schedule' => __('panel.domains.show.backup_schedule_invalid'),
+            ]);
+        }
+
+        $legacyFrequency = in_array($schedule, ['0 3 * * 0', '0 0 * * 0'], true) ? 'weekly' : 'daily';
+
         $domain->update([
             'backup_enabled' => (bool) ($validated['backup_enabled'] ?? false),
-            'backup_frequency' => $validated['backup_frequency'],
+            'backup_schedule' => $schedule,
+            'backup_frequency' => $legacyFrequency,
             'backup_retain_days' => (int) $validated['backup_retain_days'],
         ]);
 

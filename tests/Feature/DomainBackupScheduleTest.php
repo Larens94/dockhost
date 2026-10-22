@@ -35,14 +35,14 @@ class DomainBackupScheduleTest extends TestCase
         $this->actingAs($user)
             ->post(route('domains.backups.settings', $domain), [
                 'backup_enabled' => true,
-                'backup_frequency' => 'daily',
+                'backup_schedule' => '0 * * * *',
                 'backup_retain_days' => 30,
             ])
             ->assertRedirect(route('domains.show', ['domain' => $domain, 'tab' => 'database']));
 
         $domain->refresh();
         $this->assertTrue($domain->backup_enabled);
-        $this->assertSame('daily', $domain->backup_frequency);
+        $this->assertSame('0 * * * *', $domain->backup_schedule);
         $this->assertSame(30, $domain->backup_retain_days);
     }
 

@@ -125,6 +125,10 @@ const props = defineProps({
             remote_files: [],
         }),
     },
+    backupSchedulePresets: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const isLaravelStack = computed(() => (props.domain.stack || 'none') === 'laravel');
@@ -328,9 +332,23 @@ const databaseUserForm = useForm({
     privilege: 'all',
 });
 const backupForm = useForm({});
+const resolveInitialBackupSchedule = () => {
+    const saved = props.domain.backup_schedule || '0 3 * * *';
+    const presetValues = props.backupSchedulePresets.map((row) => row.value);
+
+    if (presetValues.includes(saved)) {
+        return { schedule: saved, custom: '' };
+    }
+
+    return { schedule: '__custom__', custom: saved };
+};
+
+const initialBackupSchedule = resolveInitialBackupSchedule();
+
 const backupSettingsForm = useForm({
     backup_enabled: props.domain.backup_enabled !== false,
-    backup_frequency: props.domain.backup_frequency || 'daily',
+    backup_schedule: initialBackupSchedule.schedule,
+    backup_schedule_custom: initialBackupSchedule.custom,
     backup_retain_days: props.domain.backup_retain_days || 14,
 });
 const importDumpForm = useForm({
@@ -430,13 +448,17 @@ const saveBackupSettings = () => {
 };
 
 const restoreDatabaseBackup = (backupId) => {
+    if (!window.confirm(t('domains.show.backup_restore_confirm', { fqdn: props.domain.fqdn }))) {
+        return;
+    }
+
     useForm({}).post(actionUrl(`/domains/${props.domain.id}/backups/${backupId}/restore`), {
         preserveScroll: true,
     });
 };
 
 const restoreDokployBackupFile = (backupFile) => {
-    if (!window.confirm(t('domains.show.restore_db_backup'))) {
+    if (!window.confirm(t('domains.show.backup_restore_confirm', { fqdn: props.domain.fqdn }))) {
         return;
     }
 
@@ -1191,18 +1213,36 @@ const updateMemberRole = (memberId, role) => {
                         <input v-model="backupSettingsForm.backup_enabled" type="checkbox" class="rounded border-zinc-300" />
                         {{ t('domains.show.backup_enabled') }}
                     </label>
-                    <div>
-                        <label class="block text-sm font-medium" :for="`backup-freq-${domain.id}`">
-                            {{ t('domains.show.backup_frequency') }}
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium" :for="`backup-schedule-${domain.id}`">
+                            {{ t('domains.show.backup_schedule') }}
                         </label>
                         <select
-                            :id="`backup-freq-${domain.id}`"
-                            v-model="backupSettingsForm.backup_frequency"
+                            :id="`backup-schedule-${domain.id}`"
+                            v-model="backupSettingsForm.backup_schedule"
                             :class="inputClass"
                         >
-                            <option value="daily">{{ t('domains.show.backup_frequency_daily') }}</option>
-                            <option value="weekly">{{ t('domains.show.backup_frequency_weekly') }}</option>
+                            <option
+                                v-for="preset in backupSchedulePresets"
+                                :key="preset.value"
+                                :value="preset.value"
+                            >
+                                {{ preset.label }}
+                            </option>
+                            <option value="__custom__">{{ t('domains.show.backup_schedule_custom') }}</option>
                         </select>
+                        <div v-if="backupSettingsForm.backup_schedule === '__custom__'" class="mt-2">
+                            <input
+                                v-model="backupSettingsForm.backup_schedule_custom"
+                                type="text"
+                                class="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-sm"
+                                placeholder="0 3 * * *"
+                            />
+                            <p class="mt-1 text-xs text-zinc-500">{{ t('domains.show.backup_schedule_custom_help') }}</p>
+                        </div>
+                        <p v-if="backupSettingsForm.errors.backup_schedule" class="mt-1 text-sm text-red-600">
+                            {{ backupSettingsForm.errors.backup_schedule }}
+                        </p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium" :for="`backup-retain-${domain.id}`">

@@ -19,6 +19,7 @@ use App\Models\Domain;
 use App\Models\DomainBackup;
 use App\Models\Infrastructure;
 use App\Services\Dokploy\DokployClient;
+use App\Support\DomainBackupSchedule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -69,7 +70,16 @@ class DokployDomainBackupService
                 }
 
                 $created = $this->dokploy->createBackup($payload);
-                $newId = $this->dokploy->idFrom($created, 'backupId');
+
+                try {
+                    $newId = $this->dokploy->idFrom($created, 'backupId');
+                } catch (Throwable) {
+                    $newId = $this->findExistingComposeBackupId($context, $payload);
+                }
+
+                if (! is_string($newId) || $newId === '') {
+                    throw new \RuntimeException('Dokploy did not return backupId after create.');
+                }
 
                 $locked->update(['dokploy_backup_id' => $newId]);
             });
@@ -136,21 +146,6 @@ class DokployDomainBackupService
 
         try {
             $this->dokploy->manualBackupCompose($scheduleId);
-
-            $latest = $this->latestRemoteFile($domain, $context);
-
-            $record->update([
-                'status' => 'completed',
-                'bytes' => is_int($latest['Size'] ?? null) ? $latest['Size'] : null,
-                'error' => null,
-                'meta' => [
-                    ...($record->meta ?? []),
-                    'backup_file' => $latest['Path'] ?? null,
-                    'backup_name' => $latest['Name'] ?? null,
-                ],
-            ]);
-
-            $domain->update(['backup_last_ran_at' => now()]);
         } catch (Throwable $exception) {
             $record->update([
                 'status' => 'failed',
@@ -163,6 +158,22 @@ class DokployDomainBackupService
                 ]),
             ]);
         }
+
+        $domain->update(['backup_last_ran_at' => now()]);
+
+        $latest = $this->pollLatestRemoteFile($domain, $context);
+
+        $record->update([
+            'status' => 'completed',
+            'bytes' => is_int($latest['Size'] ?? null) ? $latest['Size'] : null,
+            'error' => null,
+            'meta' => [
+                ...($record->meta ?? []),
+                'backup_file' => $latest['Path'] ?? null,
+                'backup_name' => $latest['Name'] ?? null,
+                'triggered' => true,
+            ],
+        ]);
 
         return $record->refresh();
     }
@@ -388,6 +399,8 @@ class DokployDomainBackupService
         $wantedPrefix = (string) ($payload['prefix'] ?? '');
         $wantedDestination = (string) ($payload['destinationId'] ?? '');
 
+        $matches = [];
+
         foreach ($backups as $backup) {
             if (($backup['database'] ?? null) !== $wantedDatabase) {
                 continue;
@@ -411,11 +424,44 @@ class DokployDomainBackupService
             $id = $backup['backupId'] ?? $backup['id'] ?? null;
 
             if (is_string($id) && $id !== '') {
-                return $id;
+                $matches[] = $backup;
             }
         }
 
-        return null;
+        if ($matches === []) {
+            return null;
+        }
+
+        usort($matches, fn (array $a, array $b): int => strcmp(
+            (string) ($b['createdAt'] ?? $b['backupId'] ?? ''),
+            (string) ($a['createdAt'] ?? $a['backupId'] ?? ''),
+        ));
+
+        $chosen = $matches[0];
+        $id = $chosen['backupId'] ?? $chosen['id'] ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
+    /**
+     * @param  array{database_name: string, destination_id: string, compose_id: string, root_password: string}  $context
+     * @return array<string, mixed>
+     */
+    private function pollLatestRemoteFile(Domain $domain, array $context): array
+    {
+        for ($attempt = 0; $attempt < 6; $attempt++) {
+            $latest = $this->latestRemoteFile($domain, $context);
+
+            if ($latest !== []) {
+                return $latest;
+            }
+
+            if ($attempt < 5) {
+                sleep(2);
+            }
+        }
+
+        return [];
     }
 
     private function backupPrefix(Domain $domain): string
@@ -428,9 +474,10 @@ class DokployDomainBackupService
 
     private function cronFor(Domain $domain): string
     {
-        return ($domain->backup_frequency ?: 'daily') === 'weekly'
-            ? '0 3 * * 0'
-            : '0 3 * * *';
+        return DomainBackupSchedule::normalize(
+            is_string($domain->backup_schedule) ? $domain->backup_schedule : null,
+            is_string($domain->backup_frequency) ? $domain->backup_frequency : null,
+        );
     }
 
     private function keepLatestCount(Domain $domain): int
@@ -473,7 +520,7 @@ class DokployDomainBackupService
             $files,
             fn (array $file): bool => ($file['IsDir'] ?? true) === false
                 && is_string($file['Name'] ?? null)
-                && str_contains(strtolower($file['Name']), '.sql'),
+                && $this->looksLikeSqlDump($file['Name']),
         ));
 
         if ($sqlFiles === []) {
@@ -486,5 +533,14 @@ class DokployDomainBackupService
         ));
 
         return $sqlFiles[0];
+    }
+
+    private function looksLikeSqlDump(string $name): bool
+    {
+        $lower = strtolower($name);
+
+        return str_contains($lower, '.sql')
+            || str_ends_with($lower, '.sql.gz')
+            || str_ends_with($lower, '.gz');
     }
 }
