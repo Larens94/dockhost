@@ -793,7 +793,7 @@ class DomainController extends Controller
             'enabled' => $enabled,
             'configured' => $configured,
             'remote_files' => $remoteFiles,
-            'prefix' => $configured ? $dokployBackups->storagePrefix($domain) : null,
+            'prefix' => $configured ? $dokployBackups->storageBrowsePrefix($domain) : null,
         ];
     }
 }

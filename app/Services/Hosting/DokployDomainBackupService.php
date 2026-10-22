@@ -186,6 +186,26 @@ class DokployDomainBackupService
         return $this->backupPrefix($domain);
     }
 
+    public function storageBrowsePrefix(Domain $domain): string
+    {
+        $context = $this->resolveContext($domain);
+
+        if ($context === null) {
+            return $this->backupPrefix($domain);
+        }
+
+        $searches = $this->s3DirectoryListingSearches($domain, $context);
+        $panelPrefix = $this->backupPrefix($domain);
+
+        foreach ($searches as $search) {
+            if (str_contains(rtrim($search, '/'), $panelPrefix)) {
+                return rtrim($search, '/');
+            }
+        }
+
+        return $panelPrefix;
+    }
+
     public function listRemoteFiles(Domain $domain): array
     {
         $context = $this->resolveContext($domain);
@@ -519,43 +539,33 @@ class DokployDomainBackupService
     private function discoverRemoteSqlFiles(Domain $domain, array $context): array
     {
         $fqdn = Str::lower((string) $domain->fqdn);
-        $prefix = $this->backupPrefix($domain);
+        $prefixLower = strtolower($this->backupPrefix($domain));
         $databaseName = strtolower($context['database_name']);
-
-        $searches = array_values(array_unique(array_filter([
-            $prefix,
-            $fqdn,
-            $databaseName,
-            Str::before($prefix, '/'),
-        ])));
-
         $byPath = [];
 
-        foreach ($searches as $search) {
-            try {
-                $batch = $this->dokploy->listBackupFiles($context['destination_id'], $search);
-            } catch (Throwable) {
+        foreach ($this->s3DirectoryListingSearches($domain, $context) as $directory) {
+            $this->mergeListedBackupEntries(
+                $byPath,
+                $this->listBackupDirectory($context['destination_id'], $directory),
+            );
+        }
+
+        foreach ($byPath as $path => $file) {
+            if (($file['IsDir'] ?? false) !== true) {
                 continue;
             }
 
-            foreach ($batch as $file) {
-                if (! is_array($file)) {
-                    continue;
-                }
+            $pathLower = strtolower((string) $path);
 
-                $pathKey = is_string($file['Path'] ?? null)
-                    ? $file['Path']
-                    : (is_string($file['Name'] ?? null) ? $file['Name'] : null);
-
-                if ($pathKey === null || $pathKey === '') {
-                    continue;
-                }
-
-                $byPath[$pathKey] = $file;
+            if (! str_contains($pathLower, $fqdn)) {
+                continue;
             }
-        }
 
-        $prefixLower = strtolower($prefix);
+            $this->mergeListedBackupEntries(
+                $byPath,
+                $this->listBackupDirectory($context['destination_id'], $path),
+            );
+        }
 
         $filtered = array_values(array_filter(
             $byPath,
@@ -589,6 +599,85 @@ class DokployDomainBackupService
         ));
 
         return $filtered;
+    }
+
+    /**
+     * Dokploy stores compose DB dumps at `{composeAppName}_{service}/{backup.prefix}{file}` on S3.
+     * listBackupFiles lists one directory level; the search string must end with `/` to list files inside the domain folder.
+     *
+     * @param  array{database_name: string, destination_id: string, compose_id: string, root_password: string}  $context
+     * @return list<string>
+     */
+    private function s3DirectoryListingSearches(Domain $domain, array $context): array
+    {
+        $panelPrefix = $this->backupPrefix($domain);
+        $searches = [
+            $this->ensureTrailingSlash($panelPrefix),
+            $this->ensureTrailingSlash(Str::before($panelPrefix, '/')),
+        ];
+
+        try {
+            $compose = $this->dokploy->getCompose($context['compose_id']);
+            $appName = $compose['appName'] ?? $compose['name'] ?? null;
+
+            if (is_string($appName) && $appName !== '') {
+                $serviceName = $this->mariadbServiceName();
+                $s3Root = $serviceName !== '' ? "{$appName}_{$serviceName}" : $appName;
+                $searches[] = $this->ensureTrailingSlash("{$s3Root}/{$panelPrefix}");
+            }
+        } catch (Throwable) {
+            // Fall back to panel prefix searches when compose metadata is unavailable.
+        }
+
+        return array_values(array_unique(array_filter($searches)));
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function listBackupDirectory(string $destinationId, string $directory): array
+    {
+        $directory = $this->ensureTrailingSlash(trim($directory));
+
+        if ($directory === '') {
+            return [];
+        }
+
+        try {
+            return $this->dokploy->listBackupFiles($destinationId, $directory);
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $byPath
+     * @param  list<array<string, mixed>>  $batch
+     */
+    private function mergeListedBackupEntries(array &$byPath, array $batch): void
+    {
+        foreach ($batch as $file) {
+            if (! is_array($file)) {
+                continue;
+            }
+
+            $pathKey = is_string($file['Path'] ?? null)
+                ? $file['Path']
+                : (is_string($file['Name'] ?? null) ? $file['Name'] : null);
+
+            if ($pathKey === null || $pathKey === '') {
+                continue;
+            }
+
+            $byPath[$pathKey] = $file;
+        }
+    }
+
+    private function ensureTrailingSlash(string $path): string
+    {
+        $path = trim($path, '/');
+
+        return $path === '' ? '' : $path.'/';
     }
 
     private function looksLikeSqlDump(string $name): bool

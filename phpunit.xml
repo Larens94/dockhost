@@ -35,8 +35,9 @@
         <env name="APP_KEY" value="base64:2fl+KTV4HMiLGk4YV4GfL0UyYoXnfI/O5LZoxjYEU7w="/>
         <env name="APP_LOCALE" value="it" force="true"/>
         <env name="APP_FALLBACK_LOCALE" value="en" force="true"/>
-        <env name="DOKPLOY_URL" value="https://dokploy.test"/>
-        <env name="DOKPLOY_API_KEY" value="testing"/>
+        <env name="DOKPLOY_URL" value="https://dokploy.test" force="true"/>
+        <env name="DOKPLOY_API_KEY" value="testing" force="true"/>
+        <env name="DOKPLOY_DOMAIN_BACKUPS" value="true" force="true"/>
         <env name="DOKPLOY_PUBLIC_HOST" value="cloud.silicoreautomation.com"/>
         <env name="DOKPLOY_SELF_APPLICATION_ID" value="" force="true"/>
         <env name="INFRA_MYSQL_HOST" value="infra1-mariadb"/>

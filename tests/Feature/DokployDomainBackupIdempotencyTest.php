@@ -10,6 +10,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DatabaseEngine;
 use App\Models\DatabaseAccount;
 use App\Models\Domain;
 use App\Models\Infrastructure;
@@ -74,11 +75,9 @@ class DokployDomainBackupIdempotencyTest extends TestCase
         Http::assertNotSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/backup.create');
     }
 
-    public function test_list_remote_files_finds_sql_under_destination_root_prefix(): void
+    public function test_list_remote_files_finds_sql_under_compose_s3_root(): void
     {
-        config(['dokploy.domain_backups_enabled' => true, 'dokploy.url' => 'https://dokploy.test', 'dokploy.api_key' => 'key']);
-
-        $infrastructure = Infrastructure::factory()->create([
+        $infrastructure = $this->panelInfrastructure([
             'slug' => 'infra1',
             'dokploy_compose_id' => 'compose-1',
             'dokploy_backup_destination_id' => 'dest-1',
@@ -94,30 +93,27 @@ class DokployDomainBackupIdempotencyTest extends TestCase
             'infrastructure_id' => $infrastructure->id,
             'infra_slug' => $infrastructure->slug,
             'database_name' => 'd_neoai_silicoreautomation_com',
+            'engine' => DatabaseEngine::Mysql,
         ]);
 
-        $path = 've_mariadb/infra1/neoai.silicoreautomation.com/2026-10-22T10-50-00.sql.gz';
+        $path = 'infra1-7guive_mariadb/infra1/neoai.silicoreautomation.com/2026-10-22T10-50-00.sql.gz';
 
-        Http::preventStrayRequests();
         Http::fake([
-            'https://dokploy.test/api/backup.listBackupFiles*' => function (Request $request) use ($path) {
-                $search = (string) $request->data()['search'];
-
-                if ($search === 'infra1/neoai.silicoreautomation.com') {
-                    return Http::response([]);
-                }
-
-                if ($search === 'neoai.silicoreautomation.com') {
-                    return Http::response([
-                        ['Name' => '2026-10-22T10-50-00.sql.gz', 'Path' => $path, 'IsDir' => false, 'Size' => 11_600_000],
-                    ]);
-                }
-
-                return Http::response([]);
-            },
+            'https://dokploy.test/api/compose.one*' => Http::response([
+                'composeId' => 'compose-1',
+                'appName' => 'infra1-7guive',
+            ]),
+            'https://dokploy.test/api/backup.listBackupFiles*' => Http::response([
+                ['Name' => '2026-10-22T10-50-00.sql.gz', 'Path' => $path, 'IsDir' => false, 'Size' => 11_600_000],
+            ]),
         ]);
 
-        $files = app(DokployDomainBackupService::class)->listRemoteFiles($domain->refresh());
+        $domain->refresh()->load(['infrastructure', 'databaseAccounts']);
+        $account = $domain->databaseAccounts->first();
+        $this->assertInstanceOf(DatabaseAccount::class, $account);
+        $this->assertSame(DatabaseEngine::Mysql, $account->engine);
+
+        $files = app(DokployDomainBackupService::class)->listRemoteFiles($domain);
 
         $this->assertCount(1, $files);
         $this->assertSame($path, $files[0]['Path']);
