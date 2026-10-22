@@ -126,6 +126,10 @@ class DomainController extends Controller
         $user = request()->user();
         abort_unless($user instanceof User, 404);
 
+        $dokployBackupCatalog = $dokployBackups->isEnabled()
+            && filled($domain->infrastructure?->dokploy_compose_id)
+            && filled($domain->infrastructure?->dokploy_backup_destination_id);
+
         $domain->load([
             'customer',
             'subscription.customer',
@@ -137,7 +141,9 @@ class DomainController extends Controller
             'dokployApplication',
             'infrastructure',
             'infrastructureEnvironment',
-            'backups' => fn ($query) => $query->latest()->limit(20),
+            'backups' => fn ($query) => $dokployBackupCatalog
+                ? $query->where('storage_provider', 'local')->latest()->limit(20)
+                : $query->latest()->limit(20),
         ]);
 
         $canManageAccess = $user->canManageDomainMembers($domain);
@@ -787,6 +793,7 @@ class DomainController extends Controller
             'enabled' => $enabled,
             'configured' => $configured,
             'remote_files' => $remoteFiles,
+            'prefix' => $configured ? $dokployBackups->storagePrefix($domain) : null,
         ];
     }
 }

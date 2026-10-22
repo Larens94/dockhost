@@ -181,6 +181,11 @@ class DokployDomainBackupService
     /**
      * @return list<array<string, mixed>>
      */
+    public function storagePrefix(Domain $domain): string
+    {
+        return $this->backupPrefix($domain);
+    }
+
     public function listRemoteFiles(Domain $domain): array
     {
         $context = $this->resolveContext($domain);
@@ -189,16 +194,7 @@ class DokployDomainBackupService
             return [];
         }
 
-        try {
-            $files = $this->dokploy->listBackupFiles(
-                $context['destination_id'],
-                $this->backupPrefix($domain),
-            );
-        } catch (Throwable) {
-            return [];
-        }
-
-        return array_values(array_filter($files, fn (array $file): bool => ($file['IsDir'] ?? true) === false));
+        return $this->discoverRemoteSqlFiles($domain, $context);
     }
 
     public function restoreRemoteFile(Domain $domain, string $backupFile): void
@@ -511,28 +507,88 @@ class DokployDomainBackupService
      */
     private function latestRemoteFile(Domain $domain, array $context): array
     {
-        $files = $this->dokploy->listBackupFiles(
-            $context['destination_id'],
-            $this->backupPrefix($domain),
-        );
+        $sqlFiles = $this->discoverRemoteSqlFiles($domain, $context);
 
-        $sqlFiles = array_values(array_filter(
-            $files,
-            fn (array $file): bool => ($file['IsDir'] ?? true) === false
-                && is_string($file['Name'] ?? null)
-                && $this->looksLikeSqlDump($file['Name']),
-        ));
+        return $sqlFiles[0] ?? [];
+    }
 
-        if ($sqlFiles === []) {
-            return [];
+    /**
+     * @param  array{database_name: string, destination_id: string, compose_id: string, root_password: string}  $context
+     * @return list<array<string, mixed>>
+     */
+    private function discoverRemoteSqlFiles(Domain $domain, array $context): array
+    {
+        $fqdn = Str::lower((string) $domain->fqdn);
+        $prefix = $this->backupPrefix($domain);
+        $databaseName = strtolower($context['database_name']);
+
+        $searches = array_values(array_unique(array_filter([
+            $prefix,
+            $fqdn,
+            $databaseName,
+            Str::before($prefix, '/'),
+        ])));
+
+        $byPath = [];
+
+        foreach ($searches as $search) {
+            try {
+                $batch = $this->dokploy->listBackupFiles($context['destination_id'], $search);
+            } catch (Throwable) {
+                continue;
+            }
+
+            foreach ($batch as $file) {
+                if (! is_array($file)) {
+                    continue;
+                }
+
+                $pathKey = is_string($file['Path'] ?? null)
+                    ? $file['Path']
+                    : (is_string($file['Name'] ?? null) ? $file['Name'] : null);
+
+                if ($pathKey === null || $pathKey === '') {
+                    continue;
+                }
+
+                $byPath[$pathKey] = $file;
+            }
         }
 
-        usort($sqlFiles, fn (array $a, array $b): int => strcmp(
-            (string) ($b['Name'] ?? ''),
-            (string) ($a['Name'] ?? ''),
+        $prefixLower = strtolower($prefix);
+
+        $filtered = array_values(array_filter(
+            $byPath,
+            function (array $file) use ($fqdn, $databaseName, $prefixLower): bool {
+                if (($file['IsDir'] ?? true) === true) {
+                    return false;
+                }
+
+                $name = (string) ($file['Name'] ?? '');
+                $path = strtolower((string) ($file['Path'] ?? $name));
+
+                if ($name === '' && $path === '') {
+                    return false;
+                }
+
+                $label = $name !== '' ? $name : $path;
+
+                if (! $this->looksLikeSqlDump($label)) {
+                    return false;
+                }
+
+                return str_contains($path, $fqdn)
+                    || ($databaseName !== '' && str_contains($path, $databaseName))
+                    || str_contains($path, $prefixLower);
+            },
         ));
 
-        return $sqlFiles[0];
+        usort($filtered, fn (array $a, array $b): int => strcmp(
+            (string) ($b['Name'] ?? $b['Path'] ?? ''),
+            (string) ($a['Name'] ?? $a['Path'] ?? ''),
+        ));
+
+        return $filtered;
     }
 
     private function looksLikeSqlDump(string $name): bool

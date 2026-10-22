@@ -468,15 +468,34 @@ const restoreDokployBackupFile = (backupFile) => {
     );
 };
 
-const dokployBackupFileLabel = (file) => {
-    const name = file.Name || file.Path || 'backup';
+const formatBackupBytes = (size) => {
+    const bytes = Number(size);
 
-    if (file.Size) {
-        return `${name} · ${file.Size} B`;
+    if (!Number.isFinite(bytes) || bytes <= 0) {
+        return null;
     }
 
-    return name;
+    if (bytes >= 1_048_576) {
+        return `${(bytes / 1_048_576).toFixed(1)} MB`;
+    }
+
+    if (bytes >= 1024) {
+        return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    return `${bytes} B`;
 };
+
+const dokployBackupFileLabel = (file) => {
+    const name = file.Name || file.Path || 'backup';
+    const sizeLabel = formatBackupBytes(file.Size);
+
+    return sizeLabel ? `${name} · ${sizeLabel}` : name;
+};
+
+const dokployS3Catalog = computed(
+    () => props.dokployBackups.enabled && props.dokployBackups.configured,
+);
 
 const alignFromDomain = () => {
     alignForm.post(actionUrl(`/domains/${props.domain.id}/align-from`), { preserveScroll: true });
@@ -1281,37 +1300,10 @@ const updateMemberRole = (memberId, role) => {
                     </button>
                     <p v-if="backupForm.errors.backup" class="mt-2 text-sm text-red-600">{{ backupForm.errors.backup }}</p>
                 </form>
-                <ul v-if="domain.backups?.length" class="mt-4 space-y-2">
-                    <li
-                        v-for="backup in domain.backups"
-                        :key="backup.id"
-                        class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm"
-                    >
-                        <span>
-                            #{{ backup.id }} · {{ backup.kind }} · {{ backup.status }}
-                            <span v-if="backup.storage_provider === 'dokploy'" class="text-zinc-500">
-                                · {{ t('domains.show.backup_storage_dokploy') }}
-                            </span>
-                            <span v-if="backup.bytes" class="text-zinc-500"> · {{ backup.bytes }} B</span>
-                        </span>
-                        <button
-                            v-if="backup.status === 'completed' && backup.kind === 'database'"
-                            type="button"
-                            class="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-100"
-                            @click="restoreDatabaseBackup(backup.id)"
-                        >
-                            {{ t('domains.show.restore_db_backup') }}
-                        </button>
-                    </li>
-                </ul>
-                <p v-else class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_backups') }}</p>
-
-                <div
-                    v-if="dokployBackups.enabled && dokployBackups.configured && dokployBackups.remote_files?.length"
-                    class="mt-6 border-t border-neutral-100 pt-4"
-                >
+                <div v-if="dokployS3Catalog" class="mt-4 border-t border-neutral-100 pt-4">
                     <h3 class="text-sm font-semibold">{{ t('domains.show.backup_s3_files') }}</h3>
-                    <ul class="mt-3 space-y-2">
+                    <p class="mt-1 text-sm text-zinc-500">{{ t('domains.show.backup_s3_files_help') }}</p>
+                    <ul v-if="dokployBackups.remote_files?.length" class="mt-3 space-y-2">
                         <li
                             v-for="file in dokployBackups.remote_files"
                             :key="file.Path || file.Name"
@@ -1326,6 +1318,49 @@ const updateMemberRole = (memberId, role) => {
                             >
                                 {{ t('domains.show.restore_db_backup') }}
                             </button>
+                        </li>
+                    </ul>
+                    <p v-else class="mt-3 text-sm text-zinc-500">
+                        {{ t('domains.show.backup_s3_empty', { prefix: dokployBackups.prefix || '—' }) }}
+                    </p>
+                </div>
+
+                <div v-if="!dokployS3Catalog" class="mt-4">
+                    <ul v-if="domain.backups?.length" class="space-y-2">
+                        <li
+                            v-for="backup in domain.backups"
+                            :key="backup.id"
+                            class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm"
+                        >
+                            <span>
+                                #{{ backup.id }} · {{ backup.kind }} · {{ backup.status }}
+                                <span v-if="backup.bytes" class="text-zinc-500"> · {{ backup.bytes }} B</span>
+                            </span>
+                            <button
+                                v-if="backup.status === 'completed' && backup.kind === 'database'"
+                                type="button"
+                                class="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-100"
+                                @click="restoreDatabaseBackup(backup.id)"
+                            >
+                                {{ t('domains.show.restore_db_backup') }}
+                            </button>
+                        </li>
+                    </ul>
+                    <p v-else class="text-sm text-zinc-500">{{ t('domains.show.no_backups') }}</p>
+                </div>
+
+                <div
+                    v-else-if="domain.backups?.length"
+                    class="mt-6 border-t border-neutral-100 pt-4"
+                >
+                    <h3 class="text-sm font-semibold text-zinc-700">{{ t('domains.show.backup_local_history') }}</h3>
+                    <ul class="mt-2 space-y-2">
+                        <li
+                            v-for="backup in domain.backups"
+                            :key="backup.id"
+                            class="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600"
+                        >
+                            #{{ backup.id }} · {{ backup.kind }} · {{ backup.status }}
                         </li>
                     </ul>
                 </div>
