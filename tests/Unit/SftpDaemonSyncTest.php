@@ -95,4 +95,47 @@ class SftpDaemonSyncTest extends TestCase
 
         Http::assertNotSent(fn (Request $request): bool => $request->url() === 'http://sftp-sync-b-sftp-sync:8787/sync');
     }
+
+    public function test_restarts_sftp_via_list_containers_when_app_name_match_is_empty(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'http://infra1-sftp-sync:8787/sync' => Http::response(['ok' => true]),
+            'https://dokploy.test/api/docker.getContainersByAppNameMatch*' => Http::response([]),
+            'https://dokploy.test/api/docker.getContainers*' => Http::response([
+                [
+                    'containerId' => '168ac3c349f5',
+                    'name' => 'infra1-7guive-sftp-1',
+                    'state' => 'running',
+                ],
+                [
+                    'containerId' => 'syncid',
+                    'name' => 'infra1-7guive-sftp-sync-1',
+                    'state' => 'running',
+                ],
+            ]),
+            'https://dokploy.test/api/docker.restartContainer' => Http::response(['ok' => true]),
+        ]);
+
+        $infra = $this->panelInfrastructure([
+            'slug' => 'infra1',
+            'dokploy_compose_id' => 'compose-1',
+            'sftp_sync_token' => 'sync-token',
+        ]);
+        $domain = Domain::factory()->create([
+            'infrastructure_id' => $infra->id,
+            'infra_slug' => $infra->slug,
+        ]);
+        $user = SftpUser::factory()->create([
+            'infrastructure_id' => $infra->id,
+            'domain_id' => $domain->id,
+            'username' => 'sftp_passvillage_eforge_it',
+            'password_encrypted' => 'testpass123',
+        ]);
+
+        app(SftpDaemonSync::class)->syncToContainer($user);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/docker.restartContainer'
+            && ($request['containerId'] ?? null) === '168ac3c349f5');
+    }
 }

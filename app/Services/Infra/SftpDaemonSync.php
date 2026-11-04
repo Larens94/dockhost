@@ -21,6 +21,7 @@ use App\Services\Dokploy\DokployClient;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -173,13 +174,7 @@ class SftpDaemonSync
             return;
         }
 
-        try {
-            $payload = $this->dokploy->containersByAppName($infrastructure->slug);
-        } catch (Throwable) {
-            return;
-        }
-
-        $containerId = $this->sftpContainerId($payload);
+        $containerId = $this->resolveSftpContainerId($infrastructure);
 
         if (! is_string($containerId) || $containerId === '') {
             return;
@@ -192,6 +187,53 @@ class SftpDaemonSync
                 'username' => 'Utenti scritti, ma il container SFTP di '.$infrastructure->slug.' non si è riavviato. Riavvialo da Dokploy.',
             ]);
         }
+    }
+
+    private function resolveSftpContainerId(Infrastructure $infrastructure): ?string
+    {
+        try {
+            $payload = $this->dokploy->containersByAppName($infrastructure->slug);
+        } catch (Throwable) {
+            $payload = [];
+        }
+
+        $containerId = $this->sftpContainerId(is_array($payload) ? $payload : []);
+
+        if (is_string($containerId) && $containerId !== '') {
+            return $containerId;
+        }
+
+        try {
+            $containers = $this->dokploy->listContainers();
+        } catch (Throwable) {
+            return null;
+        }
+
+        $slug = Str::lower($infrastructure->slug);
+
+        foreach ($containers as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $name = Str::lower(ltrim((string) ($item['name'] ?? $item['Name'] ?? ''), '/'));
+
+            if ($name === '' || ! str_starts_with($name, $slug) || ! str_contains($name, 'sftp')) {
+                continue;
+            }
+
+            if (str_contains($name, 'sftp-sync') || str_contains($name, 'sftp-users-init')) {
+                continue;
+            }
+
+            $rawId = ltrim((string) ($item['containerId'] ?? $item['Id'] ?? $item['id'] ?? ''), '/');
+
+            if ($rawId !== '' && preg_match('/^[a-zA-Z0-9.\-_]+$/', $rawId) === 1) {
+                return $rawId;
+            }
+        }
+
+        return null;
     }
 
     /**
