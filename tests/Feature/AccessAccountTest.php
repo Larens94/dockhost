@@ -2,7 +2,7 @@
 
 // AccessAccountTest.php — AccessAccountTest module.
 //
-// exports: AccessAccountTest | AccessAccountTest::test_creates_database_user_and_grants_select(): void | AccessAccountTest::test_rejects_database_user_when_domain_has_no_database(): void | AccessAccountTest::test_creates_sftp_user_with_alphanumeric_password(): void | AccessAccountTest::test_generated_sftp_password_never_contains_colon(): void
+// exports: AccessAccountTest | AccessAccountTest::test_creates_database_user_and_grants_select(): void | AccessAccountTest::test_rejects_database_user_when_domain_has_no_database(): void | AccessAccountTest::test_creates_sftp_user_with_alphanumeric_password(): void | AccessAccountTest::test_deletes_extra_sftp_user_and_resyncs_sidecar(): void | AccessAccountTest::test_generated_sftp_password_never_contains_colon(): void
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
@@ -141,6 +141,49 @@ class AccessAccountTest extends TestCase
             && collect($request['users'] ?? [])->contains(fn (array $row): bool => ($row['username'] ?? null) === $user->username));
         Http::assertSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/docker.restartContainer'
             && $request['containerId'] === 'sftpcontainerid');
+    }
+
+    public function test_deletes_extra_sftp_user_and_resyncs_sidecar(): void
+    {
+        Http::preventStrayRequests();
+        $this->fakeSftpSync();
+
+        $infrastructure = $this->panelInfrastructure();
+        $domain = Domain::factory()->create([
+            'infrastructure_id' => $infrastructure->id,
+            'infra_slug' => $infrastructure->slug,
+        ]);
+
+        $primary = SftpUser::factory()->create([
+            'domain_id' => $domain->id,
+            'infrastructure_id' => $infrastructure->id,
+            'username' => 'sftp_primary_user',
+        ]);
+        $extra = SftpUser::factory()->create([
+            'domain_id' => $domain->id,
+            'infrastructure_id' => $infrastructure->id,
+            'username' => 'sftp_extra_1snx',
+        ]);
+
+        $response = $this->actingAs(User::factory()->create())
+            ->delete(route('domains.sftp-users.destroy', [$domain, $extra]));
+
+        $response->assertRedirect(route('domains.show', ['domain' => $domain, 'tab' => 'sftp']));
+        $response->assertSessionHas('success');
+
+        $this->assertModelMissing($extra);
+        $this->assertDatabaseHas('sftp_users', ['id' => $primary->id]);
+
+        Http::assertSent(function ($request) use ($primary, $extra): bool {
+            if ($request->url() !== 'http://infra1-sftp-sync:8787/sync') {
+                return false;
+            }
+
+            $names = array_column($request['users'] ?? [], 'username');
+
+            return in_array($primary->username, $names, true)
+                && ! in_array($extra->username, $names, true);
+        });
     }
 
     public function test_generated_sftp_password_never_contains_colon(): void

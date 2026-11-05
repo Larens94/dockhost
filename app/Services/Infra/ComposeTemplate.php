@@ -139,7 +139,24 @@ class ComposeTemplate
             $yaml = $this->removeService($yaml, $service['key']);
         }
 
-        return $this->pruneUnusedVolumes($yaml);
+        return $this->injectSftpSyncServer($this->pruneUnusedVolumes($yaml));
+    }
+
+    private function injectSftpSyncServer(string $yaml): string
+    {
+        $scriptPath = base_path('infra/sftp-sync/server.py');
+
+        if (! is_readable($scriptPath)) {
+            return $yaml;
+        }
+
+        $script = file_get_contents($scriptPath);
+        $indented = implode("\n", array_map(
+            static fn (string $line): string => '        '.$line,
+            explode("\n", rtrim($script, "\n"))
+        ));
+
+        return str_replace('__SFTP_SYNC_SERVER__', $indented, $yaml);
     }
 
     /**
@@ -519,70 +536,12 @@ services:
         aliases:
           - ${INFRA_SLUG}-sftp-sync
     command:
-      - python
+      - sh
       - -c
       - |
-        import json, os, http.server, shutil
-        TOKEN = os.environ.get("SFTP_SYNC_TOKEN", "")
-        def under_data(path):
-            path = os.path.realpath(str(path))
-            return path == "/data" or path.startswith("/data/")
-        def ensure_jail(name, desired):
-            jail = os.path.realpath("/data/" + name)
-            if not under_data(jail) or jail == "/data":
-                return jail
-            desired = os.path.realpath(str(desired or jail))
-            if under_data(desired) and desired != "/data" and desired != jail:
-                if os.path.isdir(desired) and not os.path.exists(jail):
-                    os.makedirs(os.path.dirname(jail), mode=0o750, exist_ok=True)
-                    shutil.move(desired, jail)
-                elif os.path.isdir(desired) and os.path.isdir(jail) and not os.listdir(jail):
-                    for entry in os.listdir(desired):
-                        shutil.move(os.path.join(desired, entry), os.path.join(jail, entry))
-            os.makedirs(jail, mode=0o750, exist_ok=True)
-            return jail
-        class H(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *args):
-                return
-            def _ok(self, body=b"ok"):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(body)
-            def do_GET(self):
-                if self.path == "/health":
-                    self._ok()
-                    return
-                self.send_response(404)
-                self.end_headers()
-            def do_POST(self):
-                if self.path != "/sync" or self.headers.get("Authorization") != "Bearer " + TOKEN:
-                    self.send_response(401 if self.path == "/sync" else 404)
-                    self.end_headers()
-                    return
-                n = int(self.headers.get("Content-Length", 0))
-                body = json.loads(self.rfile.read(n) or b"{}")
-                os.makedirs("/etc/sftp", exist_ok=True)
-                lines = []
-                for user in body.get("users") or []:
-                    name = str(user.get("username", ""))
-                    password = str(user.get("password", ""))
-                    try:
-                        uid = int(user.get("uid") or 1001)
-                    except Exception:
-                        uid = 1001
-                    if uid < 1001:
-                        uid = 1001
-                    if name and password and ":" not in name and ":" not in password:
-                        ensure_jail(name, user.get("directory") or ("/data/" + name))
-                        # atmoz chroots to /home/<user> (== /data/<user> on shared volume)
-                        lines.append("%s:%s:%d:%d" % (name, password, uid, uid))
-                open("/etc/sftp/users.conf", "w").write(("\n".join(lines) + "\n") if lines else "")
-                for directory in body.get("directories") or []:
-                    path = os.path.realpath(str(directory))
-                    if under_data(path):
-                        os.makedirs(path, mode=0o750, exist_ok=True)
-                self._ok(b'{"ok":true}')
-        http.server.HTTPServer(("0.0.0.0", 8787), H).serve_forever()
+        python << 'SFTP_SYNC_PY'
+__SFTP_SYNC_SERVER__
+        SFTP_SYNC_PY
 
   sftp:
     image: atmoz/sftp:alpine

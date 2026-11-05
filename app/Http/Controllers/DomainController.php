@@ -33,6 +33,7 @@ use App\Http\Requests\DestroyDomainAliasRequest;
 use App\Http\Requests\DestroyDomainRequest;
 use App\Http\Requests\ImportDomainDatabaseDumpRequest;
 use App\Http\Requests\MutateDomainDatabaseAccountRequest;
+use App\Http\Requests\MutateDomainSftpUserRequest;
 use App\Http\Requests\ResyncDomainDatabaseUsersRequest;
 use App\Http\Requests\StoreDomainAliasRequest;
 use App\Http\Requests\StoreDomainDatabaseRequest;
@@ -48,6 +49,7 @@ use App\Models\Domain;
 use App\Models\DomainAlias;
 use App\Models\DomainBackup;
 use App\Models\Infrastructure;
+use App\Models\SftpUser;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
@@ -631,6 +633,20 @@ class DomainController extends Controller
 
         return $this->redirectToDomain($domain, 'sftp')
             ->with('revealed_credential', $revealed);
+    }
+
+    public function destroySftpUser(
+        MutateDomainSftpUserRequest $request,
+        Domain $domain,
+        SftpUser $sftpUser,
+        AccessAccountManager $accounts,
+    ): RedirectResponse {
+        $request->userBelongsToDomain($domain, $sftpUser);
+
+        $accounts->deleteSftpUser($sftpUser);
+
+        return $this->redirectToDomain($domain, 'sftp')
+            ->with('success', __('panel.domains.show.delete_sftp_user_done'));
     }
 
     public function attachLaravel(

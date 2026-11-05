@@ -326,6 +326,14 @@ class Infrastructure extends Model
         return str_replace('{slug}', $this->slug, $template);
     }
 
+    public function sftpSyncApiBaseUrl(): string
+    {
+        $syncUrl = $this->sftpSyncUrl();
+        $base = preg_replace('#/sync$#', '', $syncUrl);
+
+        return is_string($base) && $base !== '' ? $base : $syncUrl;
+    }
+
     public function publicSftpHost(): string
     {
         $host = (string) config('dokploy.public_host');

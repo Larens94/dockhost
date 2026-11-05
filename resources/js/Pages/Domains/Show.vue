@@ -27,6 +27,7 @@ import { usePanelTranslations } from '../../composables/usePanelTranslations';
 import AppLayout from '../../Layouts/AppLayout.vue';
 
 const { t } = usePanelTranslations();
+import DomainSftpFileBrowser from '../../Components/DomainSftpFileBrowser.vue';
 import LaravelToolkitPanel from '../../Components/LaravelToolkitPanel.vue';
 import StackToolkitPanel from '../../Components/StackToolkitPanel.vue';
 
@@ -565,6 +566,14 @@ const createDatabaseUser = () => {
 
 const createSftpUser = () => {
     sftpUserForm.post(actionUrl(`/domains/${props.domain.id}/sftp-users`), { preserveScroll: true });
+};
+
+const deleteSftpUser = (userId) => {
+    if (!window.confirm(t('domains.show.delete_sftp_user_confirm'))) {
+        return;
+    }
+
+    useForm({}).delete(actionUrl(`/domains/${props.domain.id}/sftp-users/${userId}`), { preserveScroll: true });
 };
 
 const privilegeLabel = (privilege) => (privilege === 'select' ? t('common.privilege_select') : t('common.privilege_all'));
@@ -1418,21 +1427,44 @@ const updateMemberRole = (memberId, role) => {
                         <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.host') }}</dt>
                         <dd class="mt-1 text-sm font-medium">{{ sftpEndpoint || '—' }}</dd>
                     </div>
-                    <div
+                </dl>
+                <ul v-if="domain.sftp_users?.length" class="mt-4 space-y-3">
+                    <li
                         v-for="user in domain.sftp_users"
                         :key="user.id"
-                        class="contents"
+                        class="rounded-lg border border-zinc-200 bg-white px-3 py-3"
                     >
-                        <div class="rounded-lg bg-zinc-50 px-3 py-2">
-                            <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.user') }}</dt>
-                            <dd class="mt-1 text-sm font-medium">{{ user.username }}</dd>
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <dl class="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.user') }}</dt>
+                                    <dd class="mt-1 text-sm font-medium">{{ user.username }}</dd>
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.home') }}</dt>
+                                    <dd class="mt-1 break-all text-sm font-medium">{{ user.home_path }}</dd>
+                                </div>
+                            </dl>
+                            <button
+                                v-if="canMutateHosting && domain.sftp_users.length > 1"
+                                type="button"
+                                class="shrink-0 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                                @click="deleteSftpUser(user.id)"
+                            >
+                                {{ t('domains.show.delete_sftp_user') }}
+                            </button>
                         </div>
-                        <div class="rounded-lg bg-zinc-50 px-3 py-2 sm:col-span-2">
-                            <dt class="text-xs uppercase tracking-wide text-zinc-500">{{ t('common.home') }}</dt>
-                            <dd class="mt-1 break-all text-sm font-medium">{{ user.home_path }}</dd>
-                        </div>
-                    </div>
-                </dl>
+                    </li>
+                </ul>
+                <template v-if="canMutateHosting">
+                    <DomainSftpFileBrowser
+                        v-for="user in domain.sftp_users"
+                        :key="`files-${user.id}`"
+                        :domain-id="domain.id"
+                        :sftp-user="user"
+                        :can-mutate="true"
+                    />
+                </template>
                 <p v-if="!domain.sftp_users?.length" class="mt-4 text-sm text-zinc-500">{{ t('domains.show.no_sftp') }}</p>
                 <form v-if="canMutateHosting" class="mt-5" @submit.prevent="createSftpUser">
                     <p v-if="sftpUserForm.errors.username" class="mb-2 text-sm text-red-600">

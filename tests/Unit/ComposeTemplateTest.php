@@ -27,6 +27,7 @@ class ComposeTemplateTest extends TestCase
         $this->assertStringContainsString('infra2-mariadb', $yaml);
         $this->assertStringContainsString('infra2-sftp-sync', $yaml);
         $this->assertStringContainsString("\n  sftp-sync:\n", $yaml);
+        $this->assertStringContainsString('/files/list', $yaml);
         $this->assertStringNotContainsString('container_name:', $yaml);
         $this->assertStringContainsString("aliases:\n          - infra2-mariadb", $yaml);
         $this->assertStringContainsString('name: infra2_data', $yaml);

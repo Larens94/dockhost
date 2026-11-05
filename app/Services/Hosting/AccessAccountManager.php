@@ -2,7 +2,7 @@
 
 // AccessAccountManager.php — AccessAccountManager module.
 //
-// exports: AccessAccountManager | AccessAccountManager::generatedPassword(): string | AccessAccountManager::createDatabaseUserForDomain(Domain $domain, DatabasePrivilege $privilege): DatabaseAccount | AccessAccountManager::createDatabaseUserForInfrastructure( Infrastructure $infrastructure, DatabaseAccount $source, DatabasePrivilege $privilege, ): DatabaseAccount | AccessAccountManager::createSftpUserForDomain(Domain $domain): SftpUser | AccessAccountManager::createSftpUserForInfrastructure(Infrastructure $infrastructure, Domain $domain): SftpUser | AccessAccountManager::resetDatabaseAccountPassword(DatabaseAccount $account): array | AccessAccountManager::revealDatabase(DatabaseAccount $account, string $password): array | AccessAccountManager::revealInitialDomainAccess(Domain $domain): array | AccessAccountManager::revealSftp(SftpUser $user, string $password): array
+// exports: AccessAccountManager | AccessAccountManager::generatedPassword(): string | AccessAccountManager::createDatabaseUserForDomain(Domain $domain, DatabasePrivilege $privilege): DatabaseAccount | AccessAccountManager::createDatabaseUserForInfrastructure( Infrastructure $infrastructure, DatabaseAccount $source, DatabasePrivilege $privilege, ): DatabaseAccount | AccessAccountManager::createSftpUserForDomain(Domain $domain): SftpUser | AccessAccountManager::createSftpUserForInfrastructure(Infrastructure $infrastructure, Domain $domain): SftpUser | AccessAccountManager::deleteSftpUser(SftpUser $user): void | AccessAccountManager::resetDatabaseAccountPassword(DatabaseAccount $account): array | AccessAccountManager::revealDatabase(DatabaseAccount $account, string $password): array | AccessAccountManager::revealInitialDomainAccess(Domain $domain): array | AccessAccountManager::revealSftp(SftpUser $user, string $password): array
 // used_by: app/Http/Controllers/DomainController.php
 //         app/Http/Controllers/InfrastructureController.php
 //         tests/Feature/AccessAccountTest.php
@@ -144,6 +144,28 @@ class AccessAccountManager
         }
 
         return $this->createSftpUser($infrastructure, $domain);
+    }
+
+    public function deleteSftpUser(SftpUser $user): void
+    {
+        if ($user->domain_id !== null) {
+            $count = SftpUser::query()->where('domain_id', $user->domain_id)->count();
+
+            if ($count < 2) {
+                throw ValidationException::withMessages([
+                    'sftp_user' => __('panel.domains.show.delete_sftp_user_last'),
+                ]);
+            }
+        }
+
+        $infrastructure = $user->infrastructure
+            ?? Infrastructure::query()->find($user->infrastructure_id);
+
+        $user->delete();
+
+        if ($infrastructure instanceof Infrastructure) {
+            $this->sftpDaemonSync->writeUsersFile($infrastructure);
+        }
     }
 
     /**

@@ -26,6 +26,7 @@ use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\DomainMemberController;
+use App\Http\Controllers\DomainSftpFileController;
 use App\Http\Controllers\InfrastructureController;
 use App\Http\Controllers\LaravelToolkitController;
 use App\Http\Controllers\PanelGitLabCredentialController;
@@ -107,6 +108,18 @@ Route::middleware('auth')->group(function () {
         ->name('domains.align-from');
     Route::post('domains/{domain}/sftp-users', [DomainController::class, 'storeSftpUser'])
         ->name('domains.sftp-users.store');
+    Route::delete('domains/{domain}/sftp-users/{sftpUser}', [DomainController::class, 'destroySftpUser'])
+        ->name('domains.sftp-users.destroy');
+    Route::get('domains/{domain}/sftp-users/{sftpUser}/files', [DomainSftpFileController::class, 'index'])
+        ->name('domains.sftp-files.index');
+    Route::post('domains/{domain}/sftp-users/{sftpUser}/files/mkdir', [DomainSftpFileController::class, 'mkdir'])
+        ->name('domains.sftp-files.mkdir');
+    Route::post('domains/{domain}/sftp-users/{sftpUser}/files/upload', [DomainSftpFileController::class, 'upload'])
+        ->name('domains.sftp-files.upload');
+    Route::delete('domains/{domain}/sftp-users/{sftpUser}/files', [DomainSftpFileController::class, 'destroy'])
+        ->name('domains.sftp-files.destroy');
+    Route::get('domains/{domain}/sftp-users/{sftpUser}/files/download', [DomainSftpFileController::class, 'download'])
+        ->name('domains.sftp-files.download');
     Route::post('domains/{domain}/laravel', [DomainController::class, 'attachLaravel'])
         ->name('domains.laravel.store');
     Route::post('domains/{domain}/laravel/align-env', [DomainController::class, 'alignLaravelEnv'])
