@@ -279,6 +279,8 @@ return [
             'storage_wiring_upload_hint' => 'In FileZilla, upload under :path inside the chroot.',
             'storage_wiring_path' => 'Volume path (DOKHOSTS_STORAGE_PATH)',
             'storage_wiring_submit' => 'Wire storage now',
+            'storage_wiring_resync' => 'Sync SFTP layout now',
+            'storage_wiring_sftp_hint' => 'Laravel env is set; you can still sync SFTP folders and ownership from here.',
             'storage_wiring_deploy_now' => 'Deploy site after wiring',
             'no_sftp' => 'No SFTP users.',
             'create_sftp' => 'Create SFTP user',

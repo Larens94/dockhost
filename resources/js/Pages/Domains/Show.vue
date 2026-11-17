@@ -1484,12 +1484,21 @@ const updateMemberRole = (memberId, role) => {
                     >
                         {{ t('domains.show.storage_wiring_ready') }}
                     </p>
+                    <p
+                        v-else-if="!storageWiring.needs_wiring"
+                        class="mt-3 text-sm text-emerald-900/80"
+                    >
+                        {{ t('domains.show.storage_wiring_sftp_hint') }}
+                    </p>
                     <form
-                        v-else-if="canMutateHosting && storageWiring.needs_wiring"
+                        v-if="canMutateHosting && storageWiring.eligible"
                         class="mt-4 flex flex-wrap items-center gap-3"
                         @submit.prevent="wireStorage"
                     >
-                        <label class="flex items-center gap-2 text-sm text-emerald-950">
+                        <label
+                            v-if="storageWiring.is_laravel"
+                            class="flex items-center gap-2 text-sm text-emerald-950"
+                        >
                             <input
                                 v-model="storageWireForm.deploy_now"
                                 type="checkbox"
@@ -1505,7 +1514,11 @@ const updateMemberRole = (memberId, role) => {
                             class="rounded-lg bg-emerald-800 px-3.5 py-2 text-sm font-medium text-white hover:bg-emerald-900 disabled:opacity-50"
                             :disabled="storageWireForm.processing"
                         >
-                            {{ t('domains.show.storage_wiring_submit') }}
+                            {{
+                                storageWiring.needs_wiring
+                                    ? t('domains.show.storage_wiring_submit')
+                                    : t('domains.show.storage_wiring_resync')
+                            }}
                         </button>
                     </form>
                 </div>

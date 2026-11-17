@@ -279,6 +279,8 @@ return [
             'storage_wiring_upload_hint' => 'Su FileZilla carica sotto :path nel chroot.',
             'storage_wiring_path' => 'Percorso volume (DOKHOSTS_STORAGE_PATH)',
             'storage_wiring_submit' => 'Collega storage ora',
+            'storage_wiring_resync' => 'Sincronizza layout SFTP',
+            'storage_wiring_sftp_hint' => 'Env Laravel ok; da qui puoi comunque sincronizzare cartelle e permessi SFTP.',
             'storage_wiring_deploy_now' => 'Deploy del sito dopo il collegamento',
             'no_sftp' => 'Nessun utente SFTP.',
             'create_sftp' => 'Crea utente SFTP',
