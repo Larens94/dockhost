@@ -148,7 +148,12 @@ class DomainProvisioner
             ]);
         }
 
-        return $this->dokployApplicationAttacher->attach($domain, $attributes);
+        $application = $this->dokployApplicationAttacher->attach($domain, $attributes);
+
+        $domain->load(['dokployApplication', 'sftpUsers', 'infrastructure', 'storageShares']);
+        app(DomainStorageWiringService::class)->wireSilently($domain, deployNow: false);
+
+        return $application;
     }
 
     public function decommission(Domain $domain): void

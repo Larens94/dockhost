@@ -70,6 +70,18 @@ def chown_tree(path: str, uid: int, gid: int | None = None) -> None:
             chown_tree(os.path.join(path, entry), uid, gid)
 
 
+def ensure_storage_tree(jail: str, uid: int) -> None:
+    pub = os.path.join(jail, "storage", "app", "public")
+    for segment in (
+        os.path.join(jail, "storage"),
+        os.path.join(jail, "storage", "app"),
+        pub,
+    ):
+        os.makedirs(segment, mode=0o775, exist_ok=True)
+    chown_tree(os.path.join(jail, "storage"), uid, uid)
+    os.chmod(os.path.join(jail, "storage"), 0o775)
+
+
 def ensure_jail(name: str, desired: str | None) -> str:
     jail = os.path.realpath("/data/" + name)
     if not under_data(jail) or jail == "/data":
@@ -186,7 +198,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if uid < 1001:
                 uid = 1001
             if name and password and ":" not in name and ":" not in password:
-                ensure_jail(name, user.get("directory") or ("/data/" + name))
+                jail = ensure_jail(name, user.get("directory") or ("/data/" + name))
+                ensure_storage_tree(jail, uid)
                 lines.append("%s:%s:%d:%d" % (name, password, uid, uid))
                 user_uids[name] = uid
         with open(USERS_CONF, "w", encoding="utf-8") as handle:

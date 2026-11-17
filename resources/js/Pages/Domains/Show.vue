@@ -130,6 +130,17 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    storageWiring: {
+        type: Object,
+        default: () => ({
+            eligible: false,
+            needs_wiring: false,
+            is_laravel: false,
+            dokhosts_storage_path: null,
+            sftp_upload_hint: null,
+            error: null,
+        }),
+    },
 });
 
 const isLaravelStack = computed(() => (props.domain.stack || 'none') === 'laravel');
@@ -524,6 +535,10 @@ const deleteDbUser = (accountId) => {
 
 const sftpUserForm = useForm({});
 
+const storageWireForm = useForm({
+    deploy_now: true,
+});
+
 const laravelForm = useForm({});
 
 const alignEnvForm = useForm({});
@@ -566,6 +581,10 @@ const createDatabaseUser = () => {
 
 const createSftpUser = () => {
     sftpUserForm.post(actionUrl(`/domains/${props.domain.id}/sftp-users`), { preserveScroll: true });
+};
+
+const wireStorage = () => {
+    storageWireForm.post(actionUrl(`/domains/${props.domain.id}/storage/wire`), { preserveScroll: true });
 };
 
 const deleteSftpUser = (userId) => {
@@ -1417,6 +1436,9 @@ const updateMemberRole = (memberId, role) => {
         </div>
 
         <div v-show="currentTab === 'sftp'" class="min-w-0 space-y-6">
+            <p v-if="page.props.flash?.success && currentTab === 'sftp'" class="text-sm text-emerald-700">
+                {{ page.props.flash.success }}
+            </p>
             <section :class="sectionTone.sftp">
                 <h2 class="text-base font-semibold" :class="headingTone.sftp">{{ t('common.sftp') }}</h2>
                 <p class="mt-1 text-sm text-zinc-500">
@@ -1428,6 +1450,65 @@ const updateMemberRole = (memberId, role) => {
                         <dd class="mt-1 text-sm font-medium">{{ sftpEndpoint || '—' }}</dd>
                     </div>
                 </dl>
+                <div
+                    v-if="storageWiring.eligible && domain.sftp_users?.length"
+                    class="mt-5 rounded-lg border border-emerald-200 bg-emerald-50/70 px-4 py-3"
+                >
+                    <h3 class="text-sm font-semibold text-emerald-900">{{ t('domains.show.storage_wiring_heading') }}</h3>
+                    <p class="mt-1 text-sm text-emerald-900/80">{{ t('domains.show.storage_wiring_help') }}</p>
+                    <p v-if="storageWiring.error" class="mt-2 text-sm text-red-700">{{ storageWiring.error }}</p>
+                    <dl
+                        v-else
+                        class="mt-3 grid gap-2 text-sm text-emerald-950 sm:grid-cols-2"
+                    >
+                        <div v-if="storageWiring.dokhosts_storage_path">
+                            <dt class="text-xs uppercase tracking-wide text-emerald-800/80">
+                                {{ t('domains.show.storage_wiring_path') }}
+                            </dt>
+                            <dd class="mt-0.5 break-all font-medium">{{ storageWiring.dokhosts_storage_path }}</dd>
+                        </div>
+                        <div v-if="storageWiring.sftp_upload_hint">
+                            <dt class="text-xs uppercase tracking-wide text-emerald-800/80">FileZilla</dt>
+                            <dd class="mt-0.5 font-medium">
+                                {{
+                                    t('domains.show.storage_wiring_upload_hint', {
+                                        path: storageWiring.sftp_upload_hint,
+                                    })
+                                }}
+                            </dd>
+                        </div>
+                    </dl>
+                    <p
+                        v-if="storageWiring.is_laravel && !storageWiring.needs_wiring"
+                        class="mt-3 text-sm font-medium text-emerald-800"
+                    >
+                        {{ t('domains.show.storage_wiring_ready') }}
+                    </p>
+                    <form
+                        v-else-if="canMutateHosting && storageWiring.needs_wiring"
+                        class="mt-4 flex flex-wrap items-center gap-3"
+                        @submit.prevent="wireStorage"
+                    >
+                        <label class="flex items-center gap-2 text-sm text-emerald-950">
+                            <input
+                                v-model="storageWireForm.deploy_now"
+                                type="checkbox"
+                                class="rounded border-emerald-300 text-emerald-700"
+                            />
+                            {{ t('domains.show.storage_wiring_deploy_now') }}
+                        </label>
+                        <p v-if="storageWireForm.errors.storage" class="w-full text-sm text-red-700">
+                            {{ storageWireForm.errors.storage }}
+                        </p>
+                        <button
+                            type="submit"
+                            class="rounded-lg bg-emerald-800 px-3.5 py-2 text-sm font-medium text-white hover:bg-emerald-900 disabled:opacity-50"
+                            :disabled="storageWireForm.processing"
+                        >
+                            {{ t('domains.show.storage_wiring_submit') }}
+                        </button>
+                    </form>
+                </div>
                 <ul v-if="domain.sftp_users?.length" class="mt-4 space-y-3">
                     <li
                         v-for="user in domain.sftp_users"

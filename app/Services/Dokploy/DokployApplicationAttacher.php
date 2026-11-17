@@ -35,6 +35,7 @@ use App\Models\Domain;
 use App\Models\Infrastructure;
 use App\Models\StorageShare;
 use App\Support\DomainPhpSettings;
+use App\Support\LaravelStorageBootstrapShell;
 use App\Support\NixpacksStartCmdPhpIniPrefix;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Validation\ValidationException;
@@ -512,11 +513,14 @@ class DokployApplicationAttacher
     {
         $prepare = 'mkdir -p /var/log/nginx /var/cache/nginx storage/framework/sessions storage/framework/views storage/framework/cache/data storage/logs bootstrap/cache && chmod -R a+rwx storage bootstrap/cache';
         $http = 'node /assets/scripts/prestart.mjs /assets/nginx.template.conf /nginx.conf && (php-fpm -y /assets/php-fpm.conf & nginx -c /nginx.conf)';
+        $start = LaravelStorageBootstrapShell::weaveIntoCore(
+            $prepare.' && php artisan migrate --force && php artisan optimize:clear && php artisan config:clear && php artisan route:cache && php artisan view:cache && php artisan event:cache && php artisan queue:restart && '.$http,
+        );
 
         return [
             'NIXPACKS_INSTALL_CMD' => 'mkdir -p /var/log/nginx /var/cache/nginx && composer install --ignore-platform-reqs --no-interaction --no-scripts && npm ci',
             'NIXPACKS_BUILD_CMD' => 'npm run build',
-            'NIXPACKS_START_CMD' => $prepare.' && php artisan migrate --force && php artisan optimize:clear && php artisan config:clear && php artisan route:cache && php artisan view:cache && php artisan event:cache && php artisan queue:restart && '.$http,
+            'NIXPACKS_START_CMD' => $start,
         ];
     }
 

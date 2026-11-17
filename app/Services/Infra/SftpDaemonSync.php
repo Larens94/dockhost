@@ -138,6 +138,9 @@ class SftpDaemonSync
         foreach ($users as $user) {
             $paths[] = $this->containerPath($infrastructure, $user->home_path);
             $paths[] = '/data/'.$user->username;
+            $paths[] = '/data/'.$user->username.'/storage';
+            $paths[] = '/data/'.$user->username.'/storage/app';
+            $paths[] = '/data/'.$user->username.'/storage/app/public';
         }
 
         return array_values(array_unique(array_filter($paths)));

@@ -44,6 +44,7 @@ use App\Http\Requests\UpdateDomainPhpSettingsRequest;
 use App\Http\Requests\UpdateDomainRequest;
 use App\Http\Requests\UpdateDomainRuntimeEnvRequest;
 use App\Http\Requests\UpdateDomainSiteEnvRequest;
+use App\Http\Requests\WireDomainStorageRequest;
 use App\Models\DatabaseAccount;
 use App\Models\Domain;
 use App\Models\DomainAlias;
@@ -60,6 +61,7 @@ use App\Services\Hosting\DomainAliasManager;
 use App\Services\Hosting\DomainBackupManager;
 use App\Services\Hosting\DomainProvisioner;
 use App\Services\Hosting\DomainSiteEnvManager;
+use App\Services\Hosting\DomainStorageWiringService;
 use App\Services\Hosting\EnvironmentAligner;
 use App\Services\Infra\MysqlProvisioner;
 use App\Services\Panel\DomainAccessMailer;
@@ -197,6 +199,7 @@ class DomainController extends Controller
             'phpSettings' => DomainPhpSettings::resolved($domain->php_settings),
             'phpSettingsApplicable' => ($domain->stack ?? DomainStack::None)->createsApplication(),
             'siteHosting' => app(DomainSiteEnvManager::class)->panelState($domain),
+            'storageWiring' => app(DomainStorageWiringService::class)->panelState($domain),
             'databaseImport' => PanelDatabaseImportLimits::inertiaPayload(),
             'dokployBackups' => $this->dokployBackupPanelState($domain, $dokployBackups),
             'backupSchedulePresets' => DomainBackupSchedule::presetsForInertia(),
@@ -721,6 +724,35 @@ class DomainController extends Controller
             'tab' => 'laravel',
             'section' => 'deploy',
         ])->with('success', $message);
+    }
+
+    public function wireStorage(
+        WireDomainStorageRequest $request,
+        Domain $domain,
+        DomainStorageWiringService $storageWiring,
+        AuditLogger $audit,
+    ): RedirectResponse {
+        $request->validated();
+        $result = $storageWiring->wire($domain, $request->deployNow());
+
+        $audit->record('domain.storage.wire', $domain, [
+            'fqdn' => $domain->fqdn,
+            'deployed' => $result['deployed'],
+            'env_updated' => $result['env_updated'],
+            'keys' => $result['keys'],
+        ]);
+
+        if ($result['env_updated']) {
+            $message = $result['deployed']
+                ? __('panel.domains.flash.storage_wired_deployed', ['keys' => implode(', ', $result['keys'])])
+                : __('panel.domains.flash.storage_wired', ['keys' => implode(', ', $result['keys'])]);
+        } else {
+            $message = $result['deployed']
+                ? __('panel.domains.flash.storage_sftp_deployed')
+                : __('panel.domains.flash.storage_sftp_synced');
+        }
+
+        return $this->redirectToDomain($domain, 'sftp')->with('success', $message);
     }
 
     public function update(

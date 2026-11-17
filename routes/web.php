@@ -126,6 +126,8 @@ Route::middleware('auth')->group(function () {
         ->name('domains.laravel.align-env');
     Route::post('domains/{domain}/laravel/deploy-config', [DomainController::class, 'applyLaravelDeployConfig'])
         ->name('domains.laravel.deploy-config');
+    Route::post('domains/{domain}/storage/wire', [DomainController::class, 'wireStorage'])
+        ->name('domains.storage.wire');
     Route::get('domains/{domain}/laravel/status', [LaravelToolkitController::class, 'status'])
         ->name('domains.laravel.status');
     Route::post('domains/{domain}/laravel/artisan', [LaravelToolkitController::class, 'artisan'])
