@@ -1,13 +1,12 @@
 <?php
 
-
 // HostingFlowTest.php — HostingFlowTest module.
 //
 // exports: HostingFlowTest | HostingFlowTest::test_happy_path_creates_customer_space_and_domain_without_database(): void | HostingFlowTest::test_domain_can_optionally_create_a_shared_database(): void | HostingFlowTest::test_domain_can_optionally_attach_laravel_when_environment_is_configured(): void | HostingFlowTest::test_laravel_attach_fails_without_infrastructure_environment_id(): void | HostingFlowTest::test_database_and_laravel_can_be_added_after_domain_creation(): void
 // used_by: none
 // rules:   none
 // agent:   codedna-cli (no-llm) | codedna-cli | 2026-09-21 | codedna-cli | initial CodeDNA annotation pass
-// message: 
+// message:
 
 namespace Tests\Feature;
 
@@ -144,7 +143,7 @@ class HostingFlowTest extends TestCase
         Http::assertNotSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/application.deploy');
         Http::assertSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/mounts.create'
             && $request['volumeName'] === 'infra1_data');
-        Http::assertSentCount(7);
+        Http::assertSentCount(9);
     }
 
     public function test_laravel_attach_fails_without_infrastructure_environment_id(): void

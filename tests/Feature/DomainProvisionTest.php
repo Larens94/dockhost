@@ -254,7 +254,10 @@ class DomainProvisionTest extends TestCase
         Http::assertNotSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/application.saveGitProvider');
         Http::assertNotSent(fn ($request): bool => $request->url() === 'https://dokploy.test/api/application.deploy');
 
-        Http::assertSentCount(7);
+        Http::assertSentCount(9);
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/application.saveEnvironment'
+            && str_contains((string) $request['env'], '_dokhosts_storage'));
+
         $this->assertSame('env-infra-1', $infrastructure->dokploy_environment_id);
     }
 

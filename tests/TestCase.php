@@ -134,6 +134,10 @@ abstract class TestCase extends BaseTestCase
     {
         Http::fake([
             'https://dokploy.test/api/application.create' => Http::response(['applicationId' => $applicationId]),
+            'https://dokploy.test/api/application.one*' => Http::response([
+                'applicationId' => $applicationId,
+                'env' => "NIXPACKS_START_CMD=mkdir storage && php artisan migrate --force\n",
+            ]),
             'https://dokploy.test/api/application.saveEnvironment' => Http::response(['ok' => true]),
             'https://dokploy.test/api/application.saveGitProvider' => Http::response(['ok' => true]),
             'https://dokploy.test/api/domain.create' => Http::response(['domainId' => $domainId]),

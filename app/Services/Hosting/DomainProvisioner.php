@@ -150,8 +150,10 @@ class DomainProvisioner
 
         $application = $this->dokployApplicationAttacher->attach($domain, $attributes);
 
-        $domain->load(['dokployApplication', 'sftpUsers', 'infrastructure', 'storageShares']);
-        app(DomainStorageWiringService::class)->wireSilently($domain, deployNow: false);
+        if (($domain->stack ?? DomainStack::None)->isLaravel()) {
+            $domain->load(['dokployApplication', 'sftpUsers', 'infrastructure', 'storageShares']);
+            app(DomainStorageWiringService::class)->wireSilently($domain, deployNow: false, syncSftp: false);
+        }
 
         return $application;
     }

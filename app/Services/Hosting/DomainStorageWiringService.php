@@ -104,7 +104,7 @@ class DomainStorageWiringService
     /**
      * @return array{sftp_synced: bool, env_updated: bool, deployed: bool, keys: list<string>}
      */
-    public function wire(Domain $domain, bool $deployNow = false): array
+    public function wire(Domain $domain, bool $deployNow = false, bool $syncSftp = true): array
     {
         $domain->loadMissing(['dokployApplication', 'sftpUsers', 'infrastructure', 'storageShares']);
 
@@ -131,7 +131,9 @@ class DomainStorageWiringService
             ]);
         }
 
-        $this->sftpDaemonSync->writeUsersFile($infrastructure);
+        if ($syncSftp) {
+            $this->sftpDaemonSync->writeUsersFile($infrastructure);
+        }
 
         $envUpdated = false;
         $keys = [];
@@ -157,7 +159,7 @@ class DomainStorageWiringService
         }
 
         return [
-            'sftp_synced' => true,
+            'sftp_synced' => $syncSftp,
             'env_updated' => $envUpdated,
             'deployed' => $deployed,
             'keys' => $keys,
@@ -167,10 +169,10 @@ class DomainStorageWiringService
     /**
      * Best-effort wiring after provision — never throws to the caller.
      */
-    public function wireSilently(Domain $domain, bool $deployNow = false): void
+    public function wireSilently(Domain $domain, bool $deployNow = false, bool $syncSftp = true): void
     {
         try {
-            $this->wire($domain, $deployNow);
+            $this->wire($domain, $deployNow, $syncSftp);
         } catch (Throwable $exception) {
             Log::warning('domain.storage_wire_failed', [
                 'domain_id' => $domain->id,
