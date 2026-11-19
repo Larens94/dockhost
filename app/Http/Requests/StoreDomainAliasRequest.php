@@ -4,7 +4,7 @@
 //
 // exports: StoreDomainAliasRequest | authorize(): bool | rules(): array | aliasAttributes(): array
 // used_by: app/Http/Controllers/DomainController.php
-// rules:   Mutate hosting only. Multi-tenancy default: web on, redirect_301 off.
+// rules:   Mutate hosting only. Multi-tenancy default: web on, redirect_301 off. create_tenant_database is optional.
 // agent:   composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Store alias FormRequest
 // message:
 
@@ -37,6 +37,7 @@ class StoreDomainAliasRequest extends FormRequest
             'redirect_301' => ['sometimes', 'boolean'],
             'mail_service' => ['sometimes', 'boolean'],
             'sync_dns' => ['sometimes', 'boolean'],
+            'create_tenant_database' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -48,7 +49,8 @@ class StoreDomainAliasRequest extends FormRequest
      *     web_service: bool,
      *     redirect_301: bool,
      *     mail_service: bool,
-     *     sync_dns: bool
+     *     sync_dns: bool,
+     *     create_tenant_database: bool
      * }
      */
     public function aliasAttributes(): array
@@ -63,6 +65,7 @@ class StoreDomainAliasRequest extends FormRequest
             'redirect_301' => (bool) ($validated['redirect_301'] ?? false),
             'mail_service' => (bool) ($validated['mail_service'] ?? false),
             'sync_dns' => (bool) ($validated['sync_dns'] ?? false),
+            'create_tenant_database' => (bool) ($validated['create_tenant_database'] ?? false),
         ];
     }
 }

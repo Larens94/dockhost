@@ -10,14 +10,20 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DatabaseEngine;
+use App\Enums\DatabasePrivilege;
 use App\Enums\DomainAliasKind;
+use App\Models\DatabaseAccount;
 use App\Models\DokployApplication;
 use App\Models\Domain;
 use App\Models\DomainAlias;
+use App\Models\Infrastructure;
 use App\Models\User;
+use App\Services\Infra\MysqlProvisioner;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Mockery;
 use Tests\TestCase;
 
 class DomainAliasTest extends TestCase
@@ -183,6 +189,89 @@ class DomainAliasTest extends TestCase
 
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://dokploy.test/api/domain.delete'
             && $request['domainId'] === 'dom-alias-del');
+    }
+
+    public function test_authenticated_user_creates_alias_with_tenant_database(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://dokploy.test/api/domain.create' => Http::response(['domainId' => 'dom-alias-db']),
+        ]);
+
+        $mysql = Mockery::mock(MysqlProvisioner::class);
+        $mysql->shouldReceive('createDatabaseIfNotExists')
+            ->once()
+            ->with('demoeforge1.it', Mockery::type(Infrastructure::class));
+        $mysql->shouldReceive('grantExistingUserOnDatabase')
+            ->once()
+            ->with('demoeforge1.it', 'u_site', Mockery::type(DatabasePrivilege::class), Mockery::type(Infrastructure::class));
+        $this->instance(MysqlProvisioner::class, $mysql);
+
+        $infrastructure = $this->panelInfrastructure();
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create([
+            'fqdn' => 'asefecommerce.space',
+            'infrastructure_id' => $infrastructure->id,
+            'infra_slug' => $infrastructure->slug,
+        ]);
+        DatabaseAccount::factory()->create([
+            'domain_id' => $domain->id,
+            'infrastructure_id' => $infrastructure->id,
+            'engine' => DatabaseEngine::Mysql,
+            'username' => 'u_site',
+            'infra_slug' => $infrastructure->slug,
+        ]);
+        DokployApplication::factory()->create([
+            'domain_id' => $domain->id,
+            'dokploy_application_id' => 'app-asef',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('domains.aliases.store', $domain), [
+                'kind' => 'alias',
+                'fqdn' => 'demoeforge1.it',
+                'web_service' => true,
+                'create_tenant_database' => true,
+            ])
+            ->assertRedirect(route('domains.show', ['domain' => $domain, 'tab' => 'hosts']))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('domain_aliases', [
+            'domain_id' => $domain->id,
+            'fqdn' => 'demoeforge1.it',
+            'tenant_database_name' => 'demoeforge1.it',
+        ]);
+    }
+
+    public function test_tenant_database_requires_mysql_account_on_primary_domain(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake();
+
+        $infrastructure = $this->panelInfrastructure();
+        $user = User::factory()->create();
+        $domain = Domain::factory()->create([
+            'fqdn' => 'asefecommerce.space',
+            'infrastructure_id' => $infrastructure->id,
+            'infra_slug' => $infrastructure->slug,
+        ]);
+        DokployApplication::factory()->create([
+            'domain_id' => $domain->id,
+            'dokploy_application_id' => 'app-asef',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('domains.show', $domain))
+            ->post(route('domains.aliases.store', $domain), [
+                'kind' => 'alias',
+                'fqdn' => 'demoeforge1.it',
+                'web_service' => false,
+                'create_tenant_database' => true,
+            ])
+            ->assertRedirect(route('domains.show', $domain))
+            ->assertSessionHasErrors('create_tenant_database');
+
+        $this->assertDatabaseCount('domain_aliases', 0);
     }
 
     public function test_domain_show_includes_aliases_relation(): void

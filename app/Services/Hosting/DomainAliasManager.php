@@ -8,7 +8,9 @@
 //          redirect_301 is stored for the panel; Traefik still routes to the app (Laravel may 301).
 //          mail_service / sync_dns are panel flags only (no mailbox/DNS provider in v1).
 //          Never invent a second Dokploy application for an alias.
+//          create_tenant_database provisions MariaDB named like fqdn; GRANT primary site user.
 // agent:   composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Alias/subdomain sync manager
+// agent:   composer-2.5-fast | cursor | 2026-11-19 | s_alias_tenant_db | Optional tenant DB on alias
 // message:
 
 namespace App\Services\Hosting;
@@ -24,7 +26,10 @@ use Throwable;
 
 class DomainAliasManager
 {
-    public function __construct(private DokployClient $dokploy) {}
+    public function __construct(
+        private DokployClient $dokploy,
+        private DomainAliasTenantDatabaseProvisioner $tenantDatabases,
+    ) {}
 
     /**
      * @param  array{
@@ -34,7 +39,8 @@ class DomainAliasManager
      *     web_service?: bool,
      *     redirect_301?: bool,
      *     mail_service?: bool,
-     *     sync_dns?: bool
+     *     sync_dns?: bool,
+     *     create_tenant_database?: bool
      * }  $attributes
      */
     public function create(Domain $domain, array $attributes): DomainAlias
@@ -42,6 +48,15 @@ class DomainAliasManager
         $kind = DomainAliasKind::from($attributes['kind']);
         $fqdn = $this->resolveFqdn($domain, $kind, $attributes);
         $this->assertFqdnAvailable($fqdn);
+
+        $createTenantDatabase = (bool) ($attributes['create_tenant_database'] ?? false);
+        $tenantDatabaseName = null;
+
+        if ($createTenantDatabase) {
+            $this->assertTenantDatabaseName($fqdn);
+            $this->tenantDatabases->provision($domain, $fqdn);
+            $tenantDatabaseName = $fqdn;
+        }
 
         $web = (bool) ($attributes['web_service'] ?? true);
         $redirect = (bool) ($attributes['redirect_301'] ?? false);
@@ -63,6 +78,7 @@ class DomainAliasManager
             'mail_service' => $mail,
             'sync_dns' => $syncDns,
             'dokploy_domain_id' => $dokployDomainId,
+            'tenant_database_name' => $tenantDatabaseName,
         ]);
     }
 
@@ -117,6 +133,21 @@ class DomainAliasManager
         }
 
         return $fqdn;
+    }
+
+    private function assertTenantDatabaseName(string $fqdn): void
+    {
+        if (mb_strlen($fqdn) > 64) {
+            throw ValidationException::withMessages([
+                'fqdn' => __('panel.domains.aliases.tenant_database_name_too_long'),
+            ]);
+        }
+
+        if (preg_match('/^[A-Za-z0-9._-]{1,64}$/', $fqdn) !== 1) {
+            throw ValidationException::withMessages([
+                'fqdn' => __('panel.domains.aliases.tenant_database_name_invalid'),
+            ]);
+        }
     }
 
     private function assertFqdnAvailable(string $fqdn): void

@@ -2,9 +2,10 @@
 
 // MysqlProvisioner.php — Creates site DB + user on shared infra MariaDB.
 //
-// exports: MysqlProvisioner | MysqlProvisioner::provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void | MysqlProvisioner::grantUser( string $database, string $username, string $password, DatabasePrivilege $privilege, ?Infrastructure $infrastructure = null, ): void | MysqlProvisioner::replaceSiteUser( string $database, string $username, string $password, DatabasePrivilege $privilege, Infrastructure $infrastructure, ): void | MysqlProvisioner::dropSiteUser(string $username, Infrastructure $infrastructure): void | MysqlProvisioner::resyncDatabaseAccount(DatabaseAccount $account): void
+// exports: MysqlProvisioner | MysqlProvisioner::provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void | MysqlProvisioner::grantUser( string $database, string $username, string $password, DatabasePrivilege $privilege, ?Infrastructure $infrastructure = null, ): void | MysqlProvisioner::createDatabaseIfNotExists(string $database, Infrastructure $infrastructure): void | MysqlProvisioner::grantExistingUserOnDatabase( string $database, string $username, DatabasePrivilege $privilege, Infrastructure $infrastructure, ): void | MysqlProvisioner::replaceSiteUser( string $database, string $username, string $password, DatabasePrivilege $privilege, Infrastructure $infrastructure, ): void | MysqlProvisioner::dropSiteUser(string $username, Infrastructure $infrastructure): void | MysqlProvisioner::resyncDatabaseAccount(DatabaseAccount $account): void
 // used_by: app/Providers/AppServiceProvider.php
 //         app/Services/Hosting/AccessAccountManager.php
+//         app/Services/Hosting/DomainAliasTenantDatabaseProvisioner.php
 //         app/Services/Hosting/DomainProvisioner.php
 //         tests/Feature/AccessAccountTest.php
 //         tests/Feature/DomainProvisionTest.php
@@ -56,18 +57,44 @@ class MysqlProvisioner
 
     public function provision(string $database, string $username, string $password, ?Infrastructure $infrastructure = null): void
     {
-        $pdo = $infrastructure instanceof Infrastructure
-            ? $this->connect($infrastructure)
-            : ($this->connector)();
-        $databaseIdentifier = $this->quoteIdentifier($database);
-
-        $pdo->exec("CREATE DATABASE IF NOT EXISTS {$databaseIdentifier}");
-
         if (! $infrastructure instanceof Infrastructure) {
             throw new InvalidArgumentException('Infrastructure is required to provision a site database user.');
         }
 
+        $this->createDatabaseIfNotExists($database, $infrastructure);
+
         $this->replaceSiteUser($database, $username, $password, DatabasePrivilege::All, $infrastructure);
+    }
+
+    public function createDatabaseIfNotExists(string $database, Infrastructure $infrastructure): void
+    {
+        $pdo = $this->connect($infrastructure);
+        $databaseIdentifier = $this->quoteDatabaseName($database);
+        $pdo->exec("CREATE DATABASE IF NOT EXISTS {$databaseIdentifier}");
+    }
+
+    public function grantExistingUserOnDatabase(
+        string $database,
+        string $username,
+        DatabasePrivilege $privilege,
+        Infrastructure $infrastructure,
+    ): void {
+        $pdo = $this->connect($infrastructure);
+        $databaseIdentifier = $this->quoteDatabaseName($database);
+        $usernameIdentifier = $this->quoteIdentifier($username);
+        $grant = $privilege->mysqlGrant();
+
+        $exists = $pdo->prepare('SELECT 1 FROM mysql.global_priv WHERE User = ? LIMIT 1');
+        $exists->execute([$username]);
+
+        if ($exists->fetchColumn() === false) {
+            throw ValidationException::withMessages([
+                'create_tenant_database' => 'MariaDB non ha ancora l’utente sito «'.$username.'». Risincronizza gli utenti MySQL dal pannello.',
+            ]);
+        }
+
+        $pdo->exec("GRANT {$grant} ON {$databaseIdentifier}.* TO {$usernameIdentifier}@'%'");
+        $pdo->exec('FLUSH PRIVILEGES');
     }
 
     public function grantUser(
@@ -295,5 +322,14 @@ class MysqlProvisioner
         }
 
         return '`'.$name.'`';
+    }
+
+    private function quoteDatabaseName(string $name): string
+    {
+        if (preg_match('/^[A-Za-z0-9._-]{1,64}$/', $name) !== 1) {
+            throw new InvalidArgumentException('Invalid MySQL database name.');
+        }
+
+        return '`'.str_replace('`', '``', $name).'`';
     }
 }

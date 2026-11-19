@@ -14,6 +14,7 @@
            composer-2.5-fast | cursor | 2026-10-11 | s_domain_ui_color | Semantic tab/card color accents for IA
            composer-2.5-fast | cursor | 2026-10-11 | s_db_import | SQL dump import on Database tab
            composer-2.5-fast | cursor | 2026-10-12 | s_domain_alias | Domains tab: aliases + subdomains
+           composer-2.5-fast | cursor | 2026-11-19 | s_alias_tenant_db | Optional MariaDB tenant DB on alias create
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_flash | Read flash.revealed_credential; show password on Database tab
            composer-2.5-fast | cursor | 2026-10-12 | s_reveal_alert | One credential alert modal; drop duplicate banners
            composer-2.5-fast | cursor | 2026-10-12 | s_db_import_ui | SQL import modal + client size guard
@@ -372,6 +373,10 @@ const alignForm = useForm({
     source_domain_id: '',
     allow_overwrite_production: false,
 });
+const aliasTenantDatabaseAvailable = computed(() => (props.domain.database_accounts || []).some(
+    (account) => account.engine === 'mysql',
+));
+
 const aliasForm = useForm({
     kind: 'alias',
     fqdn: '',
@@ -380,6 +385,7 @@ const aliasForm = useForm({
     redirect_301: false,
     mail_service: false,
     sync_dns: false,
+    create_tenant_database: false,
 });
 
 const createAlias = () => {
@@ -390,6 +396,7 @@ const createAlias = () => {
             aliasForm.kind = 'alias';
             aliasForm.web_service = true;
             aliasForm.redirect_301 = false;
+            aliasForm.create_tenant_database = false;
         },
     });
 };
@@ -895,6 +902,11 @@ const updateMemberRole = (memberId, role) => {
                                             v-if="alias.sync_dns"
                                             class="rounded-md bg-zinc-100 px-1.5 py-0.5 text-zinc-700"
                                         >{{ t('domains.aliases.flag_dns') }}</span>
+                                        <span
+                                            v-if="alias.tenant_database_name"
+                                            class="rounded-md bg-emerald-100 px-1.5 py-0.5 text-emerald-900"
+                                            :title="alias.tenant_database_name"
+                                        >{{ t('domains.aliases.flag_tenant_database') }}</span>
                                     </div>
                                 </td>
                                 <td v-if="canMutateHosting" class="px-2 py-3">
@@ -997,9 +1009,28 @@ const updateMemberRole = (memberId, role) => {
                                 <span class="mt-0.5 block text-xs text-zinc-500">{{ t('domains.aliases.dns_help') }}</span>
                             </span>
                         </label>
+                        <label
+                            v-if="aliasTenantDatabaseAvailable"
+                            class="flex items-start gap-2 text-sm text-zinc-800 sm:col-span-2"
+                        >
+                            <input
+                                v-model="aliasForm.create_tenant_database"
+                                type="checkbox"
+                                class="mt-0.5 rounded border-zinc-300"
+                            />
+                            <span>
+                                <span class="font-medium">{{ t('domains.aliases.create_tenant_database') }}</span>
+                                <span class="mt-0.5 block text-xs text-zinc-500">
+                                    {{ t('domains.aliases.create_tenant_database_help') }}
+                                </span>
+                            </span>
+                        </label>
                     </div>
 
                     <p v-if="aliasForm.errors.web_service" class="text-sm text-red-600">{{ aliasForm.errors.web_service }}</p>
+                    <p v-if="aliasForm.errors.create_tenant_database" class="text-sm text-red-600">
+                        {{ aliasForm.errors.create_tenant_database }}
+                    </p>
                     <p v-if="aliasForm.errors.kind" class="text-sm text-red-600">{{ aliasForm.errors.kind }}</p>
 
                     <button

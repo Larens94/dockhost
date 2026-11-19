@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'mail_service',
     'sync_dns',
     'dokploy_domain_id',
+    'tenant_database_name',
 ])]
 class DomainAlias extends Model
 {

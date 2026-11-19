@@ -540,10 +540,17 @@ class DomainController extends Controller
             'kind' => $alias->kind->value,
             'web_service' => $alias->web_service,
             'redirect_301' => $alias->redirect_301,
+            'tenant_database_name' => $alias->tenant_database_name,
         ]);
 
-        return $this->redirectToDomain($domain, 'hosts')
-            ->with('success', __('panel.domains.aliases.created', ['fqdn' => $alias->fqdn]));
+        $message = filled($alias->tenant_database_name)
+            ? __('panel.domains.aliases.created_with_database', [
+                'fqdn' => $alias->fqdn,
+                'database' => $alias->tenant_database_name,
+            ])
+            : __('panel.domains.aliases.created', ['fqdn' => $alias->fqdn]);
+
+        return $this->redirectToDomain($domain, 'hosts')->with('success', $message);
     }
 
     public function destroyAlias(

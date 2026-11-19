@@ -97,4 +97,36 @@ class MysqlProvisionerGrantTest extends TestCase
 
         $this->assertContains("GRANT ALL PRIVILEGES ON `d_shop`.* TO `u_owner`@'%'", $statements);
     }
+
+    public function test_grant_existing_user_on_database_does_not_recreate_user(): void
+    {
+        $statements = [];
+        $pdo = Mockery::mock(PDO::class);
+        $pdo->shouldReceive('quote')->andReturnUsing(fn (string $value): string => "'".$value."'");
+        $pdo->shouldReceive('exec')->andReturnUsing(function (string $sql) use (&$statements): int {
+            $statements[] = $sql;
+
+            return 1;
+        });
+
+        $exists = Mockery::mock(PDOStatement::class);
+        $exists->shouldReceive('execute')->once()->with(['u_site']);
+        $exists->shouldReceive('fetchColumn')->once()->andReturn('1');
+
+        $pdo->shouldReceive('prepare')->once()->with('SELECT 1 FROM mysql.global_priv WHERE User = ? LIMIT 1')->andReturn($exists);
+
+        $infrastructure = Infrastructure::factory()->make(['slug' => 'infra1', 'mysql_host' => 'infra1-mariadb']);
+        $provisioner = new MysqlProvisioner(
+            fn (): PDO => $pdo,
+            null,
+            fn (): PDO => $pdo,
+        );
+        $provisioner->grantExistingUserOnDatabase('demoeforge1.it', 'u_site', DatabasePrivilege::All, $infrastructure);
+
+        $this->assertContains("GRANT ALL PRIVILEGES ON `demoeforge1.it`.* TO `u_site`@'%'", $statements);
+        $this->assertContains('FLUSH PRIVILEGES', $statements);
+        $this->assertFalse(
+            collect($statements)->contains(fn (string $sql): bool => str_contains($sql, 'CREATE USER')),
+        );
+    }
 }
