@@ -13,6 +13,7 @@ class LaravelStorageBootstrapShellTest extends TestCase
         $woven = LaravelStorageBootstrapShell::weaveIntoCore($core);
 
         $this->assertTrue(LaravelStorageBootstrapShell::isConfigured($woven));
+        $this->assertStringContainsString('rm -rf storage/app/public', $woven);
         $this->assertStringContainsString('ln -sfn "$_dokhosts_storage/storage/app/public" storage/app/public', $woven);
         $this->assertMatchesRegularExpression(
             '/chmod -R a\+rwx storage bootstrap\/cache && .*php artisan migrate/',
