@@ -126,14 +126,21 @@ function stringifyLogs(json, fallbackBody = '') {
     return fallbackBody;
 }
 
+// Rules: a value that looks like a provider secret is hidden wherever it appears — Stripe sk_/rk_/whsec_, OpenRouter sk-or-, OpenAI sk-, GitHub ghp_
+const SECRET_VALUE = /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+|\bwhsec_[A-Za-z0-9]+|\bsk-(?:or-v1-|ant-|proj-)?[A-Za-z0-9_-]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bamy_[A-Za-z0-9_-]{16,}/g;
+
 function redact(text) {
     return String(text)
         .replace(/IDENTIFIED BY '[^']*'/gi, "IDENTIFIED BY '***'")
-        .replace(/(password[=:]\s*)\S+/gi, '$1***');
+        .replace(/(password[=:]\s*)\S+/gi, '$1***')
+        .replace(SECRET_VALUE, '***');
 }
 
+// Rules: a key that names a secret anywhere (STRIPE_SECRET_KEY_LIVE, *_KEY_TEST, WEBHOOK_SECRET_*) is redacted, not only a key that ends with it
 const SENSITIVE_ENV_KEY =
-    /^(APP_KEY|.*_(PASSWORD|SECRET|TOKEN|PRIVATE_KEY|API_KEY|CREDENTIAL|SIGNING_KEY)|MYSQL_.+|POSTGRES_.+|REDIS_PASSWORD|AWS_SECRET|MAIL_PASSWORD)$/i;
+    /(^APP_KEY$|PASSWORD|SECRET|TOKEN|PRIVATE_KEY|API_KEY|CREDENTIAL|SIGNING_KEY|_KEY(_LIVE|_TEST)?$|WHSEC|^MYSQL_.+|^POSTGRES_.+|^AWS_SECRET)/i;
+// Rules: public keys stay readable — a VAPID or Stripe publishable key is not a secret
+const PUBLIC_ENV_KEY = /(PUBLIC_KEY|PUBLISHABLE_KEY)$/i;
 
 function parseEnvLines(envText) {
     const map = new Map();
@@ -164,15 +171,22 @@ function serializeEnvLines(map) {
     return [...map.entries()].map(([key, value]) => `${key}=${value}`).join('\n');
 }
 
-function envKeyIsSensitive(key) {
-    return SENSITIVE_ENV_KEY.test(String(key));
+function envKeyIsSensitive(key, value = '') {
+    const name = String(key);
+    if (PUBLIC_ENV_KEY.test(name)) {
+        return false;
+    }
+    SECRET_VALUE.lastIndex = 0;
+    const looksSecret = SECRET_VALUE.test(String(value));
+    SECRET_VALUE.lastIndex = 0;
+    return SENSITIVE_ENV_KEY.test(name) || looksSecret;
 }
 
 export function summarizeEnvForMcp(envText) {
     const variables = [];
 
     for (const [key, value] of parseEnvLines(envText)) {
-        if (envKeyIsSensitive(key)) {
+        if (envKeyIsSensitive(key, value)) {
             variables.push({
                 key,
                 redacted: true,
